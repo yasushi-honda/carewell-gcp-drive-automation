@@ -142,7 +142,7 @@ class PlaywrightAutomationEngine:
         logger.info("Navigating to class management")
 
         # Wait for frames to fully load after login
-        time.sleep(2)
+        time.sleep(3)
 
         # Find 'list' frame (known to contain home.aspx after login)
         list_frame = None
@@ -166,6 +166,15 @@ class PlaywrightAutomationEngine:
 
         if not list_frame:
             raise Exception("Could not find 'list' frame or 'クラス管理' link")
+
+        # Wait for list frame content to load
+        logger.info("Waiting for list frame content to load")
+        try:
+            # Wait for body element to have content
+            list_frame.wait_for_selector("body", state="attached", timeout=10000)
+            time.sleep(2)  # Additional wait for dynamic content
+        except Exception as e:
+            logger.warning(f"Could not wait for body selector: {e}")
 
         # Debug: Log frame content details
         try:
