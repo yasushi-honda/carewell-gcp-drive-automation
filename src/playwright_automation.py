@@ -67,14 +67,33 @@ class PlaywrightAutomationEngine:
         # Debug: Log page title and URL
         logger.info(f"Page loaded - Title: {self.page.title()}, URL: {self.page.url}")
 
+        # Wait for frames to load
+        time.sleep(2)
+
+        # Find the frame containing login form
+        login_frame = None
+        for frame in self.page.frames:
+            try:
+                if frame.locator('input[name="ctl00$masterMain$txtUserID"]').count() > 0:
+                    logger.info(f"Found login form in frame: {frame.name or frame.url}")
+                    login_frame = frame
+                    break
+            except:
+                continue
+
+        if not login_frame:
+            logger.error("Could not find login form in any frame")
+            # Fallback to main page
+            login_frame = self.page
+
         # Fill login form
         logger.info("Filling login credentials")
-        self.page.fill('input[name="ctl00$masterMain$txtUserID"]', user_id)
-        self.page.fill('input[name="ctl00$masterMain$txtPassword"]', password)
+        login_frame.fill('input[name="ctl00$masterMain$txtUserID"]', user_id)
+        login_frame.fill('input[name="ctl00$masterMain$txtPassword"]', password)
 
         # Click login button
         logger.info("Clicking login button")
-        self.page.click('input[name="ctl00$masterMain$btnSubmit"]')
+        login_frame.click('input[name="ctl00$masterMain$btnSubmit"]')
 
         # Wait for navigation
         self.page.wait_for_load_state("networkidle")
