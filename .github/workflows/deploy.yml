@@ -1,0 +1,60 @@
+name: Deploy to Cloud Run Functions
+
+on:
+  push:
+    branches:
+      - main
+
+env:
+  PROJECT_ID: carewell-automation
+  REGION: asia-northeast1
+  FUNCTION_NAME: carewell-file-collector
+  ARTIFACT_REGISTRY: asia-northeast1-docker.pkg.dev/carewell-automation/carewell-functions
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: read
+      id-token: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: 'projects/61759806259/locations/global/workloadIdentityPools/github-actions-pool/providers/github-provider'
+          service_account: 'github-actions-sa@carewell-automation.iam.gserviceaccount.com'
+
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Configure Docker for Artifact Registry
+        run: |
+          gcloud auth configure-docker asia-northeast1-docker.pkg.dev
+
+      - name: Build and push Docker image
+        run: |
+          IMAGE_TAG="${ARTIFACT_REGISTRY}/${FUNCTION_NAME}:${GITHUB_SHA}"
+          IMAGE_LATEST="${ARTIFACT_REGISTRY}/${FUNCTION_NAME}:latest"
+
+          docker build -t ${IMAGE_TAG} -t ${IMAGE_LATEST} .
+          docker push ${IMAGE_TAG}
+          docker push ${IMAGE_LATEST}
+
+      - name: Deploy to Cloud Run Functions
+        run: |
+          gcloud run deploy ${FUNCTION_NAME} \
+            --image ${ARTIFACT_REGISTRY}/${FUNCTION_NAME}:${GITHUB_SHA} \
+            --region ${REGION} \
+            --platform managed \
+            --allow-unauthenticated \
+            --memory 2Gi \
+            --cpu 1 \
+            --timeout 540 \
+            --service-account github-actions-sa@carewell-automation.iam.gserviceaccount.com \
+            --set-env-vars "GCP_PROJECT=${PROJECT_ID}" \
+            --set-secrets "CAREWELL_USER_ID=carewell-user-id:latest,CAREWELL_PASSWORD=carewell-password:latest"
