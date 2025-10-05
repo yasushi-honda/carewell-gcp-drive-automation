@@ -144,37 +144,9 @@ class PlaywrightAutomationEngine:
         # Wait for frames to fully load after login
         time.sleep(3)
 
-        # Debug: Search for "クラス管理" in all frames
-        logger.info("Searching for 'クラス管理' in all frames")
-        target_frame = None
-        for i, frame in enumerate(self.page.frames):
-            try:
-                frame_name = frame.name if frame.name else f"unnamed_{i}"
-                frame_url = frame.url
-                logger.info(f"Checking frame {i}: name={frame_name}, url={frame_url}")
-
-                # Try to find "クラス管理" in this frame
-                if frame.locator('text="クラス管理"').count() > 0:
-                    logger.info(f"✓ Found 'クラス管理' in frame {i} ({frame_name})")
-                    target_frame = frame
-                    break
-                else:
-                    # Log all links in this frame for debugging
-                    try:
-                        links = frame.locator("a").all_text_contents()[:10]  # First 10 links only
-                        logger.info(f"  Frame {i} links (first 10): {links}")
-                    except:
-                        pass
-            except Exception as e:
-                logger.debug(f"Could not check frame {i}: {e}")
-                continue
-
-        if not target_frame:
-            raise Exception("Could not find 'クラス管理' link in any frame")
-
-        # Click "クラス管理" in the target frame
-        logger.info(f"Clicking 'クラス管理' in frame: {target_frame.name or target_frame.url}")
-        target_frame.click('text="クラス管理"')
+        # Click "クラス管理" button (image-based link to course/default.aspx)
+        logger.info("Clicking 'クラス管理' button")
+        self.page.click('a[href="course/default.aspx"]')
 
         time.sleep(2)
 
