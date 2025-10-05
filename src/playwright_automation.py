@@ -109,12 +109,13 @@ class PlaywrightAutomationEngine:
         except:
             pass
 
-        # Log all frames after login
+        # Log all frames after login with URLs
         try:
             for i, frame in enumerate(self.page.frames):
                 try:
-                    frame_name = frame.name or frame.url
-                    logger.info(f"Frame {i} after login: {frame_name}")
+                    frame_name = frame.name
+                    frame_url = frame.url
+                    logger.info(f"Frame {i} after login: name={frame_name}, url={frame_url}")
                 except:
                     pass
         except:
