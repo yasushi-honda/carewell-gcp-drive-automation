@@ -144,60 +144,37 @@ class PlaywrightAutomationEngine:
         # Wait for frames to fully load after login
         time.sleep(3)
 
-        # Find 'list' frame (known to contain home.aspx after login)
-        list_frame = None
-        for frame in self.page.frames:
-            if frame.name == 'list':
-                list_frame = frame
-                logger.info(f"Found 'list' frame with URL: {frame.url}")
-                break
+        # Debug: Search for "クラス管理" in all frames
+        logger.info("Searching for 'クラス管理' in all frames")
+        target_frame = None
+        for i, frame in enumerate(self.page.frames):
+            try:
+                frame_name = frame.name if frame.name else f"unnamed_{i}"
+                frame_url = frame.url
+                logger.info(f"Checking frame {i}: name={frame_name}, url={frame_url}")
 
-        if not list_frame:
-            # Fallback: search all frames
-            logger.warning("'list' frame not found, searching all frames")
-            for frame in self.page.frames:
-                try:
-                    if frame.locator('text="クラス管理"').count() > 0:
-                        list_frame = frame
-                        logger.info(f"Found 'クラス管理' in frame: {frame.name or frame.url}")
-                        break
-                except:
-                    continue
+                # Try to find "クラス管理" in this frame
+                if frame.locator('text="クラス管理"').count() > 0:
+                    logger.info(f"✓ Found 'クラス管理' in frame {i} ({frame_name})")
+                    target_frame = frame
+                    break
+                else:
+                    # Log all links in this frame for debugging
+                    try:
+                        links = frame.locator("a").all_text_contents()[:10]  # First 10 links only
+                        logger.info(f"  Frame {i} links (first 10): {links}")
+                    except:
+                        pass
+            except Exception as e:
+                logger.debug(f"Could not check frame {i}: {e}")
+                continue
 
-        if not list_frame:
-            raise Exception("Could not find 'list' frame or 'クラス管理' link")
+        if not target_frame:
+            raise Exception("Could not find 'クラス管理' link in any frame")
 
-        # Wait for list frame content to load
-        logger.info("Waiting for list frame content to load")
-        try:
-            # Wait for body element to have content
-            list_frame.wait_for_selector("body", state="attached", timeout=10000)
-            time.sleep(2)  # Additional wait for dynamic content
-        except Exception as e:
-            logger.warning(f"Could not wait for body selector: {e}")
-
-        # Debug: Log frame content details
-        try:
-            # Log all text content in the frame
-            text_content = list_frame.text_content("body")
-            logger.info(f"List frame text content (first 1000 chars): {text_content[:1000] if text_content else 'None'}")
-
-            # Log all links in the frame
-            links = list_frame.locator("a").all_text_contents()
-            logger.info(f"All links in list frame: {links}")
-
-            # Log inner HTML to see structure
-            inner_html = list_frame.inner_html("body")
-            logger.info(f"List frame HTML (first 1000 chars): {inner_html[:1000] if inner_html else 'None'}")
-        except Exception as e:
-            logger.error(f"Failed to debug list frame: {e}")
-
-        # Click "クラス管理" in the list frame
-        if list_frame.locator('text="クラス管理"').count() > 0:
-            logger.info("Clicking 'クラス管理'")
-            list_frame.click('text="クラス管理"')
-        else:
-            raise Exception("'クラス管理' link not found in list frame")
+        # Click "クラス管理" in the target frame
+        logger.info(f"Clicking 'クラス管理' in frame: {target_frame.name or target_frame.url}")
+        target_frame.click('text="クラス管理"')
 
         time.sleep(2)
 
