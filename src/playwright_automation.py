@@ -57,11 +57,15 @@ class PlaywrightAutomationEngine:
         context = self.browser.new_context()
         self.page = context.new_page()
 
-        # Set timeout
-        self.page.set_default_timeout(60000)  # 60 seconds
+        # Set timeout for slow network
+        self.page.set_default_timeout(180000)  # 180 seconds
 
         # Navigate to login page
-        self.page.goto("https://jaccw-carewel.study.jp/")
+        logger.info("Accessing login URL: https://jaccw-carewel.study.jp/")
+        self.page.goto("https://jaccw-carewel.study.jp/", wait_until="networkidle")
+
+        # Debug: Log page title and URL
+        logger.info(f"Page loaded - Title: {self.page.title()}, URL: {self.page.url}")
 
         # Fill login form
         logger.info("Filling login credentials")
