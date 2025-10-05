@@ -167,6 +167,22 @@ class PlaywrightAutomationEngine:
         if not list_frame:
             raise Exception("Could not find 'list' frame or 'クラス管理' link")
 
+        # Debug: Take screenshot of list frame
+        try:
+            screenshot_path = "/tmp/list_frame.png"
+            list_frame.screenshot(path=screenshot_path)
+            logger.info(f"Screenshot saved to {screenshot_path}")
+
+            # Log all text content in the frame
+            text_content = list_frame.text_content("body")
+            logger.info(f"List frame text content (first 500 chars): {text_content[:500] if text_content else 'None'}")
+
+            # Log all links in the frame
+            links = list_frame.locator("a").all_text_contents()
+            logger.info(f"All links in list frame: {links}")
+        except Exception as e:
+            logger.error(f"Failed to debug list frame: {e}")
+
         # Click "クラス管理" in the list frame
         if list_frame.locator('text="クラス管理"').count() > 0:
             logger.info("Clicking 'クラス管理'")
