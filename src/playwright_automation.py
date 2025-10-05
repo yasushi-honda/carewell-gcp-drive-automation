@@ -2,10 +2,43 @@
 Playwright Automation Engine for Carewell Web Service
 """
 import logging
+import os
 import time
-from playwright.sync_api import sync_playwright, Browser, Page
+from typing import Optional
+from playwright.sync_api import sync_playwright, Browser, Page, Frame
+from google.cloud import secretmanager
 
 logger = logging.getLogger(__name__)
+
+
+class CarewellSelectors:
+    """CSS selectors and URLs for Carewell web service"""
+    # URLs
+    BASE_URL = "https://jaccw-carewel.study.jp/"
+
+    # Login form selectors
+    LOGIN_USER_ID = 'input[name="ctl00$masterMain$txtUserID"]'
+    LOGIN_PASSWORD = 'input[name="ctl00$masterMain$txtPassword"]'
+    LOGIN_SUBMIT = 'input[name="ctl00$masterMain$btnSubmit"]'
+
+    # Navigation selectors
+    CLASS_MANAGEMENT = 'a[href="course/default.aspx"]'
+
+    # Frame names
+    FRAME_LIST = 'list'
+
+
+class CarewellConfig:
+    """Configuration constants for Carewell automation"""
+    # Timeouts (in milliseconds)
+    PAGE_TIMEOUT = 180000  # 3 minutes for slow network
+    NAVIGATION_WAIT = 2000  # Wait after navigation actions
+    FRAME_LOAD_WAIT = 3000  # Wait for frames to load
+    DATA_LOAD_WAIT = 5000   # Wait for data-heavy pages
+
+    # Retry settings
+    MAX_RETRIES = 3
+    RETRY_DELAY = 1000
 
 
 class PlaywrightAutomationEngine:
@@ -17,27 +50,18 @@ class PlaywrightAutomationEngine:
         self.playwright = None
         self.browser = None
         self.page = None
+        self._credentials = None
 
-    def _launch_browser(self) -> Browser:
-        """Launch Chromium browser in headless mode"""
-        logger.info("Launching Chromium browser")
-        self.playwright = sync_playwright().start()
-        self.browser = self.playwright.chromium.launch(
-            headless=True,
-            args=['--no-sandbox', '--disable-dev-shm-usage']
-        )
-        return self.browser
-
-    def _login(self) -> Page:
+    def _get_credentials(self) -> tuple[str, str]:
         """
-        Login to Carewell web service
+        Retrieve credentials from Secret Manager (cached)
 
-        Retrieves credentials from Secret Manager
+        Returns:
+            Tuple of (user_id, password)
         """
-        import os
-        from google.cloud import secretmanager
+        if self._credentials:
+            return self._credentials
 
-        # Get credentials from Secret Manager
         project_id = os.getenv('GCP_PROJECT', 'carewell-automation')
         client = secretmanager.SecretManagerServiceClient()
 
@@ -53,75 +77,163 @@ class PlaywrightAutomationEngine:
         if not user_id or not password:
             raise ValueError("Failed to retrieve credentials from Secret Manager")
 
-        logger.info("Navigating to Carewell login page")
-        context = self.browser.new_context()
-        self.page = context.new_page()
+        self._credentials = (user_id, password)
+        return self._credentials
 
-        # Set timeout for slow network
-        self.page.set_default_timeout(180000)  # 180 seconds
+    def _launch_browser(self) -> Browser:
+        """Launch Chromium browser in headless mode"""
+        logger.info("Launching Chromium browser")
+        self.playwright = sync_playwright().start()
+        self.browser = self.playwright.chromium.launch(
+            headless=True,
+            args=['--no-sandbox', '--disable-dev-shm-usage']
+        )
+        return self.browser
 
-        # Navigate to login page
-        logger.info("Accessing login URL: https://jaccw-carewel.study.jp/")
-        self.page.goto("https://jaccw-carewel.study.jp/", wait_until="networkidle")
+    def _find_frame_with_selector(self, selector: str, timeout_ms: int = 5000) -> Optional[Frame]:
+        """
+        Find frame containing a specific selector
 
-        # Debug: Log page title and URL
-        logger.info(f"Page loaded - Title: {self.page.title()}, URL: {self.page.url}")
+        Args:
+            selector: CSS selector or text selector
+            timeout_ms: Maximum time to wait for selector
 
-        # Wait for frames to load
-        time.sleep(2)
-
-        # Find the frame containing login form
-        login_frame = None
+        Returns:
+            Frame object if found, None otherwise
+        """
         for frame in self.page.frames:
             try:
-                if frame.locator('input[name="ctl00$masterMain$txtUserID"]').count() > 0:
-                    logger.info(f"Found login form in frame: {frame.name or frame.url}")
-                    login_frame = frame
-                    break
-            except:
+                if frame.locator(selector).count() > 0:
+                    logger.debug(f"Found selector '{selector}' in frame: {frame.name or frame.url}")
+                    return frame
+            except Exception as e:
+                logger.debug(f"Could not check frame {frame.name}: {e}")
                 continue
+        return None
 
+    def _click_in_any_frame(self, selector: str, description: str = None) -> bool:
+        """
+        Click element in any frame that contains it
+
+        Args:
+            selector: CSS selector or text selector
+            description: Human-readable description for logging
+
+        Returns:
+            True if clicked successfully, False otherwise
+        """
+        desc = description or selector
+        logger.info(f"Clicking '{desc}'")
+
+        frame = self._find_frame_with_selector(selector)
+        if frame:
+            frame.click(selector)
+            logger.info(f"Clicked '{desc}' in frame: {frame.name or 'unnamed'}")
+            return True
+
+        logger.warning(f"Could not find '{desc}' in any frame")
+        return False
+
+    def _wait_for_navigation(self, wait_ms: int = CarewellConfig.NAVIGATION_WAIT):
+        """Wait for navigation to complete"""
+        time.sleep(wait_ms / 1000)
+
+    def _login(self) -> Page:
+        """
+        Login to Carewell web service
+
+        Returns:
+            Page object after successful login
+        """
+        user_id, password = self._get_credentials()
+
+        logger.info(f"Navigating to {CarewellSelectors.BASE_URL}")
+        context = self.browser.new_context()
+        self.page = context.new_page()
+        self.page.set_default_timeout(CarewellConfig.PAGE_TIMEOUT)
+
+        self.page.goto(CarewellSelectors.BASE_URL, wait_until="networkidle")
+        logger.info(f"Page loaded: {self.page.title()}")
+
+        # Wait for frames to load
+        self._wait_for_navigation(2000)
+
+        # Find login frame
+        login_frame = self._find_frame_with_selector(CarewellSelectors.LOGIN_USER_ID)
         if not login_frame:
-            logger.error("Could not find login form in any frame")
-            # Fallback to main page
+            logger.warning("Login form not found in frames, using main page")
             login_frame = self.page
 
-        # Fill login form
-        logger.info("Filling login credentials")
-        login_frame.fill('input[name="ctl00$masterMain$txtUserID"]', user_id)
-        login_frame.fill('input[name="ctl00$masterMain$txtPassword"]', password)
+        # Fill and submit login form
+        logger.info("Submitting login credentials")
+        login_frame.fill(CarewellSelectors.LOGIN_USER_ID, user_id)
+        login_frame.fill(CarewellSelectors.LOGIN_PASSWORD, password)
+        login_frame.click(CarewellSelectors.LOGIN_SUBMIT)
 
-        # Click login button
-        logger.info("Clicking login button")
-        login_frame.click('input[name="ctl00$masterMain$btnSubmit"]')
-
-        # Wait for navigation after login
+        # Wait for post-login navigation
+        self.page.wait_for_load_state("networkidle")
+        self._wait_for_navigation(CarewellConfig.FRAME_LOAD_WAIT)
         self.page.wait_for_load_state("networkidle")
 
-        # Additional wait for potential page redirect
-        time.sleep(3)
-        self.page.wait_for_load_state("networkidle")
-
-        logger.info(f"Login successful, current URL: {self.page.url}")
-
-        try:
-            logger.info(f"Page title after login: {self.page.title()}")
-        except:
-            pass
-
-        # Log all frames after login with URLs
-        try:
-            for i, frame in enumerate(self.page.frames):
-                try:
-                    frame_name = frame.name
-                    frame_url = frame.url
-                    logger.info(f"Frame {i} after login: name={frame_name}, url={frame_url}")
-                except:
-                    pass
-        except:
-            pass
-
+        logger.info(f"Login successful: {self.page.url}")
         return self.page
+
+    def _navigate_to_class_list(self):
+        """Navigate to class list page"""
+        logger.info("Navigating to class management")
+        self._wait_for_navigation(CarewellConfig.FRAME_LOAD_WAIT)
+
+        # Click "クラス管理" button (image-based)
+        self.page.click(CarewellSelectors.CLASS_MANAGEMENT)
+        self._wait_for_navigation()
+
+        # Click "教科クラス一覧"
+        if not self._click_in_any_frame('text="教科クラス一覧"', '教科クラス一覧'):
+            raise Exception("Could not navigate to '教科クラス一覧'")
+
+        self._wait_for_navigation(CarewellConfig.DATA_LOAD_WAIT)
+
+    def _select_class(self, class_name: str):
+        """
+        Select a specific class
+
+        Args:
+            class_name: Name of the class to select
+        """
+        logger.info(f"Selecting class: {class_name}")
+
+        if not self._click_in_any_frame(f'text="{class_name}"', f'class "{class_name}"'):
+            raise Exception(f"Could not find class: {class_name}")
+
+        self._wait_for_navigation()
+
+    def _navigate_to_report_grading(self):
+        """Navigate to report grading section"""
+        if not self._click_in_any_frame('text="レポート採点"', 'レポート採点'):
+            raise Exception("Could not navigate to 'レポート採点'")
+
+        self._wait_for_navigation()
+
+    def _select_task(self, task_name: str):
+        """
+        Select a specific task
+
+        Args:
+            task_name: Name of the task to select
+        """
+        logger.info(f"Selecting task: {task_name}")
+
+        if not self._click_in_any_frame(f'text="{task_name}"', f'task "{task_name}"'):
+            raise Exception(f"Could not find task: {task_name}")
+
+        self._wait_for_navigation()
+
+    def _show_all_submissions(self):
+        """Click '全て' tab to show all submissions"""
+        if not self._click_in_any_frame('text="全て"', '全て tab'):
+            raise Exception("Could not click '全て' tab")
+
+        self._wait_for_navigation(CarewellConfig.FRAME_LOAD_WAIT)
 
     def navigate_to_task(self, class_name: str, task_name: str) -> Page:
         """
@@ -138,100 +250,18 @@ class PlaywrightAutomationEngine:
         self._launch_browser()
         self._login()
 
-        # Navigate to class management
-        logger.info("Navigating to class management")
+        # Navigate through the pages
+        self._navigate_to_class_list()
+        self._select_class(class_name)
+        self._navigate_to_report_grading()
+        self._select_task(task_name)
+        self._show_all_submissions()
 
-        # Wait for frames to fully load after login
-        time.sleep(3)
-
-        # Click "クラス管理" button (image-based link to course/default.aspx)
-        logger.info("Clicking 'クラス管理' button")
-        self.page.click('a[href="course/default.aspx"]')
-
-        time.sleep(2)
-
-        # Click "教科クラス一覧"
-        logger.info("Clicking '教科クラス一覧'")
-        for frame in self.page.frames:
-            try:
-                if frame.locator('text="教科クラス一覧"').count() > 0:
-                    frame.click('text="教科クラス一覧"')
-                    break
-            except:
-                continue
-
-        # Wait for data to load
-        time.sleep(5)
-
-        # Find and click target class
-        logger.info(f"Looking for class: {class_name}")
-        clicked = False
-        for frame in self.page.frames:
-            try:
-                class_link = frame.locator(f'text="{class_name}"')
-                if class_link.count() > 0:
-                    logger.info(f"Found class link in frame: {frame.name}")
-                    class_link.click()
-                    clicked = True
-                    break
-            except Exception as e:
-                logger.debug(f"Could not find class in frame {frame.name}: {e}")
-                continue
-
-        if not clicked:
-            raise Exception(f"Could not find class: {class_name}")
-
-        time.sleep(2)
-
-        # Click "レポート採点"
-        logger.info("Clicking 'レポート採点'")
-        for frame in self.page.frames:
-            try:
-                if frame.locator('text="レポート採点"').count() > 0:
-                    frame.click('text="レポート採点"')
-                    break
-            except:
-                continue
-
-        time.sleep(2)
-
-        # Find and click target task
-        logger.info(f"Looking for task: {task_name}")
-        clicked = False
-        for frame in self.page.frames:
-            try:
-                task_link = frame.locator(f'text="{task_name}"')
-                if task_link.count() > 0:
-                    logger.info(f"Found task link in frame: {frame.name}")
-                    task_link.click()
-                    clicked = True
-                    break
-            except Exception as e:
-                logger.debug(f"Could not find task in frame {frame.name}: {e}")
-                continue
-
-        if not clicked:
-            raise Exception(f"Could not find task: {task_name}")
-
-        time.sleep(2)
-
-        # Click "全て" tab
-        logger.info("Clicking '全て' tab")
-        for frame in self.page.frames:
-            try:
-                if frame.locator('text="全て"').count() > 0:
-                    frame.click('text="全て"')
-                    break
-            except:
-                continue
-
-        time.sleep(3)
-
-        logger.info(f"Successfully navigated to task page")
+        logger.info("Successfully navigated to task page")
         return self.page
 
     def close(self):
-        """Close browser and cleanup"""
+        """Close browser and cleanup resources"""
         logger.info("Closing browser")
         if self.browser:
             self.browser.close()
