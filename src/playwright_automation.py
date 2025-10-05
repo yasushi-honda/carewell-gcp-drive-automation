@@ -99,12 +99,22 @@ class PlaywrightAutomationEngine:
         self.page.wait_for_load_state("networkidle")
 
         logger.info(f"Login successful, current URL: {self.page.url}")
-        logger.info(f"Page title after login: {self.page.title()}")
+
+        try:
+            logger.info(f"Page title after login: {self.page.title()}")
+        except:
+            pass
 
         # Log all frames after login
-        for i, frame in enumerate(self.page.frames):
-            frame_name = frame.name or frame.url
-            logger.info(f"Frame {i} after login: {frame_name}")
+        try:
+            for i, frame in enumerate(self.page.frames):
+                try:
+                    frame_name = frame.name or frame.url
+                    logger.info(f"Frame {i} after login: {frame_name}")
+                except:
+                    pass
+        except:
+            pass
 
         return self.page
 
@@ -142,11 +152,12 @@ class PlaywrightAutomationEngine:
 
                 # Try to get frame content sample for debugging
                 try:
-                    text_content = frame.locator('body').text_content(timeout=3000)
+                    text_content = frame.locator('body').text_content(timeout=1000)
                     if text_content:
                         sample = text_content[:200].replace('\n', ' ').strip()
                         logger.info(f"Frame content sample: {sample}")
-                except:
+                except Exception as e:
+                    logger.debug(f"Could not get frame content: {str(e)[:100]}")
                     pass
 
                 if frame.locator('text="クラス管理"').count() > 0:
