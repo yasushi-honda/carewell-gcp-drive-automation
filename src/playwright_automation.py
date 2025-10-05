@@ -95,7 +95,11 @@ class PlaywrightAutomationEngine:
         logger.info("Clicking login button")
         login_frame.click('input[name="ctl00$masterMain$btnSubmit"]')
 
-        # Wait for navigation
+        # Wait for navigation after login
+        self.page.wait_for_load_state("networkidle")
+
+        # Additional wait for potential page redirect
+        time.sleep(3)
         self.page.wait_for_load_state("networkidle")
 
         logger.info(f"Login successful, current URL: {self.page.url}")
