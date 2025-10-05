@@ -142,41 +142,38 @@ class PlaywrightAutomationEngine:
         logger.info("Navigating to class management")
 
         # Wait for frames to fully load after login
-        logger.info(f"Waiting for frames to load. Current frame count: {len(self.page.frames)}")
-        time.sleep(5)  # Extended wait for frame content to load
-        logger.info(f"After wait, frame count: {len(self.page.frames)}")
+        time.sleep(2)
 
-        # Find and click "クラス管理" link in frame
-        frames = self.page.frames
-        class_management_frame = None
+        # Find 'list' frame (known to contain home.aspx after login)
+        list_frame = None
+        for frame in self.page.frames:
+            if frame.name == 'list':
+                list_frame = frame
+                logger.info(f"Found 'list' frame with URL: {frame.url}")
+                break
 
-        for frame in frames:
-            try:
-                frame_name = frame.name or frame.url
-                logger.info(f"Checking frame: {frame_name}")
-
-                # Try to get frame content sample for debugging
+        if not list_frame:
+            # Fallback: search all frames
+            logger.warning("'list' frame not found, searching all frames")
+            for frame in self.page.frames:
                 try:
-                    text_content = frame.locator('body').text_content(timeout=1000)
-                    if text_content:
-                        sample = text_content[:200].replace('\n', ' ').strip()
-                        logger.info(f"Frame content sample: {sample}")
-                except Exception as e:
-                    logger.debug(f"Could not get frame content: {str(e)[:100]}")
-                    pass
+                    if frame.locator('text="クラス管理"').count() > 0:
+                        list_frame = frame
+                        logger.info(f"Found 'クラス管理' in frame: {frame.name or frame.url}")
+                        break
+                except:
+                    continue
 
-                if frame.locator('text="クラス管理"').count() > 0:
-                    logger.info(f"Found 'クラス管理' in frame: {frame_name}")
-                    class_management_frame = frame
-                    break
-            except Exception as e:
-                logger.debug(f"Error checking frame: {e}")
-                continue
+        if not list_frame:
+            raise Exception("Could not find 'list' frame or 'クラス管理' link")
 
-        if not class_management_frame:
-            raise Exception("Could not find 'クラス管理' link in any frame")
+        # Click "クラス管理" in the list frame
+        if list_frame.locator('text="クラス管理"').count() > 0:
+            logger.info("Clicking 'クラス管理'")
+            list_frame.click('text="クラス管理"')
+        else:
+            raise Exception("'クラス管理' link not found in list frame")
 
-        class_management_frame.click('text="クラス管理"')
         time.sleep(2)
 
         # Click "教科クラス一覧"
