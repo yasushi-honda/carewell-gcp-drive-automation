@@ -58,15 +58,34 @@ def main(request):
             submissions = engine.get_submission_list()
             logger.info(f"Found {len(submissions)} submissions")
 
-            # TODO: Download files, upload to Drive, record in Sheets
+            # Download files (test with first submission only for now)
+            downloaded_count = 0
+            failed_count = 0
+
+            for submission in submissions[:1]:  # Test with first submission only
+                try:
+                    if submission.get("download_url") and submission.get("filename"):
+                        logger.info(f"Testing download: {submission['filename']}")
+                        file_path = engine.download_file(
+                            submission["download_url"],
+                            submission["filename"]
+                        )
+                        logger.info(f"Downloaded to: {file_path}")
+                        downloaded_count += 1
+                    else:
+                        logger.warning(f"No download link for {submission['student_name']}")
+                        failed_count += 1
+                except Exception as e:
+                    logger.error(f"Failed to download {submission['filename']}: {e}")
+                    failed_count += 1
 
             return {
                 "status": "success",
-                "message": "File collection analysis completed",
+                "message": "File download test completed",
                 "submissions_found": len(submissions),
-                "processed": 0,
+                "processed": downloaded_count,
                 "skipped": 0,
-                "failed": 0
+                "failed": failed_count
             }, 200
 
         finally:

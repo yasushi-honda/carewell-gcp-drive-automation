@@ -414,6 +414,63 @@ class PlaywrightAutomationEngine:
                 pass
             return {"url": None, "filename": None}
 
+    def download_file(self, download_url: str, filename: str) -> str:
+        """
+        Download a file from Carewell
+
+        Args:
+            download_url: URL to download file (e.g., "download.aspx?id=XXX")
+            filename: Suggested filename
+
+        Returns:
+            Path to downloaded file in /tmp
+
+        Raises:
+            Exception if download fails
+        """
+        import os
+        from pathlib import Path
+
+        try:
+            # Find list frame
+            list_frame = None
+            for frame in self.page.frames:
+                if frame.name == CarewellSelectors.FRAME_LIST:
+                    list_frame = frame
+                    break
+
+            if not list_frame:
+                list_frame = self.page
+
+            logger.info(f"Starting download: {filename}")
+
+            # Set up download handler
+            download = None
+            with self.page.expect_download() as download_info:
+                # Click download link
+                list_frame.click(f'a[href="{download_url}"]')
+                download = download_info.value
+
+            # Save to /tmp with sanitized filename
+            # Remove unsafe characters from filename
+            safe_filename = "".join(c for c in filename if c.isalnum() or c in (' ', '.', '_', '-', '（', '）', '　'))
+            download_path = f"/tmp/{safe_filename}"
+
+            # Save the file
+            download.save_as(download_path)
+
+            # Verify file exists and has size
+            if os.path.exists(download_path):
+                file_size = os.path.getsize(download_path)
+                logger.info(f"Downloaded successfully: {download_path} ({file_size} bytes)")
+                return download_path
+            else:
+                raise Exception(f"Download failed: file not found at {download_path}")
+
+        except Exception as e:
+            logger.error(f"Error downloading {filename}: {e}", exc_info=True)
+            raise
+
     def close(self):
         """Close browser and cleanup resources"""
         logger.info("Closing browser")
