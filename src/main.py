@@ -5,6 +5,9 @@ import json
 import logging
 import os
 from playwright_automation import PlaywrightAutomationEngine
+from google_drive_service import GoogleDriveService
+from firestore_service import FirestoreService
+from sheets_service import SheetsService
 
 # Configure logging
 logging.basicConfig(
@@ -47,8 +50,11 @@ def main(request):
 
         logger.info(f"Starting file collection for class={class_name}, task={task_name}")
 
-        # Initialize Playwright automation
+        # Initialize services
         engine = PlaywrightAutomationEngine()
+        drive_service = GoogleDriveService()
+        firestore_service = FirestoreService()
+        sheets_service = SheetsService()
 
         try:
             # Navigate to task page
@@ -59,15 +65,30 @@ def main(request):
             submissions = engine.get_submission_list()
             logger.info(f"Found {len(submissions)} submissions")
 
-            # Download files (test with first submission only for now)
+            # Process all submissions
             downloaded_count = 0
+            skipped_count = 0
             failed_count = 0
 
-            for submission in submissions[:1]:  # Test with first submission only
+            for submission in submissions:
                 file_path = None
                 try:
                     if submission.get("download_url") and submission.get("filename") and submission.get("detail_url"):
-                        logger.info(f"Testing download: {submission['filename']}")
+                        # Check if already uploaded
+                        existing_upload = firestore_service.check_already_uploaded(
+                            class_name,
+                            task_name,
+                            submission['student_name'],
+                            submission['filename']
+                        )
+
+                        if existing_upload:
+                            logger.info(f"Skipping already uploaded file: {submission['filename']} (Drive ID: {existing_upload.get('drive_file_id')})")
+                            skipped_count += 1
+                            continue
+
+                        # Download file
+                        logger.info(f"Downloading: {submission['filename']}")
                         file_path = engine.download_file(
                             submission["download_url"],
                             submission["filename"],
@@ -75,8 +96,41 @@ def main(request):
                         )
                         logger.info(f"Downloaded to: {file_path}")
 
-                        # TODO: Upload to Google Drive here
-                        # drive_file_id = upload_to_drive(file_path, drive_folder_id)
+                        # Upload to Google Drive
+                        drive_file_id = drive_service.upload_file(
+                            file_path,
+                            submission['filename'],
+                            drive_folder_id
+                        )
+                        logger.info(f"Uploaded to Drive: {drive_file_id}")
+
+                        # Record upload in Firestore
+                        metadata = {
+                            "log_no": submission.get('log_no'),
+                            "score": submission.get('score'),
+                            "pass_status": submission.get('pass_status'),
+                            "status": submission.get('status'),
+                            "submit_date": submission.get('submit_date')
+                        }
+
+                        firestore_service.record_upload(
+                            class_name,
+                            task_name,
+                            submission['student_name'],
+                            submission['filename'],
+                            drive_file_id,
+                            drive_folder_id,
+                            metadata=metadata
+                        )
+
+                        # Record in Google Sheets
+                        sheets_service.append_record(
+                            spreadsheet_id,
+                            submission['student_name'],
+                            submission['filename'],
+                            drive_file_id,
+                            metadata=metadata
+                        )
 
                         downloaded_count += 1
                     else:
@@ -96,10 +150,10 @@ def main(request):
 
             return {
                 "status": "success",
-                "message": "File download test completed",
+                "message": "File collection completed",
                 "submissions_found": len(submissions),
                 "processed": downloaded_count,
-                "skipped": 0,
+                "skipped": skipped_count,
                 "failed": failed_count
             }, 200
 

@@ -14,9 +14,9 @@ Carewell Webサービスから提出ファイルを自動収集し、Google Driv
 - **Playwright**: Carewell Webサイトの自動操作
 - **Secret Manager**: 認証情報の安全な管理
 - **Artifact Registry**: Dockerイメージの保存（最新2つのみ保持）
-- **Firestore**: 重複チェック用メタデータストア（予定）
-- **Google Drive API**: ファイル保存（予定）
-- **Google Sheets API**: 記録管理（予定）
+- **Firestore**: 重複チェック用メタデータストア
+- **Google Drive API**: ファイル保存
+- **Google Sheets API**: 記録管理
 
 ### CI/CDパイプライン
 
@@ -32,13 +32,16 @@ GitHub Push → GitHub Actions → Artifact Registry → Cloud Run Functions
 .
 ├── .github/
 │   └── workflows/
-│       └── deploy.yml          # CI/CDパイプライン定義
+│       └── deploy.yml             # CI/CDパイプライン定義
 ├── src/
-│   ├── main.py                 # Cloud Functions エントリーポイント
-│   └── playwright_automation.py # Playwright自動化エンジン
-├── Dockerfile                  # コンテナイメージ定義
-├── requirements.txt            # Python依存関係
-└── .gitignore                  # Git除外設定
+│   ├── main.py                    # Cloud Functions エントリーポイント
+│   ├── playwright_automation.py   # Playwright自動化エンジン
+│   ├── google_drive_service.py    # Google Drive API サービス
+│   ├── firestore_service.py       # Firestore 重複チェックサービス
+│   └── sheets_service.py          # Google Sheets API サービス
+├── Dockerfile                     # コンテナイメージ定義
+├── requirements.txt               # Python依存関係
+└── .gitignore                     # Git除外設定
 ```
 
 ## セットアップ
@@ -89,6 +92,8 @@ POST https://carewell-file-collector-imczapxkba-an.a.run.app
 ```json
 {
   "status": "success",
+  "message": "File collection completed",
+  "submissions_found": 12,
   "processed": 10,
   "skipped": 2,
   "failed": 0
@@ -155,10 +160,65 @@ playwright install chromium
 - ✅ Playwright自動化基盤
 - ✅ Secret Manager統合
 - ✅ Carewellログイン・ナビゲーション
-- 🚧 ファイル収集ロジック
-- 🚧 Google Drive統合
-- 🚧 Firestore統合
-- 🚧 Googleスプレッドシート統合
+- ✅ ファイル収集ロジック（提出リスト取得・ダウンロード）
+- ✅ Google Drive統合（Application Default Credentials）
+- ✅ Firestore統合（SHA256ハッシュによる重複チェック）
+- ✅ Googleスプレッドシート統合（自動記録・リンク生成）
+- ✅ 一時ファイル自動クリーンアップ
+
+## 処理フロー
+
+システムは以下の流れで動作します：
+
+```
+1. Cloud Functions HTTPリクエスト受信
+   ↓
+2. Carewellログイン（Secret Manager経由）
+   ↓
+3. 指定クラス・課題ページへナビゲーション
+   ↓
+4. 提出リスト取得（全学生）
+   ↓
+5. 各提出ファイルについて：
+   ├─ Firestoreで重複チェック
+   │  └─ 既存 → スキップ
+   ├─ Carewell→/tmpへダウンロード
+   ├─ Google Driveへアップロード
+   ├─ Firestoreに記録（SHA256ハッシュ）
+   ├─ Google Sheetsに記録
+   └─ /tmp一時ファイル削除
+   ↓
+6. レスポンス返却（処理件数サマリー）
+```
+
+### 重複チェック方式
+
+ファイルの一意性判定は以下の組み合わせのSHA256ハッシュで行います：
+
+```
+class_name + task_name + student_name + filename
+```
+
+これにより：
+- ✅ 同一学生の再提出は検知されない（意図的に上書き可能）
+- ✅ 異なる課題での同名ファイルは別物として扱われる
+- ✅ ファイル内容が変更されても、Firestore記録があればスキップ
+
+### Google Sheets記録フォーマット
+
+スプレッドシートには以下の情報が自動記録されます：
+
+| 列 | 内容 |
+|----|------|
+| 学生名 | Carewellの学生名 |
+| ファイル名 | アップロードされたファイル名 |
+| 提出日時 | Carewellでの提出日時 |
+| スコア | 採点スコア |
+| 合否 | 合否判定 |
+| 状態 | 提出状態 |
+| Drive File ID | Google DriveファイルID |
+| Drive Link | クリック可能なDriveリンク |
+| アップロード日時 | システムがアップロードした日時 |
 
 ## トラブルシューティング
 
