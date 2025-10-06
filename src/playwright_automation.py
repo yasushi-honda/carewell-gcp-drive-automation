@@ -269,9 +269,21 @@ class PlaywrightAutomationEngine:
         """
         logger.info("Extracting submission list from page")
 
-        # Find the frame containing submission list
-        list_frame = self._find_frame_with_selector(CarewellSelectors.FRAME_LIST)
+        # Log all frames
+        logger.info(f"Total frames: {len(self.page.frames)}")
+        for i, frame in enumerate(self.page.frames):
+            logger.info(f"Frame {i}: name={frame.name or 'unnamed'}, url={frame.url}")
+
+        # Find the frame containing submission list (should be 'list' frame)
+        list_frame = None
+        for frame in self.page.frames:
+            if frame.name == CarewellSelectors.FRAME_LIST:
+                list_frame = frame
+                logger.info(f"Using frame: {frame.name}")
+                break
+
         if not list_frame:
+            logger.warning("'list' frame not found, using main page")
             list_frame = self.page
 
         # Debug: Log page structure
