@@ -314,7 +314,9 @@ class PlaywrightAutomationEngine:
                     logger.info(f"Processing submission: {student_name_text}")
 
                     # Navigate to detail page to get download link
-                    download_info = self._get_download_link(detail_url)
+                    # Save list URL for navigation back
+                    list_url = list_frame.url
+                    download_info = self._get_download_link(detail_url, list_url)
 
                     submission = {
                         "student_name": student_name_text,
@@ -340,12 +342,13 @@ class PlaywrightAutomationEngine:
 
         return submissions
 
-    def _get_download_link(self, detail_url: str) -> dict:
+    def _get_download_link(self, detail_url: str, list_url: str) -> dict:
         """
         Navigate to detail page and extract download link
 
         Args:
             detail_url: Relative URL to detail page (e.g., "report.aspx?log_id=XXX")
+            list_url: URL of the list page to return to
 
         Returns:
             Dictionary with 'url' and 'filename'
@@ -361,9 +364,13 @@ class PlaywrightAutomationEngine:
             if not list_frame:
                 list_frame = self.page
 
+            # Save current URL
+            current_url = list_frame.url
+            logger.debug(f"Current list URL: {current_url}")
+
             # Click the detail link
             list_frame.click(f'a[href="{detail_url}"]')
-            self._wait_for_navigation()
+            self._wait_for_navigation(3000)  # Wait longer for detail page
 
             # Find download link (download.aspx?id=XXX)
             download_link = list_frame.locator('a[href^="download.aspx"]').first
@@ -373,25 +380,26 @@ class PlaywrightAutomationEngine:
                 filename = download_link.text_content().strip()
                 logger.info(f"Found download link: {filename}")
 
-                # Go back to list page
-                list_frame.go_back()
+                # Navigate back to list using goto
+                self.page.goto(current_url, wait_until="networkidle")
                 self._wait_for_navigation()
 
                 return {"url": download_url, "filename": filename}
             else:
                 logger.warning(f"No download link found for {detail_url}")
-                # Go back to list page
-                list_frame.go_back()
+                # Navigate back to list
+                self.page.goto(current_url, wait_until="networkidle")
                 self._wait_for_navigation()
 
                 return {"url": None, "filename": None}
 
         except Exception as e:
-            logger.error(f"Error getting download link from {detail_url}: {e}")
-            # Try to go back
+            logger.error(f"Error getting download link from {detail_url}: {e}", exc_info=True)
+            # Try to go back to list URL
             try:
-                list_frame.go_back()
-                self._wait_for_navigation()
+                if list_frame and current_url:
+                    self.page.goto(current_url, wait_until="networkidle")
+                    self._wait_for_navigation()
             except:
                 pass
             return {"url": None, "filename": None}
