@@ -3,6 +3,7 @@ Carewell File Collector - Cloud Functions Entrypoint
 """
 import json
 import logging
+import os
 from playwright_automation import PlaywrightAutomationEngine
 
 # Configure logging
@@ -63,6 +64,7 @@ def main(request):
             failed_count = 0
 
             for submission in submissions[:1]:  # Test with first submission only
+                file_path = None
                 try:
                     if submission.get("download_url") and submission.get("filename") and submission.get("detail_url"):
                         logger.info(f"Testing download: {submission['filename']}")
@@ -72,6 +74,10 @@ def main(request):
                             submission["detail_url"]
                         )
                         logger.info(f"Downloaded to: {file_path}")
+
+                        # TODO: Upload to Google Drive here
+                        # drive_file_id = upload_to_drive(file_path, drive_folder_id)
+
                         downloaded_count += 1
                     else:
                         logger.warning(f"No download link for {submission['student_name']}")
@@ -79,6 +85,14 @@ def main(request):
                 except Exception as e:
                     logger.error(f"Failed to download {submission.get('filename', 'unknown')}: {e}")
                     failed_count += 1
+                finally:
+                    # Clean up temporary file
+                    if file_path and os.path.exists(file_path):
+                        try:
+                            os.remove(file_path)
+                            logger.info(f"Cleaned up temporary file: {file_path}")
+                        except Exception as cleanup_error:
+                            logger.warning(f"Failed to clean up {file_path}: {cleanup_error}")
 
             return {
                 "status": "success",
