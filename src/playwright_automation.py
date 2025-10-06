@@ -300,12 +300,16 @@ class PlaywrightAutomationEngine:
 
             logger.info("Found submission table")
 
+            # Debug: Log table HTML structure
+            table_html = submission_table.inner_html()[:3000]
+            logger.info(f"Submission table HTML (first 3000 chars): {table_html}")
+
             # ASP.NET GridView structure: outer table > tr > td > inner table > tbody > tr (data rows)
             # We need to find the inner table with class="standard_table"
             inner_table = submission_table.locator("table.standard_table").first
             if inner_table.count() == 0:
                 logger.warning("Inner table (standard_table) not found")
-                # Try direct rows
+                # Try direct rows from outer table
                 rows = submission_table.locator("tr").all()
             else:
                 logger.info("Found inner standard_table")
