@@ -24,6 +24,10 @@ class CarewellSelectors:
     # Navigation selectors
     CLASS_MANAGEMENT = 'a[href="course/default.aspx"]'
 
+    # Submission list selectors
+    SUBMISSION_TABLE = 'table#ctl00_masterMain_gvwMain'
+    SUBMISSION_ROW = 'tr.standard_table_tr'
+
     # Frame names
     FRAME_LIST = 'list'
 
@@ -286,64 +290,55 @@ class PlaywrightAutomationEngine:
             logger.warning("'list' frame not found, using main page")
             list_frame = self.page
 
-        # Debug: Log page structure
+        # Get submission table
         try:
-            # Get all tables
-            tables = list_frame.locator("table").all()
-            logger.info(f"Found {len(tables)} tables in list frame")
+            submission_table = list_frame.locator(CarewellSelectors.SUBMISSION_TABLE)
 
-            # Analyze each table
-            for i, table in enumerate(tables):
+            if submission_table.count() == 0:
+                logger.warning(f"Submission table '{CarewellSelectors.SUBMISSION_TABLE}' not found")
+                return []
+
+            logger.info("Found submission table")
+
+            # Get all rows from the table (skip header row)
+            rows = submission_table.locator("tr").all()
+            logger.info(f"Found {len(rows)} rows in submission table")
+
+            # Log first few rows for structure analysis
+            for i, row in enumerate(rows[:3]):
                 try:
-                    # Get table class/id for identification
-                    table_class = table.get_attribute("class") or "no-class"
-                    table_id = table.get_attribute("id") or "no-id"
-
-                    # Get row count
-                    rows = table.locator("tr").all()
-                    row_count = len(rows)
-
-                    # Get first row text as sample
-                    if rows:
-                        first_row_text = rows[0].text_content()[:100]
-                    else:
-                        first_row_text = "empty"
-
-                    logger.info(f"Table {i}: class='{table_class}', id='{table_id}', rows={row_count}, sample='{first_row_text}'")
-
-                    # If table has many rows, it might be the submission table
-                    if row_count > 5:
-                        logger.info(f"Table {i} appears to be data table, logging structure")
-                        table_html = table.inner_html()[:2000]
-                        logger.info(f"Table {i} HTML: {table_html}")
-                except Exception as te:
-                    logger.debug(f"Could not analyze table {i}: {te}")
-
-            # Get all links with "download" or file-related patterns
-            links = list_frame.locator("a").all()
-            logger.info(f"Found {len(links)} total links in list frame")
-
-            # Look for download links
-            download_links = []
-            for link in links:
-                try:
-                    href = link.get_attribute("href") or ""
-                    text = link.text_content().strip()
-
-                    # Check if this looks like a download link
-                    if any(keyword in href.lower() for keyword in ["download", "file", "report", "attachment"]):
-                        download_links.append(f"{text}: {href}")
+                    row_html = row.inner_html()[:500]
+                    row_text = row.text_content()[:200]
+                    logger.info(f"Row {i} text: {row_text}")
+                    logger.info(f"Row {i} HTML: {row_html}")
                 except:
                     pass
 
-            if download_links:
-                logger.info(f"Found {len(download_links)} potential download links: {download_links[:10]}")
+            # Parse each row to extract submission data
+            submissions = []
+            for i, row in enumerate(rows):
+                try:
+                    # Skip header row (first row)
+                    if i == 0:
+                        continue
+
+                    # Get all cells in the row
+                    cells = row.locator("td").all()
+                    logger.info(f"Row {i}: {len(cells)} cells")
+
+                    # Extract data from cells
+                    # TODO: Determine cell structure
+                    # Typically: student name, submission date, status, download link, etc.
+
+                except Exception as re:
+                    logger.debug(f"Could not parse row {i}: {re}")
+
+            logger.info(f"Extracted {len(submissions)} submissions")
 
         except Exception as e:
-            logger.error(f"Error analyzing page structure: {e}")
+            logger.error(f"Error extracting submissions: {e}", exc_info=True)
 
-        # TODO: Implement actual parsing logic
-        return []
+        return submissions
 
     def close(self):
         """Close browser and cleanup resources"""
