@@ -260,6 +260,52 @@ class PlaywrightAutomationEngine:
         logger.info("Successfully navigated to task page")
         return self.page
 
+    def get_submission_list(self) -> list[dict]:
+        """
+        Extract submission file information from task page
+
+        Returns:
+            List of submission dictionaries with metadata
+        """
+        logger.info("Extracting submission list from page")
+
+        # Find the frame containing submission list
+        list_frame = self._find_frame_with_selector(CarewellSelectors.FRAME_LIST)
+        if not list_frame:
+            list_frame = self.page
+
+        # Debug: Log page structure
+        try:
+            # Get all table rows (submissions are typically in tables)
+            tables = list_frame.locator("table").all()
+            logger.info(f"Found {len(tables)} tables in list frame")
+
+            # Log first table structure
+            if tables:
+                first_table_html = tables[0].inner_html()
+                logger.info(f"First table HTML (first 1000 chars): {first_table_html[:1000]}")
+
+            # Get all links (download links)
+            links = list_frame.locator("a").all()
+            logger.info(f"Found {len(links)} links in list frame")
+
+            # Log first 10 link hrefs
+            link_info = []
+            for i, link in enumerate(links[:10]):
+                try:
+                    href = link.get_attribute("href")
+                    text = link.text_content()
+                    link_info.append(f"{text}: {href}")
+                except:
+                    pass
+            logger.info(f"First 10 links: {link_info}")
+
+        except Exception as e:
+            logger.error(f"Error analyzing page structure: {e}")
+
+        # TODO: Implement actual parsing logic
+        return []
+
     def close(self):
         """Close browser and cleanup resources"""
         logger.info("Closing browser")

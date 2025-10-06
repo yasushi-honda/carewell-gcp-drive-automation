@@ -50,15 +50,20 @@ def main(request):
         engine = PlaywrightAutomationEngine()
 
         try:
-            # Test: Navigate to task page
+            # Navigate to task page
             page = engine.navigate_to_task(class_name, task_name)
             logger.info(f"Successfully navigated to task page: {page.url}")
 
-            # TODO: Implement file collection logic
+            # Get submission list
+            submissions = engine.get_submission_list()
+            logger.info(f"Found {len(submissions)} submissions")
+
+            # TODO: Download files, upload to Drive, record in Sheets
 
             return {
                 "status": "success",
-                "message": "Navigation test completed",
+                "message": "File collection analysis completed",
+                "submissions_found": len(submissions),
                 "processed": 0,
                 "skipped": 0,
                 "failed": 0
