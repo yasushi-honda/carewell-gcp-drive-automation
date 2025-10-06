@@ -276,29 +276,56 @@ class PlaywrightAutomationEngine:
 
         # Debug: Log page structure
         try:
-            # Get all table rows (submissions are typically in tables)
+            # Get all tables
             tables = list_frame.locator("table").all()
             logger.info(f"Found {len(tables)} tables in list frame")
 
-            # Log first table structure
-            if tables:
-                first_table_html = tables[0].inner_html()
-                logger.info(f"First table HTML (first 1000 chars): {first_table_html[:1000]}")
-
-            # Get all links (download links)
-            links = list_frame.locator("a").all()
-            logger.info(f"Found {len(links)} links in list frame")
-
-            # Log first 10 link hrefs
-            link_info = []
-            for i, link in enumerate(links[:10]):
+            # Analyze each table
+            for i, table in enumerate(tables):
                 try:
-                    href = link.get_attribute("href")
-                    text = link.text_content()
-                    link_info.append(f"{text}: {href}")
+                    # Get table class/id for identification
+                    table_class = table.get_attribute("class") or "no-class"
+                    table_id = table.get_attribute("id") or "no-id"
+
+                    # Get row count
+                    rows = table.locator("tr").all()
+                    row_count = len(rows)
+
+                    # Get first row text as sample
+                    if rows:
+                        first_row_text = rows[0].text_content()[:100]
+                    else:
+                        first_row_text = "empty"
+
+                    logger.info(f"Table {i}: class='{table_class}', id='{table_id}', rows={row_count}, sample='{first_row_text}'")
+
+                    # If table has many rows, it might be the submission table
+                    if row_count > 5:
+                        logger.info(f"Table {i} appears to be data table, logging structure")
+                        table_html = table.inner_html()[:2000]
+                        logger.info(f"Table {i} HTML: {table_html}")
+                except Exception as te:
+                    logger.debug(f"Could not analyze table {i}: {te}")
+
+            # Get all links with "download" or file-related patterns
+            links = list_frame.locator("a").all()
+            logger.info(f"Found {len(links)} total links in list frame")
+
+            # Look for download links
+            download_links = []
+            for link in links:
+                try:
+                    href = link.get_attribute("href") or ""
+                    text = link.text_content().strip()
+
+                    # Check if this looks like a download link
+                    if any(keyword in href.lower() for keyword in ["download", "file", "report", "attachment"]):
+                        download_links.append(f"{text}: {href}")
                 except:
                     pass
-            logger.info(f"First 10 links: {link_info}")
+
+            if download_links:
+                logger.info(f"Found {len(download_links)} potential download links: {download_links[:10]}")
 
         except Exception as e:
             logger.error(f"Error analyzing page structure: {e}")
