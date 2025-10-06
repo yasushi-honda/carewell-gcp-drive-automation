@@ -269,21 +269,15 @@ class PlaywrightAutomationEngine:
         Extract submission file information from task page
 
         Returns:
-            List of submission dictionaries with metadata
+            List of submission dictionaries with metadata and download links
         """
         logger.info("Extracting submission list from page")
 
-        # Log all frames
-        logger.info(f"Total frames: {len(self.page.frames)}")
-        for i, frame in enumerate(self.page.frames):
-            logger.info(f"Frame {i}: name={frame.name or 'unnamed'}, url={frame.url}")
-
-        # Find the frame containing submission list (should be 'list' frame)
+        # Find the list frame
         list_frame = None
         for frame in self.page.frames:
             if frame.name == CarewellSelectors.FRAME_LIST:
                 list_frame = frame
-                logger.info(f"Using frame: {frame.name}")
                 break
 
         if not list_frame:
@@ -297,7 +291,7 @@ class PlaywrightAutomationEngine:
             rows = list_frame.locator('tr.standard_grid_item').all()
             logger.info(f"Found {len(rows)} submission rows")
 
-            # Parse each row
+            # Parse each row and get download links
             for i, row in enumerate(rows):
                 try:
                     cells = row.locator("td").all()
@@ -317,28 +311,90 @@ class PlaywrightAutomationEngine:
                     status = cells[4].text_content().strip()
                     submit_date = cells[5].text_content().strip()
 
+                    logger.info(f"Processing submission: {student_name_text}")
+
+                    # Navigate to detail page to get download link
+                    download_info = self._get_download_link(detail_url)
+
                     submission = {
                         "student_name": student_name_text,
-                        "detail_url": detail_url,
                         "log_no": log_no,
                         "score": score,
                         "pass_status": pass_status,
                         "status": status,
-                        "submit_date": submit_date
+                        "submit_date": submit_date,
+                        "download_url": download_info.get("url"),
+                        "filename": download_info.get("filename")
                     }
 
                     submissions.append(submission)
-                    logger.info(f"Parsed submission: {student_name_text} - {status} - {submit_date}")
+                    logger.info(f"Added submission: {student_name_text} - {download_info.get('filename')}")
 
                 except Exception as re:
                     logger.error(f"Could not parse row {i}: {re}", exc_info=True)
 
-            logger.info(f"Successfully extracted {len(submissions)} submissions")
+            logger.info(f"Successfully extracted {len(submissions)} submissions with download links")
 
         except Exception as e:
             logger.error(f"Error extracting submissions: {e}", exc_info=True)
 
         return submissions
+
+    def _get_download_link(self, detail_url: str) -> dict:
+        """
+        Navigate to detail page and extract download link
+
+        Args:
+            detail_url: Relative URL to detail page (e.g., "report.aspx?log_id=XXX")
+
+        Returns:
+            Dictionary with 'url' and 'filename'
+        """
+        try:
+            # Find list frame
+            list_frame = None
+            for frame in self.page.frames:
+                if frame.name == CarewellSelectors.FRAME_LIST:
+                    list_frame = frame
+                    break
+
+            if not list_frame:
+                list_frame = self.page
+
+            # Click the detail link
+            list_frame.click(f'a[href="{detail_url}"]')
+            self._wait_for_navigation()
+
+            # Find download link (download.aspx?id=XXX)
+            download_link = list_frame.locator('a[href^="download.aspx"]').first
+
+            if download_link.count() > 0:
+                download_url = download_link.get_attribute("href")
+                filename = download_link.text_content().strip()
+                logger.info(f"Found download link: {filename}")
+
+                # Go back to list page
+                list_frame.go_back()
+                self._wait_for_navigation()
+
+                return {"url": download_url, "filename": filename}
+            else:
+                logger.warning(f"No download link found for {detail_url}")
+                # Go back to list page
+                list_frame.go_back()
+                self._wait_for_navigation()
+
+                return {"url": None, "filename": None}
+
+        except Exception as e:
+            logger.error(f"Error getting download link from {detail_url}: {e}")
+            # Try to go back
+            try:
+                list_frame.go_back()
+                self._wait_for_navigation()
+            except:
+                pass
+            return {"url": None, "filename": None}
 
     def close(self):
         """Close browser and cleanup resources"""
