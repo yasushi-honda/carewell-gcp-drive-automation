@@ -334,7 +334,7 @@ class PlaywrightAutomationEngine:
                     download_info = self._get_download_link(basic['detail_url'], list_url)
 
                     submission = {
-                        **basic,
+                        **basic,  # Includes detail_url from basic info
                         "download_url": download_info.get("url"),
                         "filename": download_info.get("filename")
                     }
@@ -414,13 +414,14 @@ class PlaywrightAutomationEngine:
                 pass
             return {"url": None, "filename": None}
 
-    def download_file(self, download_url: str, filename: str) -> str:
+    def download_file(self, download_url: str, filename: str, detail_url: str) -> str:
         """
         Download a file from Carewell
 
         Args:
             download_url: URL to download file (e.g., "download.aspx?id=XXX")
             filename: Suggested filename
+            detail_url: Detail page URL where download link exists
 
         Returns:
             Path to downloaded file in /tmp
@@ -444,9 +445,13 @@ class PlaywrightAutomationEngine:
 
             logger.info(f"Starting download: {filename}")
 
-            # Set up download handler
+            # Navigate to detail page first (download link is there)
+            list_frame.click(f'a[href="{detail_url}"]')
+            self._wait_for_navigation(3000)
+
+            # Set up download handler and click download link
             download = None
-            with self.page.expect_download() as download_info:
+            with self.page.expect_download(timeout=30000) as download_info:
                 # Click download link
                 list_frame.click(f'a[href="{download_url}"]')
                 download = download_info.value

@@ -64,11 +64,12 @@ def main(request):
 
             for submission in submissions[:1]:  # Test with first submission only
                 try:
-                    if submission.get("download_url") and submission.get("filename"):
+                    if submission.get("download_url") and submission.get("filename") and submission.get("detail_url"):
                         logger.info(f"Testing download: {submission['filename']}")
                         file_path = engine.download_file(
                             submission["download_url"],
-                            submission["filename"]
+                            submission["filename"],
+                            submission["detail_url"]
                         )
                         logger.info(f"Downloaded to: {file_path}")
                         downloaded_count += 1
@@ -76,7 +77,7 @@ def main(request):
                         logger.warning(f"No download link for {submission['student_name']}")
                         failed_count += 1
                 except Exception as e:
-                    logger.error(f"Failed to download {submission['filename']}: {e}")
+                    logger.error(f"Failed to download {submission.get('filename', 'unknown')}: {e}")
                     failed_count += 1
 
             return {
