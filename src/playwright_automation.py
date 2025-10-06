@@ -290,66 +290,50 @@ class PlaywrightAutomationEngine:
             logger.warning("'list' frame not found, using main page")
             list_frame = self.page
 
-        # Debug: Log frame HTML
+        # Get submission table rows
+        submissions = []
         try:
-            frame_html = list_frame.content()[:5000]
-            logger.info(f"List frame HTML (first 5000 chars): {frame_html}")
-        except Exception as e:
-            logger.error(f"Could not get frame content: {e}")
+            # Get all submission rows (class="standard_grid_item")
+            rows = list_frame.locator('tr.standard_grid_item').all()
+            logger.info(f"Found {len(rows)} submission rows")
 
-        # Get submission table
-        try:
-            submission_table = list_frame.locator(CarewellSelectors.SUBMISSION_TABLE)
-
-            if submission_table.count() == 0:
-                logger.warning(f"Submission table '{CarewellSelectors.SUBMISSION_TABLE}' not found")
-                return []
-
-            logger.info(f"Found submission table, count={submission_table.count()}")
-
-            # ASP.NET GridView structure: outer table > tr > td > inner table > tbody > tr (data rows)
-            # We need to find the inner table with class="standard_table"
-            inner_table = submission_table.locator("table.standard_table").first
-            if inner_table.count() == 0:
-                logger.warning("Inner table (standard_table) not found")
-                # Try direct rows from outer table
-                rows = submission_table.locator("tr").all()
-            else:
-                logger.info("Found inner standard_table")
-                rows = inner_table.locator("tr").all()
-
-            logger.info(f"Found {len(rows)} rows in submission table")
-
-            # Log first few rows for structure analysis
-            for i, row in enumerate(rows[:3]):
-                try:
-                    row_html = row.inner_html()[:500]
-                    row_text = row.text_content()[:200]
-                    logger.info(f"Row {i} text: {row_text}")
-                    logger.info(f"Row {i} HTML: {row_html}")
-                except:
-                    pass
-
-            # Parse each row to extract submission data
-            submissions = []
+            # Parse each row
             for i, row in enumerate(rows):
                 try:
-                    # Skip header row (first row)
-                    if i == 0:
+                    cells = row.locator("td").all()
+                    if len(cells) < 6:
+                        logger.warning(f"Row {i} has only {len(cells)} cells, skipping")
                         continue
 
-                    # Get all cells in the row
-                    cells = row.locator("td").all()
-                    logger.info(f"Row {i}: {len(cells)} cells")
+                    # Extract student link and info
+                    student_link_elem = cells[0].locator("a").first
+                    student_name_text = student_link_elem.text_content()  # "氏名 <日介番号>"
+                    detail_url = student_link_elem.get_attribute("href")  # "report.aspx?log_id=XXX&..."
 
-                    # Extract data from cells
-                    # TODO: Determine cell structure
-                    # Typically: student name, submission date, status, download link, etc.
+                    # Extract other data
+                    log_no = cells[1].text_content().strip()
+                    score = cells[2].text_content().strip()
+                    pass_status = cells[3].text_content().strip()
+                    status = cells[4].text_content().strip()
+                    submit_date = cells[5].text_content().strip()
+
+                    submission = {
+                        "student_name": student_name_text,
+                        "detail_url": detail_url,
+                        "log_no": log_no,
+                        "score": score,
+                        "pass_status": pass_status,
+                        "status": status,
+                        "submit_date": submit_date
+                    }
+
+                    submissions.append(submission)
+                    logger.info(f"Parsed submission: {student_name_text} - {status} - {submit_date}")
 
                 except Exception as re:
-                    logger.debug(f"Could not parse row {i}: {re}")
+                    logger.error(f"Could not parse row {i}: {re}", exc_info=True)
 
-            logger.info(f"Extracted {len(submissions)} submissions")
+            logger.info(f"Successfully extracted {len(submissions)} submissions")
 
         except Exception as e:
             logger.error(f"Error extracting submissions: {e}", exc_info=True)
