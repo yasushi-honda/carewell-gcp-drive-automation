@@ -290,6 +290,13 @@ class PlaywrightAutomationEngine:
             logger.warning("'list' frame not found, using main page")
             list_frame = self.page
 
+        # Debug: Log frame HTML
+        try:
+            frame_html = list_frame.content()[:5000]
+            logger.info(f"List frame HTML (first 5000 chars): {frame_html}")
+        except Exception as e:
+            logger.error(f"Could not get frame content: {e}")
+
         # Get submission table
         try:
             submission_table = list_frame.locator(CarewellSelectors.SUBMISSION_TABLE)
@@ -298,11 +305,7 @@ class PlaywrightAutomationEngine:
                 logger.warning(f"Submission table '{CarewellSelectors.SUBMISSION_TABLE}' not found")
                 return []
 
-            logger.info("Found submission table")
-
-            # Debug: Log table HTML structure
-            table_html = submission_table.inner_html()[:3000]
-            logger.info(f"Submission table HTML (first 3000 chars): {table_html}")
+            logger.info(f"Found submission table, count={submission_table.count()}")
 
             # ASP.NET GridView structure: outer table > tr > td > inner table > tbody > tr (data rows)
             # We need to find the inner table with class="standard_table"
