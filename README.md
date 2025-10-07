@@ -196,13 +196,14 @@ playwright install chromium
 ファイルの一意性判定は以下の組み合わせのSHA256ハッシュで行います：
 
 ```
-class_name + task_name + student_name + filename
+class_name + task_name + student_id + filename + submit_date
 ```
 
 これにより：
-- ✅ 同一学生の再提出は検知されない（意図的に上書き可能）
+- ✅ 同一学生が同じファイル名で再提出した場合、提出日時が異なれば新しいファイルとして取得
 - ✅ 異なる課題での同名ファイルは別物として扱われる
-- ✅ ファイル内容が変更されても、Firestore記録があればスキップ
+- ✅ 同一提出（同じ提出日時）の重複は確実にスキップ
+- ✅ 学生IDベースなので名前の表記ゆれに影響されない
 
 ### Google Sheets記録フォーマット
 
@@ -210,7 +211,8 @@ class_name + task_name + student_name + filename
 
 | 列 | 内容 |
 |----|------|
-| 学生名 | Carewellの学生名 |
+| 学生名 | Carewellの学生名（IDを除く） |
+| 学生ID | 学生ID（例：N9902913） |
 | ファイル名 | アップロードされたファイル名 |
 | 提出日時 | Carewellでの提出日時 |
 | スコア | 採点スコア |
@@ -219,6 +221,10 @@ class_name + task_name + student_name + filename
 | Drive File ID | Google DriveファイルID |
 | Drive Link | クリック可能なDriveリンク |
 | アップロード日時 | システムがアップロードした日時 |
+
+**データフォーマット**:
+- Carewellから取得される学生情報は `森平　直樹 <N9902913>` の形式
+- システムが自動的に学生名と学生IDに分離して記録
 
 ## トラブルシューティング
 

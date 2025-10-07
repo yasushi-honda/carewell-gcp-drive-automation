@@ -83,9 +83,10 @@ gcloud secrets describe carewell-password
 ### Firestoreデータベースの作成
 
 ```bash
-# Firestoreをネイティブモードで作成
-gcloud firestore databases create \
-  --location=asia-northeast1
+# Firestoreをネイティブモードで作成（carewell-nativeデータベース）
+gcloud firestore databases create carewell-native \
+  --location=asia-northeast1 \
+  --type=firestore-native
 ```
 
 ### 作成の確認
@@ -95,7 +96,20 @@ gcloud firestore databases create \
 gcloud firestore databases list
 ```
 
-**注意:** Firestoreは一度作成すると削除できません。プロジェクト全体を削除する必要があります。
+**注意事項:**
+- Firestoreは一度作成すると削除できません。プロジェクト全体を削除する必要があります。
+- データベース名は `carewell-native` を使用（コード内で指定）
+- デフォルトデータベースがDATASTORE_MODEの場合、別データベースとして作成が必要
+
+### 重複チェックの仕組み
+
+Firestoreは以下の情報で重複チェックを行います：
+
+**複合キー**: `class_name | task_name | student_id | filename | submit_date`
+
+これにより：
+- 同一学生が同じファイル名で再提出した場合、提出日時が異なれば新規ファイルとして取得
+- 同一提出（同じ提出日時）の場合は重複としてスキップ
 
 ## 5. Artifact Registryの設定
 
@@ -216,6 +230,27 @@ gcloud projects get-iam-policy carewell-automation \
    github-actions-sa@carewell-automation.iam.gserviceaccount.com
    ```
 4. 権限を「編集者」に設定
+
+### スプレッドシートのカラム構成
+
+システムは初回実行時に自動的に以下のヘッダーを作成します：
+
+| カラム名 | 内容 |
+|---------|------|
+| 学生名 | 学生名のみ（例：森平　直樹） |
+| 学生ID | 学生ID（例：N9902913） |
+| ファイル名 | 提出ファイル名 |
+| 提出日時 | Carewellでの提出日時 |
+| スコア | 採点結果 |
+| 合否 | 合否判定 |
+| 状態 | 提出状態 |
+| Drive File ID | Google DriveのファイルID |
+| Drive Link | クリック可能なDriveリンク |
+| アップロード日時 | システムがアップロードした日時 |
+
+**データ形式:**
+- Carewellから取得される学生情報: `森平　直樹 <N9902913>`
+- システムが自動的に学生名と学生IDに分離して記録
 
 ## 9. Workload Identity Federation（GitHub Actions用）
 
