@@ -38,13 +38,13 @@ class SheetsService:
             logger.error(f"Failed to initialize Google Sheets service: {e}", exc_info=True)
             raise
 
-    def _ensure_headers(self, spreadsheet_id: str, sheet_name: str = "Sheet1"):
+    def _ensure_headers(self, spreadsheet_id: str, sheet_name: str = "シート1"):
         """
         Ensure spreadsheet has proper headers
 
         Args:
             spreadsheet_id: Google Sheets spreadsheet ID
-            sheet_name: Sheet name (default: "Sheet1")
+            sheet_name: Sheet name (default: "シート1")
         """
         try:
             # Check if headers exist
@@ -89,7 +89,7 @@ class SheetsService:
         filename: str,
         drive_file_id: str,
         metadata: Optional[dict] = None,
-        sheet_name: str = "Sheet1"
+        sheet_name: str = "シート1"
     ) -> bool:
         """
         Append a new record to the spreadsheet
@@ -100,7 +100,7 @@ class SheetsService:
             filename: Uploaded filename
             drive_file_id: Google Drive file ID
             metadata: Additional metadata (submit_date, score, etc.)
-            sheet_name: Sheet name (default: "Sheet1")
+            sheet_name: Sheet name (default: "シート1")
 
         Returns:
             True if successful, False otherwise
@@ -148,7 +148,7 @@ class SheetsService:
         spreadsheet_id: str,
         student_name: str,
         filename: str,
-        sheet_name: str = "Sheet1"
+        sheet_name: str = "シート1"
     ) -> bool:
         """
         Check if a record already exists in the spreadsheet
@@ -157,7 +157,7 @@ class SheetsService:
             spreadsheet_id: Google Sheets spreadsheet ID
             student_name: Student name
             filename: Filename to check
-            sheet_name: Sheet name (default: "Sheet1")
+            sheet_name: Sheet name (default: "シート1")
 
         Returns:
             True if record exists, False otherwise
@@ -191,7 +191,7 @@ class SheetsService:
 
         Args:
             spreadsheet_id: Google Sheets spreadsheet ID
-            sheet_name: Sheet name (default: "Sheet1")
+            sheet_name: Sheet name (default: "シート1")
 
         Returns:
             Dictionary with statistics
