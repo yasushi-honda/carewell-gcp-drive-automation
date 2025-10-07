@@ -16,8 +16,8 @@ class FirestoreService:
     """
 
     def __init__(self):
-        """Initialize Firestore client"""
-        self.db = firestore.Client()
+        """Initialize Firestore client with Native Mode database"""
+        self.db = firestore.Client(database='carewell-native')
         self.collection_name = "uploaded_files"
 
     def _generate_file_hash(self, class_name: str, task_name: str, student_name: str, filename: str) -> str:
@@ -62,8 +62,8 @@ class FirestoreService:
                 return None
 
         except Exception as e:
-            logger.warning(f"Firestore unavailable (Datastore mode?), skipping duplicate check for {filename}")
-            # Return None to allow upload (no duplicate check)
+            logger.error(f"Error checking duplicate for {filename}: {e}", exc_info=True)
+            # Return None to allow upload on error (fail-open for availability)
             return None
 
     def record_upload(
@@ -113,8 +113,8 @@ class FirestoreService:
             return True
 
         except Exception as e:
-            logger.warning(f"Firestore unavailable, skipping record for {filename}: {e}")
-            # Return True to continue processing even if Firestore fails
+            logger.error(f"Error recording upload for {filename}: {e}", exc_info=True)
+            # Return True to continue processing even if Firestore fails (fail-open)
             return True
 
     def get_upload_stats(self, class_name: str, task_name: str) -> dict:
