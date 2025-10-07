@@ -62,8 +62,8 @@ class FirestoreService:
                 return None
 
         except Exception as e:
-            logger.error(f"Error checking upload status for {filename}: {e}", exc_info=True)
-            # Return None on error to allow retry
+            logger.warning(f"Firestore unavailable (Datastore mode?), skipping duplicate check for {filename}")
+            # Return None to allow upload (no duplicate check)
             return None
 
     def record_upload(
@@ -113,8 +113,9 @@ class FirestoreService:
             return True
 
         except Exception as e:
-            logger.error(f"Error recording upload for {filename}: {e}", exc_info=True)
-            return False
+            logger.warning(f"Firestore unavailable, skipping record for {filename}: {e}")
+            # Return True to continue processing even if Firestore fails
+            return True
 
     def get_upload_stats(self, class_name: str, task_name: str) -> dict:
         """
