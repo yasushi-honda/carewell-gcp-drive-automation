@@ -62,8 +62,8 @@ RESPONSE=$(curl -s -w "\n%{http_code}" -X POST "${FUNCTION_URL}" \
   -d "${REQUEST_PAYLOAD}")
 
 # HTTPステータスコードとボディを分離
-HTTP_BODY=$(echo "${RESPONSE}" | head -n -1)
 HTTP_CODE=$(echo "${RESPONSE}" | tail -n 1)
+HTTP_BODY=$(echo "${RESPONSE}" | sed '$d')
 
 # レスポンスの表示
 echo -e "${YELLOW}Response (HTTP ${HTTP_CODE}):${NC}"

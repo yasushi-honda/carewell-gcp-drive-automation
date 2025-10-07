@@ -115,16 +115,18 @@ gcloud artifacts repositories list
 
 ## 6. サービスアカウントの設定
 
-### デフォルトCompute Engine サービスアカウントの確認
+### GitHub Actions用サービスアカウントの確認
+
+このプロジェクトでは、GitHub Actions専用のサービスアカウント`github-actions-sa`を使用します。
 
 ```bash
-# プロジェクト番号を取得
-PROJECT_NUMBER=$(gcloud projects describe carewell-automation --format="value(projectNumber)")
-
 # サービスアカウントのメールアドレス
-SERVICE_ACCOUNT="${PROJECT_NUMBER}-compute@developer.gserviceaccount.com"
+SERVICE_ACCOUNT="github-actions-sa@carewell-automation.iam.gserviceaccount.com"
 
 echo "Service Account: ${SERVICE_ACCOUNT}"
+
+# サービスアカウントの存在確認
+gcloud iam service-accounts describe ${SERVICE_ACCOUNT}
 ```
 
 ### IAM権限の付与
@@ -155,37 +157,65 @@ gcloud projects get-iam-policy carewell-automation \
   --filter="bindings.members:${SERVICE_ACCOUNT}"
 ```
 
-## 7. Google Drive フォルダの準備
+## 7. Google Drive 共有ドライブの準備
 
-### フォルダの作成と共有
+**重要:** サービスアカウントはマイドライブにアップロードできません。必ず共有ドライブ（Shared Drive）を使用してください。
 
-1. Google Driveでアップロード先フォルダを作成
-2. フォルダを右クリック → 「共有」
-3. サービスアカウントのメールアドレスを追加:
-   ```
-   [PROJECT_NUMBER]-compute@developer.gserviceaccount.com
-   ```
-4. 権限を「編集者」に設定
-5. フォルダIDをメモ（URLから取得）:
-   ```
-   https://drive.google.com/drive/folders/[THIS_IS_THE_FOLDER_ID]
-   ```
+### 共有ドライブの作成と権限設定
+
+1. **Google Driveで共有ドライブを作成**
+   - 左サイドバー → 「共有ドライブ」
+   - 「新規」をクリック
+   - 共有ドライブ名を入力（例：「Carewell自動収集」）
+
+2. **フォルダの作成**
+   - 共有ドライブ内にアップロード先フォルダを作成
+   - フォルダIDをメモ（URLから取得）:
+     ```
+     https://drive.google.com/drive/folders/[THIS_IS_THE_FOLDER_ID]
+     ```
+
+3. **サービスアカウントに権限を付与**
+   - 共有ドライブの設定（⚙アイコン）→ 「メンバーを管理」
+   - 「メンバーを追加」をクリック
+   - サービスアカウントのメールアドレスを入力:
+     ```
+     github-actions-sa@carewell-automation.iam.gserviceaccount.com
+     ```
+   - 権限を「コンテンツ管理者」または「編集者」に設定
+   - 「送信」をクリック
+
+**注意事項:**
+- ❌ マイドライブのフォルダは使用できません（サービスアカウントにはストレージクォータがないため）
+- ✅ 共有ドライブ内のフォルダのみ使用可能
+- ✅ コードは`supportsAllDrives=True`パラメータで共有ドライブに対応済み
 
 ## 8. Google Spreadsheetsの準備
 
 ### スプレッドシートの作成と共有
 
+**推奨:** スプレッドシートも共有ドライブ内に作成することで、一元管理できます。
+
+1. **共有ドライブ内でスプレッドシートを作成**
+   - 先ほど作成した共有ドライブを開く
+   - 「新規」→ 「Google スプレッドシート」
+   - スプレッドシートIDをメモ（URLから取得）:
+     ```
+     https://docs.google.com/spreadsheets/d/[THIS_IS_THE_SPREADSHEET_ID]/edit
+     ```
+
+2. **権限の確認**
+   - 共有ドライブ内のファイルは、ドライブのメンバー全員がアクセス可能
+   - サービスアカウント（`github-actions-sa@carewell-automation.iam.gserviceaccount.com`）は既にメンバーのため、追加の共有設定は不要
+
+**マイドライブで作成する場合:**
 1. Google Sheetsで新規スプレッドシートを作成
 2. 「共有」をクリック
 3. サービスアカウントのメールアドレスを追加:
    ```
-   [PROJECT_NUMBER]-compute@developer.gserviceaccount.com
+   github-actions-sa@carewell-automation.iam.gserviceaccount.com
    ```
 4. 権限を「編集者」に設定
-5. スプレッドシートIDをメモ（URLから取得）:
-   ```
-   https://docs.google.com/spreadsheets/d/[THIS_IS_THE_SPREADSHEET_ID]/edit
-   ```
 
 ## 9. Workload Identity Federation（GitHub Actions用）
 

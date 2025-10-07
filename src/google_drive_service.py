@@ -117,10 +117,10 @@ class GoogleDriveService:
 
     def check_folder_access(self, folder_id: str) -> bool:
         """
-        Check if service account has access to the folder
+        Check if service account has access to the folder (Shared Drive supported)
 
         Args:
-            folder_id: Google Drive folder ID
+            folder_id: Google Drive folder ID (must be in Shared Drive)
 
         Returns:
             True if accessible, False otherwise
@@ -128,10 +128,17 @@ class GoogleDriveService:
         try:
             folder = self.service.files().get(
                 fileId=folder_id,
-                fields='id, name'
+                fields='id, name, driveId',
+                supportsAllDrives=True
             ).execute()
 
-            logger.info(f"Successfully accessed folder: {folder.get('name')} (ID: {folder_id})")
+            drive_type = "Shared Drive" if folder.get('driveId') else "My Drive"
+            logger.info(f"Successfully accessed folder: {folder.get('name')} (ID: {folder_id}, Type: {drive_type})")
+
+            # Warn if not in Shared Drive
+            if not folder.get('driveId'):
+                logger.warning(f"Folder {folder_id} is in My Drive. Service accounts cannot upload to My Drive folders. Use Shared Drive instead.")
+
             return True
 
         except Exception as e:
