@@ -50,7 +50,7 @@ class SheetsService:
             # Check if headers exist
             result = self.service.spreadsheets().values().get(
                 spreadsheetId=spreadsheet_id,
-                range=f"{sheet_name}!A1:I1"
+                range=f"{sheet_name}!A1:J1"
             ).execute()
 
             values = result.get('values', [])
@@ -59,6 +59,7 @@ class SheetsService:
             if not values or len(values[0]) == 0:
                 headers = [
                     "学生名",
+                    "学生ID",
                     "ファイル名",
                     "提出日時",
                     "スコア",
@@ -71,7 +72,7 @@ class SheetsService:
 
                 self.service.spreadsheets().values().update(
                     spreadsheetId=spreadsheet_id,
-                    range=f"{sheet_name}!A1:I1",
+                    range=f"{sheet_name}!A1:J1",
                     valueInputOption="RAW",
                     body={"values": [headers]}
                 ).execute()
@@ -96,10 +97,10 @@ class SheetsService:
 
         Args:
             spreadsheet_id: Google Sheets spreadsheet ID
-            student_name: Student name
+            student_name: Student name (without ID)
             filename: Uploaded filename
             drive_file_id: Google Drive file ID
-            metadata: Additional metadata (submit_date, score, etc.)
+            metadata: Additional metadata (student_id, submit_date, score, etc.)
             sheet_name: Sheet name (default: "シート1")
 
         Returns:
@@ -117,6 +118,7 @@ class SheetsService:
 
             row = [
                 student_name,
+                metadata.get("student_id", ""),
                 filename,
                 metadata.get("submit_date", ""),
                 metadata.get("score", ""),
@@ -130,13 +132,13 @@ class SheetsService:
             # Append row
             result = self.service.spreadsheets().values().append(
                 spreadsheetId=spreadsheet_id,
-                range=f"{sheet_name}!A:I",
+                range=f"{sheet_name}!A:J",
                 valueInputOption="RAW",
                 insertDataOption="INSERT_ROWS",
                 body={"values": [row]}
             ).execute()
 
-            logger.info(f"Appended record to spreadsheet: {student_name} - {filename}")
+            logger.info(f"Appended record to spreadsheet: {student_name} ({metadata.get('student_id', '')}) - {filename}")
             return True
 
         except Exception as e:

@@ -79,8 +79,9 @@ def main(request):
                         existing_upload = firestore_service.check_already_uploaded(
                             class_name,
                             task_name,
-                            submission['student_name'],
-                            submission['filename']
+                            submission.get('student_id', ''),
+                            submission['filename'],
+                            submission.get('submit_date', '')
                         )
 
                         if existing_upload:
@@ -107,6 +108,7 @@ def main(request):
 
                         # Record upload in Firestore
                         metadata = {
+                            "student_id": submission.get('student_id'),
                             "log_no": submission.get('log_no'),
                             "score": submission.get('score'),
                             "pass_status": submission.get('pass_status'),
@@ -118,9 +120,11 @@ def main(request):
                             class_name,
                             task_name,
                             submission['student_name'],
+                            submission.get('student_id', ''),
                             submission['filename'],
                             drive_file_id,
                             drive_folder_id,
+                            submission.get('submit_date', ''),
                             metadata=metadata
                         )
 

@@ -3,12 +3,35 @@ Playwright Automation Engine for Carewell Web Service
 """
 import logging
 import os
+import re
 import time
 from typing import Optional
 from playwright.sync_api import sync_playwright, Browser, Page, Frame
 from google.cloud import secretmanager
 
 logger = logging.getLogger(__name__)
+
+
+def parse_student_info(student_name_with_id: str) -> tuple[str, str]:
+    """
+    Parse student name and ID from format: "森平　直樹 <N9902913>"
+
+    Args:
+        student_name_with_id: Student name with ID in format "Name <ID>"
+
+    Returns:
+        Tuple of (student_name, student_id)
+        Example: ("森平　直樹", "N9902913")
+    """
+    match = re.match(r'^(.+?)\s*<(.+?)>$', student_name_with_id.strip())
+    if match:
+        student_name = match.group(1).strip()
+        student_id = match.group(2).strip()
+        return student_name, student_id
+    else:
+        # If format doesn't match, return original as name and empty ID
+        logger.warning(f"Could not parse student ID from: {student_name_with_id}")
+        return student_name_with_id.strip(), ""
 
 
 class CarewellSelectors:
@@ -304,7 +327,7 @@ class PlaywrightAutomationEngine:
 
                     # Extract all data while row is still valid
                     student_link_elem = cells[0].locator("a").first
-                    student_name_text = student_link_elem.text_content()
+                    student_name_with_id = student_link_elem.text_content()
                     detail_url = student_link_elem.get_attribute("href")
                     log_no = cells[1].text_content().strip()
                     score = cells[2].text_content().strip()
@@ -312,8 +335,12 @@ class PlaywrightAutomationEngine:
                     status = cells[4].text_content().strip()
                     submit_date = cells[5].text_content().strip()
 
+                    # Parse student name and ID
+                    student_name, student_id = parse_student_info(student_name_with_id)
+
                     submission_basics.append({
-                        "student_name": student_name_text,
+                        "student_name": student_name,
+                        "student_id": student_id,
                         "detail_url": detail_url,
                         "log_no": log_no,
                         "score": score,
