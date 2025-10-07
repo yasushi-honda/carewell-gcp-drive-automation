@@ -446,17 +446,50 @@ class PlaywrightAutomationEngine:
             logger.info(f"Starting download: {filename}")
 
             # Navigate to detail page first (download link is there)
-            # Reduce timeout to fail fast on problematic links
             logger.debug(f"Navigating to detail page: {detail_url}")
+
+            # Strategy: Try multiple approaches to click the link
+            detail_link_selector = f'a[href="{detail_url}"]'
+            clicked = False
+
+            # Attempt 1: Standard click with short timeout
             try:
-                list_frame.click(f'a[href="{detail_url}"]', timeout=10000)
+                logger.debug(f"Attempt 1: Standard click")
+                list_frame.wait_for_selector(detail_link_selector, state='attached', timeout=5000)
+                list_frame.click(detail_link_selector, timeout=5000)
+                clicked = True
                 self._wait_for_navigation(2000)
-            except Exception as nav_error:
-                logger.warning(f"Failed to navigate to detail page (retrying once): {nav_error}")
-                # Retry once with longer timeout
-                time.sleep(1)
-                list_frame.click(f'a[href="{detail_url}"]', timeout=15000)
-                self._wait_for_navigation(2000)
+            except Exception as e1:
+                logger.debug(f"Attempt 1 failed: {e1}")
+
+                # Attempt 2: Scroll into view and force click
+                try:
+                    logger.debug(f"Attempt 2: Scroll and force click")
+                    element = list_frame.query_selector(detail_link_selector)
+                    if element:
+                        element.scroll_into_view_if_needed()
+                        time.sleep(0.5)
+                        element.click(force=True, timeout=5000)
+                        clicked = True
+                        self._wait_for_navigation(2000)
+                    else:
+                        raise Exception("Element not found")
+                except Exception as e2:
+                    logger.debug(f"Attempt 2 failed: {e2}")
+
+                    # Attempt 3: Direct navigation
+                    try:
+                        logger.debug(f"Attempt 3: Direct navigation")
+                        current_url = list_frame.url
+                        base_url = current_url.split('?')[0].rsplit('/', 1)[0]
+                        full_detail_url = f"{base_url}/{detail_url}"
+                        logger.debug(f"Navigating to: {full_detail_url}")
+                        list_frame.goto(full_detail_url, timeout=10000, wait_until='domcontentloaded')
+                        clicked = True
+                        self._wait_for_navigation(2000)
+                    except Exception as e3:
+                        logger.error(f"All navigation attempts failed: {e3}")
+                        raise Exception(f"Cannot navigate to detail page after 3 attempts")
 
             # Set up download handler and click download link
             logger.debug(f"Initiating download: {download_url}")
