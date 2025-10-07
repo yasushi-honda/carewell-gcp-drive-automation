@@ -446,14 +446,24 @@ class PlaywrightAutomationEngine:
             logger.info(f"Starting download: {filename}")
 
             # Navigate to detail page first (download link is there)
-            list_frame.click(f'a[href="{detail_url}"]')
-            self._wait_for_navigation(3000)
+            # Reduce timeout to fail fast on problematic links
+            logger.debug(f"Navigating to detail page: {detail_url}")
+            try:
+                list_frame.click(f'a[href="{detail_url}"]', timeout=10000)
+                self._wait_for_navigation(2000)
+            except Exception as nav_error:
+                logger.warning(f"Failed to navigate to detail page (retrying once): {nav_error}")
+                # Retry once with longer timeout
+                time.sleep(1)
+                list_frame.click(f'a[href="{detail_url}"]', timeout=15000)
+                self._wait_for_navigation(2000)
 
             # Set up download handler and click download link
+            logger.debug(f"Initiating download: {download_url}")
             download = None
-            with self.page.expect_download(timeout=30000) as download_info:
+            with self.page.expect_download(timeout=60000) as download_info:
                 # Click download link
-                list_frame.click(f'a[href="{download_url}"]')
+                list_frame.click(f'a[href="{download_url}"]', timeout=10000)
                 download = download_info.value
 
             # Save to /tmp with sanitized filename
@@ -462,6 +472,7 @@ class PlaywrightAutomationEngine:
             download_path = f"/tmp/{safe_filename}"
 
             # Save the file
+            logger.debug(f"Saving file to: {download_path}")
             download.save_as(download_path)
 
             # Verify file exists and has size
