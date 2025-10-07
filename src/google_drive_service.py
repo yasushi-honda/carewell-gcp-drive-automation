@@ -22,17 +22,28 @@ class GoogleDriveService:
 
     def _initialize_service(self):
         """
-        Initialize Google Drive API service with default credentials
+        Initialize Google Drive API service with domain-wide delegation
 
-        Uses Application Default Credentials (ADC) which works with:
-        - Service account attached to Cloud Run
-        - Workload Identity
+        Uses Application Default Credentials (ADC) with subject delegation to:
+        - Impersonate user account (system@jaccw.or.jp)
+        - Upload files to My Drive folders
         """
         try:
             # Use default credentials (service account from Cloud Run)
             from google.auth import default
+            import os
 
             credentials, project = default(scopes=['https://www.googleapis.com/auth/drive.file'])
+
+            # Apply domain-wide delegation to impersonate user
+            # This allows the service account to act as system@jaccw.or.jp
+            delegated_user = os.environ.get('DRIVE_DELEGATED_USER', 'system@jaccw.or.jp')
+
+            if hasattr(credentials, 'with_subject'):
+                credentials = credentials.with_subject(delegated_user)
+                logger.info(f"Using domain-wide delegation with subject: {delegated_user}")
+            else:
+                logger.warning("Credentials do not support domain-wide delegation, using default")
 
             self.service = build('drive', 'v3', credentials=credentials)
             logger.info("Google Drive service initialized successfully")
