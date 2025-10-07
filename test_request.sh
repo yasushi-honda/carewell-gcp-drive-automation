@@ -56,9 +56,13 @@ echo ""
 echo -e "${YELLOW}Sending request...${NC}"
 echo ""
 
-# リクエスト送信
+# 認証トークンの取得
+AUTH_TOKEN=$(gcloud auth print-identity-token)
+
+# リクエスト送信（認証トークン付き）
 RESPONSE=$(curl -s -w "\n%{http_code}" -X POST "${FUNCTION_URL}" \
   -H "Content-Type: application/json" \
+  -H "Authorization: Bearer ${AUTH_TOKEN}" \
   -d "${REQUEST_PAYLOAD}")
 
 # HTTPステータスコードとボディを分離
