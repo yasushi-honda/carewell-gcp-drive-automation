@@ -22,25 +22,14 @@ class SheetsService:
 
     def _initialize_service(self):
         """
-        Initialize Google Sheets API service with domain-wide delegation
+        Initialize Google Sheets API service with default credentials
 
-        Uses Application Default Credentials (ADC) with subject delegation
+        Uses Application Default Credentials (ADC)
         """
         try:
-            import os
-
             credentials, project = default(scopes=[
                 'https://www.googleapis.com/auth/spreadsheets'
             ])
-
-            # Apply domain-wide delegation to impersonate user
-            delegated_user = os.environ.get('DRIVE_DELEGATED_USER', 'system@jaccw.or.jp')
-
-            if hasattr(credentials, 'with_subject'):
-                credentials = credentials.with_subject(delegated_user)
-                logger.info(f"Using domain-wide delegation with subject: {delegated_user}")
-            else:
-                logger.warning("Credentials do not support domain-wide delegation, using default")
 
             self.service = build('sheets', 'v4', credentials=credentials)
             logger.info("Google Sheets service initialized successfully")
