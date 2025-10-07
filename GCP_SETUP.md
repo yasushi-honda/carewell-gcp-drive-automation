@@ -299,7 +299,39 @@ gcloud iam workload-identity-pools providers describe github-provider \
 
 この値をGitHub Secretsに`WIF_PROVIDER`として設定します。
 
-## 10. GitHub Secretsの設定
+## 10. Cloud Run 認証設定
+
+### パブリックアクセスの削除とサービスアカウント認証
+
+Cloud Run Functionsは初期状態では誰でもアクセス可能です。セキュリティのため、認証されたアクセスのみに制限します。
+
+```bash
+# パブリックアクセス（allUsers）を削除
+gcloud run services remove-iam-policy-binding carewell-file-collector \
+  --region=asia-northeast1 \
+  --member="allUsers" \
+  --role="roles/run.invoker"
+
+# サービスアカウントにinvoker権限を付与
+gcloud run services add-iam-policy-binding carewell-file-collector \
+  --region=asia-northeast1 \
+  --member="serviceAccount:github-actions-sa@carewell-automation.iam.gserviceaccount.com" \
+  --role="roles/run.invoker"
+```
+
+### 認証の確認
+
+```bash
+# IAMポリシーを確認
+gcloud run services get-iam-policy carewell-file-collector \
+  --region=asia-northeast1
+```
+
+**期待される出力**:
+- `allUsers`が存在しない
+- `github-actions-sa`のみが`roles/run.invoker`を持つ
+
+## 11. GitHub Secretsの設定
 
 GitHubリポジトリの Settings → Secrets and variables → Actions で以下を設定：
 

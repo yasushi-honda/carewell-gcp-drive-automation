@@ -140,12 +140,14 @@ playwright install chromium
 - **メモリ**: 2Gi
 - **CPU**: 1
 - **タイムアウト**: 540秒
-- **認証**: 未認証アクセス許可（開発中）
+- **認証**: サービスアカウント認証（github-actions-sa）
 
 ## セキュリティ
 
 - 認証情報はSecret Managerで管理
 - Workload Identity Federationによる鍵なし認証
+- Cloud Run: 認証トークン必須（パブリックアクセス無効化）
+- サービスアカウント最小権限の原則
 - 環境変数での認証情報保存は禁止
 
 ## ライセンス
