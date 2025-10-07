@@ -51,6 +51,9 @@ class CarewellSelectors:
     SUBMISSION_TABLE = 'table#ctl00_masterMain_gvwMain'
     SUBMISSION_ROW = 'tr.standard_table_tr'
 
+    # Pagination selectors
+    PAGINATION_SELECT = 'select[name="ctl00$masterMain$dpgMain$dpgMain$ctl00$ddlPage"]'
+
     # Frame names
     FRAME_LIST = 'list'
 
@@ -289,12 +292,12 @@ class PlaywrightAutomationEngine:
 
     def get_submission_list(self) -> list[dict]:
         """
-        Extract submission file information from task page
+        Extract submission file information from all pages
 
         Returns:
             List of submission dictionaries with metadata and download links
         """
-        logger.info("Extracting submission list from page")
+        logger.info("Extracting submission list from all pages")
 
         # Find the list frame
         list_frame = None
@@ -307,77 +310,120 @@ class PlaywrightAutomationEngine:
             logger.warning("'list' frame not found, using main page")
             list_frame = self.page
 
-        # Get submission table rows
-        submissions = []
+        # Collect submissions from all pages
+        all_submissions = []
+        current_page = 1
+
         try:
             # Save list URL for navigation
             list_url = list_frame.url
 
-            # First pass: Extract all basic submission info
-            rows = list_frame.locator('tr.standard_grid_item').all()
-            logger.info(f"Found {len(rows)} submission rows")
+            # Loop through all pages
+            while True:
+                logger.info(f"Processing page {current_page}")
 
-            submission_basics = []
-            for i, row in enumerate(rows):
+                # Wait for data to load
+                list_frame.wait_for_selector('tr.standard_grid_item', timeout=10000)
+
+                # First pass: Extract all basic submission info from current page
+                rows = list_frame.locator('tr.standard_grid_item').all()
+                logger.info(f"Found {len(rows)} submission rows on page {current_page}")
+
+                submission_basics = []
+                for i, row in enumerate(rows):
+                    try:
+                        cells = row.locator("td").all()
+                        if len(cells) < 6:
+                            logger.warning(f"Row {i} has only {len(cells)} cells, skipping")
+                            continue
+
+                        # Extract all data while row is still valid
+                        student_link_elem = cells[0].locator("a").first
+                        student_name_with_id = student_link_elem.text_content()
+                        detail_url = student_link_elem.get_attribute("href")
+                        log_no = cells[1].text_content().strip()
+                        score = cells[2].text_content().strip()
+                        pass_status = cells[3].text_content().strip()
+                        status = cells[4].text_content().strip()
+                        submit_date = cells[5].text_content().strip()
+
+                        # Parse student name and ID
+                        student_name, student_id = parse_student_info(student_name_with_id)
+
+                        submission_basics.append({
+                            "student_name": student_name,
+                            "student_id": student_id,
+                            "detail_url": detail_url,
+                            "log_no": log_no,
+                            "score": score,
+                            "pass_status": pass_status,
+                            "status": status,
+                            "submit_date": submit_date
+                        })
+
+                    except Exception as re:
+                        logger.error(f"Could not parse row {i}: {re}", exc_info=True)
+
+                logger.info(f"Extracted basic info for {len(submission_basics)} submissions on page {current_page}")
+
+                # Second pass: Get download links for each submission on current page
+                for basic in submission_basics:
+                    try:
+                        logger.info(f"Getting download link for: {basic['student_name']}")
+                        download_info = self._get_download_link(basic['detail_url'], list_url)
+
+                        submission = {
+                            **basic,  # Includes detail_url from basic info
+                            "download_url": download_info.get("url"),
+                            "filename": download_info.get("filename")
+                        }
+
+                        all_submissions.append(submission)
+                        logger.info(f"Added: {basic['student_name']} - {download_info.get('filename')}")
+
+                    except Exception as e:
+                        logger.error(f"Error processing {basic['student_name']}: {e}", exc_info=True)
+
+                # Check for pagination and navigate to next page
                 try:
-                    cells = row.locator("td").all()
-                    if len(cells) < 6:
-                        logger.warning(f"Row {i} has only {len(cells)} cells, skipping")
-                        continue
+                    pagination_select = list_frame.locator(CarewellSelectors.PAGINATION_SELECT)
 
-                    # Extract all data while row is still valid
-                    student_link_elem = cells[0].locator("a").first
-                    student_name_with_id = student_link_elem.text_content()
-                    detail_url = student_link_elem.get_attribute("href")
-                    log_no = cells[1].text_content().strip()
-                    score = cells[2].text_content().strip()
-                    pass_status = cells[3].text_content().strip()
-                    status = cells[4].text_content().strip()
-                    submit_date = cells[5].text_content().strip()
+                    if pagination_select.count() == 0:
+                        logger.info("No pagination control found, assuming single page")
+                        break
 
-                    # Parse student name and ID
-                    student_name, student_id = parse_student_info(student_name_with_id)
+                    # Get all page options
+                    options = pagination_select.locator('option').all()
+                    total_pages = len(options)
+                    logger.info(f"Total pages available: {total_pages}")
 
-                    submission_basics.append({
-                        "student_name": student_name,
-                        "student_id": student_id,
-                        "detail_url": detail_url,
-                        "log_no": log_no,
-                        "score": score,
-                        "pass_status": pass_status,
-                        "status": status,
-                        "submit_date": submit_date
-                    })
+                    # Check if there's a next page
+                    if current_page >= total_pages:
+                        logger.info(f"Reached last page {current_page}/{total_pages}")
+                        break
 
-                except Exception as re:
-                    logger.error(f"Could not parse row {i}: {re}", exc_info=True)
+                    # Navigate to next page
+                    next_page = current_page + 1
+                    logger.info(f"Navigating to page {next_page}/{total_pages}")
 
-            logger.info(f"Extracted basic info for {len(submission_basics)} submissions")
+                    # Select next page by value (page numbers are 1-indexed)
+                    pagination_select.select_option(str(next_page))
 
-            # Second pass: Get download links for each submission
-            for basic in submission_basics:
-                try:
-                    logger.info(f"Getting download link for: {basic['student_name']}")
-                    download_info = self._get_download_link(basic['detail_url'], list_url)
+                    # Wait for page transition
+                    time.sleep(2)
 
-                    submission = {
-                        **basic,  # Includes detail_url from basic info
-                        "download_url": download_info.get("url"),
-                        "filename": download_info.get("filename")
-                    }
+                    current_page = next_page
 
-                    submissions.append(submission)
-                    logger.info(f"Added: {basic['student_name']} - {download_info.get('filename')}")
+                except Exception as pe:
+                    logger.warning(f"Pagination navigation failed: {pe}, assuming last page")
+                    break
 
-                except Exception as e:
-                    logger.error(f"Error processing {basic['student_name']}: {e}", exc_info=True)
-
-            logger.info(f"Successfully extracted {len(submissions)} submissions with download links")
+            logger.info(f"Successfully extracted {len(all_submissions)} submissions from {current_page} page(s)")
 
         except Exception as e:
             logger.error(f"Error extracting submissions: {e}", exc_info=True)
 
-        return submissions
+        return all_submissions
 
     def _get_download_link(self, detail_url: str, list_url: str) -> dict:
         """
