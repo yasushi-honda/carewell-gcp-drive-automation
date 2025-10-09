@@ -259,11 +259,14 @@ class PlaywrightAutomationEngine:
         self._wait_for_navigation()
 
     def _show_all_submissions(self):
-        """Click '全て' tab to show all submissions"""
-        if not self._click_in_any_frame('text="全て"', '全て tab'):
-            raise Exception("Could not click '全て' tab")
-
-        self._wait_for_navigation(CarewellConfig.FRAME_LOAD_WAIT)
+        """Click '全て' tab to show all submissions (optional)"""
+        # Try to click '全て' tab, but don't fail if it doesn't exist
+        if self._click_in_any_frame(':has-text("全て")', '全て tab'):
+            logger.info("Clicked '全て' tab successfully")
+            self._wait_for_navigation(CarewellConfig.FRAME_LOAD_WAIT)
+        else:
+            logger.warning("'全て' tab not found, continuing without clicking (may already be on all submissions view)")
+            self._wait_for_navigation(CarewellConfig.FRAME_LOAD_WAIT)
 
     def navigate_to_task(self, class_name: str, task_pattern: str) -> Page:
         """
