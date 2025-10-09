@@ -1,31 +1,32 @@
 {
   "feature_name": "carewell-drive-automation",
   "created_at": "2025-10-02T00:00:00Z",
-  "updated_at": "2025-10-09T00:00:00Z",
+  "updated_at": "2025-10-09T01:00:00Z",
   "language": "ja",
   "phase": "implementation-in-progress",
   "approvals": {
     "requirements": {
       "generated": true,
       "approved": false,
-      "note": "運用要件（要件10）を追加 - 再承認待ち"
+      "note": "運用要件（要件10）とtask_idパラメータ追加（要件8） - 再承認待ち"
     },
     "design": {
       "generated": true,
       "approved": false,
-      "note": "運用設計セクションを追加 - 再承認待ち"
+      "note": "運用設計とtask_id対応データ構造変更 - 再承認待ち"
     },
     "tasks": {
       "generated": true,
       "approved": false,
-      "note": "タスク10.4を詳細化（運用基盤構築） - 再承認待ち"
+      "note": "タスク10.4詳細化、フェーズ11（task_id導入）追加 - 再承認待ち"
     }
   },
   "ready_for_implementation": true,
   "implementation_notes": {
     "core_functionality": "完了 - 全コア機能実装済み（フェーズ1-7、10.1-10.3、10.5）",
     "operations_phase": "仕様策定完了 - Cloud Scheduler設定と運用基盤構築（タスク10.4）の実装待ち",
+    "task_id_migration": "仕様策定完了 - task_id導入によるパラメータ・データ構造改善（フェーズ11）の実装待ち",
     "optional_features": "未実装 - Gmail通知（フェーズ8）、ユニット/統合テスト（フェーズ9）",
-    "production_status": "稼働中 - コア機能は本番環境で手動トリガー運用中"
+    "production_status": "開発段階 - テストデータのみ、本番未稼働"
   }
 }

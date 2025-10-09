@@ -226,16 +226,21 @@ PDF、CSV、画像、Excel、PowerPointなど多様な形式に対応
 1. WHEN Cloud Run Function（第2世代）がデプロイされる THEN システムはHTTPリクエストをトリガーとして受け付けなければならない
 2. WHEN HTTPリクエストを受信する THEN システムはリクエストボディから以下のパラメータを抽出しなければならない:
    - class_name: クラス名（文字列）
-   - task_name: 課題名（文字列）
+   - task_id: 課題識別子（文字列、例: "課題①"、Firestore/Sheets管理用）
+   - task_pattern: 課題検索パターン（文字列、例: "課題①"、Carewell画面での部分一致検索用）
    - drive_folder_id: Google DriveフォルダID（文字列）
    - spreadsheet_id: スプレッドシートID（文字列）
 3. IF 必須パラメータが欠けている THEN システムはHTTP 400エラーを返し、欠けているパラメータ名を示すエラーメッセージを含めなければならない
-4. WHEN Cloud Schedulerがジョブを実行する THEN システムは各クラス×課題の組み合わせに対して個別のスケジュールジョブを設定しなければならない
-5. WHEN スケジュールジョブが設定される THEN システムは実行タイミングを30分間隔でずらして同時実行を避けなければならない
-6. WHEN Functionが実行される THEN システムは実行タイムアウトを適切に設定しなければならない（推奨: 540秒）
-7. WHEN Functionが実行される THEN システムはメモリ割り当てを適切に設定しなければならない（推奨: 1GB以上、Playwright要件考慮）
-8. WHEN 処理が完了する THEN システムはHTTP 200ステータスと処理結果サマリーをJSONで返さなければならない
-9. IF 処理中にエラーが発生する THEN システムはHTTP 500ステータスとエラー詳細をJSONで返さなければならない
+4. WHEN 課題をCarewell画面で検索する THEN システムはtask_patternを使用して部分一致検索を実行しなければならない（締切日が異なる同一課題に対応）
+5. WHEN Firestoreコレクションを作成する THEN システムはtask_idを使用してコレクション名を構成しなければならない（例: "{class_name}/{task_id}/documents"）
+6. WHEN Google Sheetsにシートを作成する THEN システムはtask_idをシート名として使用しなければならない（例: "課題①"）
+7. WHEN Google Sheetsにデータを書き込む THEN システムは課題ID列（task_id）をカラムAに含めなければならない
+8. WHEN Cloud Schedulerがジョブを実行する THEN システムは各クラス×課題の組み合わせに対して個別のスケジュールジョブを設定しなければならない
+9. WHEN スケジュールジョブが設定される THEN システムは実行タイミングを30分間隔でずらして同時実行を避けなければならない
+10. WHEN Functionが実行される THEN システムは実行タイムアウトを適切に設定しなければならない（推奨: 540秒）
+11. WHEN Functionが実行される THEN システムはメモリ割り当てを適切に設定しなければならない（推奨: 1GB以上、Playwright要件考慮）
+12. WHEN 処理が完了する THEN システムはHTTP 200ステータスと処理結果サマリーをJSONで返さなければならない
+13. IF 処理中にエラーが発生する THEN システムはHTTP 500ステータスとエラー詳細をJSONで返さなければならない
 
 ### 要件9: トレーサビリティと監査ログ
 **目的:** システム管理者として、全ての処理履歴を追跡できるようにすることで、デバッグとメンテナンスを容易にする
@@ -264,7 +269,7 @@ PDF、CSV、画像、Excel、PowerPointなど多様な形式に対応
 2. WHEN ジョブを作成する THEN システムは以下の命名規則を使用しなければならない: `carewell-class{番号}-task{番号}`（例: carewell-class01-task01）
 3. WHEN ジョブスケジュールを設定する THEN システムは30分間隔でタイミングをずらし、同時実行を避けなければならない
 4. WHEN ジョブの実行頻度を設定する THEN システムは24時間・30分ごとの実行パターンを使用しなければならない（深夜・早朝の提出にも対応）
-5. WHEN ジョブパラメータを設定する THEN システムは以下の情報をHTTPリクエストボディに含めなければならない: class_name、task_name、drive_folder_id、spreadsheet_id
+5. WHEN ジョブパラメータを設定する THEN システムは以下の情報をHTTPリクエストボディに含めなければならない: class_name、task_id、task_pattern、drive_folder_id、spreadsheet_id
 6. WHEN 課題が終了する（締切後） THEN システム管理者はジョブを一時停止（pause）できなければならない
 7. WHEN 新しい課題が開始される THEN システム管理者は停止中のジョブを再開（resume）し、パラメータを更新できなければならない
 8. WHEN ジョブパラメータを更新する THEN システムは既存ジョブのスケジュール設定を保持したままボディパラメータのみを更新できなければならない

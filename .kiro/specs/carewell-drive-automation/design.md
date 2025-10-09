@@ -314,13 +314,14 @@ sequenceDiagram
 **API Contract**:
 | Method | Endpoint | Request | Response | Errors |
 |--------|----------|---------|----------|--------|
-| POST | / | `{"class_name": str, "task_name": str, "drive_folder_id": str, "spreadsheet_id": str}` | `{"status": "success", "processed": int, "skipped": int, "failed": int}` | 400 (パラメータ不足), 500 (処理失敗) |
+| POST | / | `{"class_name": str, "task_id": str, "task_pattern": str, "drive_folder_id": str, "spreadsheet_id": str}` | `{"status": "success", "processed": int, "skipped": int, "failed": int}` | 400 (パラメータ不足), 500 (処理失敗) |
 
 **リクエストスキーマ**:
 ```typescript
 interface FunctionRequest {
   class_name: string;        // 例: "令和7年度 デジタル中核人材養成研修 №01"
-  task_name: string;         // 例: "課題①業務分析　※～11/3〆切"
+  task_id: string;           // 例: "課題①" (Firestore/Sheets管理用、固定識別子)
+  task_pattern: string;      // 例: "課題①" (Carewell画面検索用、部分一致パターン)
   drive_folder_id: string;   // Google DriveフォルダID
   spreadsheet_id: string;    // Google SheetsスプレッドシートID
 }
@@ -1105,10 +1106,11 @@ erDiagram
 **コレクション構造**:
 ```
 {class_name} (collection)
-  └── {task_name} (document)
+  └── {task_id} (document)
       └── documents (subcollection)
           └── {composite_key} (document)
               ├── composite_key: string
+              ├── task_id: string
               ├── name: string
               ├── care_number: string
               ├── submitted_at: timestamp
@@ -1132,10 +1134,11 @@ erDiagram
 **コレクション構造の例**:
 ```
 令和7年度 デジタル中核人材養成研修 №01/ (collection)
-  └── 課題①業務分析　※～11/3〆切/ (document)
+  └── 課題①/ (document)
       └── documents/ (subcollection)
           ├── N9903754_20251002095045/
           │   ├── composite_key: "N9903754_20251002095045"
+          │   ├── task_id: "課題①"
           │   ├── name: "山田太郎"
           │   ├── care_number: "N9903754"
           │   ├── submitted_at: Timestamp(2025-10-02 09:50:45)
@@ -1161,18 +1164,19 @@ erDiagram
 
 **シート構造**:
 - 1つのスプレッドシートに複数のシート（課題ごと）
-- シート名: 課題名（例: "課題①業務分析　※～11/3〆切"）
+- シート名: task_id（例: "課題①"）
 
 **カラム定義**:
 | カラム | 型 | 説明 |
 |--------|-----|------|
-| A: 複合キー | string | N9903754_20251002095045 |
-| B: 氏名 | string | 山田太郎 |
-| C: 日介番号 | string | N9903754 |
-| D: 提出日 | datetime | 2025-10-02 09:50:45 |
-| E: ファイル名 | string | 業務分析レポート.pdf |
-| F: ファイルURL | hyperlink | https://drive.google.com/... |
-| G: ダウンロード日時 | datetime | 2025-10-04 10:15:30 |
+| A: 課題ID | string | 課題① |
+| B: 複合キー | string | N9903754_20251002095045 |
+| C: 氏名 | string | 山田太郎 |
+| D: 日介番号 | string | N9903754 |
+| E: 提出日 | datetime | 2025-10-02 09:50:45 |
+| F: ファイル名 | string | 業務分析レポート.pdf |
+| G: ファイルURL | hyperlink | https://drive.google.com/... |
+| H: ダウンロード日時 | datetime | 2025-10-04 10:15:30 |
 
 **ヘッダー行**: 常に1行目に固定
 **データ追記**: `append`メソッドで自動的に次の空白行に追記
@@ -1185,7 +1189,8 @@ erDiagram
 ```json
 {
   "class_name": "令和7年度 デジタル中核人材養成研修 №01",
-  "task_name": "課題①業務分析　※～11/3〆切",
+  "task_id": "課題①",
+  "task_pattern": "課題①",
   "drive_folder_id": "1abc...xyz",
   "spreadsheet_id": "1def...uvw"
 }
@@ -1193,7 +1198,8 @@ erDiagram
 
 **検証ルール**:
 - class_name: 必須、非空文字列、最大256文字
-- task_name: 必須、非空文字列、最大256文字
+- task_id: 必須、非空文字列、最大64文字（例: "課題①"）
+- task_pattern: 必須、非空文字列、最大256文字（例: "課題①"）
 - drive_folder_id: 必須、Google Drive フォルダID形式
 - spreadsheet_id: 必須、Google Sheets スプレッドシートID形式
 
@@ -1711,7 +1717,8 @@ gantt
   },
   "body": {
     "class_name": "令和7年度 デジタル中核人材養成研修 №01",
-    "task_name": "課題①業務分析　※～11/3〆切",
+    "task_id": "課題①",
+    "task_pattern": "課題①",
     "drive_folder_id": "1abc...xyz",
     "spreadsheet_id": "1def...uvw"
   },
@@ -1748,7 +1755,8 @@ stateDiagram-v2
      --headers="Content-Type=application/json" \
      --message-body='{
        "class_name": "令和7年度 デジタル中核人材養成研修 №01",
-       "task_name": "課題①業務分析　※～11/3〆切",
+       "task_id": "課題①",
+       "task_pattern": "課題①",
        "drive_folder_id": "1abc...xyz",
        "spreadsheet_id": "1def...uvw"
      }' \
@@ -1775,7 +1783,8 @@ stateDiagram-v2
    gcloud scheduler jobs update http carewell-class01-task01 \
      --message-body='{
        "class_name": "令和7年度 デジタル中核人材養成研修 №01",
-       "task_name": "課題②システム設計　※～12/1〆切",
+       "task_id": "課題②",
+       "task_pattern": "課題②",
        "drive_folder_id": "1xyz...abc",
        "spreadsheet_id": "1uvw...def"
      }' \
