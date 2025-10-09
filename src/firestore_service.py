@@ -20,30 +20,30 @@ class FirestoreService:
         self.db = firestore.Client(database='carewell-native')
         self.collection_name = "uploaded_files"
 
-    def _generate_file_hash(self, class_name: str, task_name: str, student_id: str, filename: str, submit_date: str) -> str:
+    def _generate_composite_key(self, student_id: str, filename: str, submit_date: str) -> str:
         """
-        Generate unique hash for file identification
+        Generate composite key for file identification
 
         Args:
-            class_name: Class name
-            task_name: Task name
             student_id: Student ID (e.g., N9902913)
             filename: Original filename
             submit_date: Submission date/time
 
         Returns:
-            SHA256 hash string
+            Composite key string in format: {student_id}_{filename}_{submit_date}
         """
-        composite_key = f"{class_name}|{task_name}|{student_id}|{filename}|{submit_date}"
-        return hashlib.sha256(composite_key.encode('utf-8')).hexdigest()
+        # Sanitize submit_date to remove special characters
+        safe_submit_date = submit_date.replace(' ', '_').replace(':', '-').replace('/', '-')
+        composite_key = f"{student_id}_{filename}_{safe_submit_date}"
+        return composite_key
 
-    def check_already_uploaded(self, class_name: str, task_name: str, student_id: str, filename: str, submit_date: str) -> Optional[dict]:
+    def check_already_uploaded(self, class_name: str, task_id: str, student_id: str, filename: str, submit_date: str) -> Optional[dict]:
         """
         Check if file has already been uploaded
 
         Args:
             class_name: Class name
-            task_name: Task name
+            task_id: Task ID (e.g., "課題①")
             student_id: Student ID (e.g., N9902913)
             filename: Original filename
             submit_date: Submission date/time
@@ -52,9 +52,10 @@ class FirestoreService:
             Upload record dict if exists, None otherwise
         """
         try:
-            file_hash = self._generate_file_hash(class_name, task_name, student_id, filename, submit_date)
+            composite_key = self._generate_composite_key(student_id, filename, submit_date)
 
-            doc_ref = self.db.collection(self.collection_name).document(file_hash)
+            # Collection path: {class_name}/{task_id}/documents
+            doc_ref = self.db.collection(class_name).document(task_id).collection('documents').document(composite_key)
             doc = doc_ref.get()
 
             if doc.exists:
@@ -71,7 +72,7 @@ class FirestoreService:
     def record_upload(
         self,
         class_name: str,
-        task_name: str,
+        task_id: str,
         student_name: str,
         student_id: str,
         filename: str,
@@ -85,7 +86,7 @@ class FirestoreService:
 
         Args:
             class_name: Class name
-            task_name: Task name
+            task_id: Task ID (e.g., "課題①")
             student_name: Student name (without ID)
             student_id: Student ID (e.g., N9902913)
             filename: Original filename
@@ -98,12 +99,11 @@ class FirestoreService:
             True if recorded successfully, False otherwise
         """
         try:
-            file_hash = self._generate_file_hash(class_name, task_name, student_id, filename, submit_date)
+            composite_key = self._generate_composite_key(student_id, filename, submit_date)
 
             record = {
-                "file_hash": file_hash,
-                "class_name": class_name,
-                "task_name": task_name,
+                "composite_key": composite_key,
+                "task_id": task_id,
                 "student_name": student_name,
                 "student_id": student_id,
                 "filename": filename,
@@ -114,7 +114,8 @@ class FirestoreService:
                 "metadata": metadata or {}
             }
 
-            doc_ref = self.db.collection(self.collection_name).document(file_hash)
+            # Collection path: {class_name}/{task_id}/documents
+            doc_ref = self.db.collection(class_name).document(task_id).collection('documents').document(composite_key)
             doc_ref.set(record)
 
             logger.info(f"Recorded upload: {filename} (Student ID: {student_id}, Drive ID: {drive_file_id})")
@@ -125,23 +126,20 @@ class FirestoreService:
             # Return True to continue processing even if Firestore fails (fail-open)
             return True
 
-    def get_upload_stats(self, class_name: str, task_name: str) -> dict:
+    def get_upload_stats(self, class_name: str, task_id: str) -> dict:
         """
         Get upload statistics for a specific class/task
 
         Args:
             class_name: Class name
-            task_name: Task name
+            task_id: Task ID (e.g., "課題①")
 
         Returns:
             Dictionary with upload statistics
         """
         try:
-            query = self.db.collection(self.collection_name) \
-                .where("class_name", "==", class_name) \
-                .where("task_name", "==", task_name)
-
-            docs = query.stream()
+            # Collection path: {class_name}/{task_id}/documents
+            docs = self.db.collection(class_name).document(task_id).collection('documents').stream()
 
             count = 0
             for doc in docs:
@@ -149,7 +147,7 @@ class FirestoreService:
 
             return {
                 "class_name": class_name,
-                "task_name": task_name,
+                "task_id": task_id,
                 "total_uploaded": count
             }
 
@@ -157,7 +155,7 @@ class FirestoreService:
             logger.error(f"Error getting upload stats: {e}", exc_info=True)
             return {
                 "class_name": class_name,
-                "task_name": task_name,
+                "task_id": task_id,
                 "total_uploaded": 0,
                 "error": str(e)
             }

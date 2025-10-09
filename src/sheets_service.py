@@ -38,19 +38,36 @@ class SheetsService:
             logger.error(f"Failed to initialize Google Sheets service: {e}", exc_info=True)
             raise
 
-    def _ensure_headers(self, spreadsheet_id: str, sheet_name: str = "シート1"):
+    def _generate_composite_key(self, student_id: str, filename: str, submit_date: str) -> str:
+        """
+        Generate composite key for file identification (same logic as FirestoreService)
+
+        Args:
+            student_id: Student ID (e.g., N9902913)
+            filename: Original filename
+            submit_date: Submission date/time
+
+        Returns:
+            Composite key string in format: {student_id}_{filename}_{submit_date}
+        """
+        # Sanitize submit_date to remove special characters
+        safe_submit_date = submit_date.replace(' ', '_').replace(':', '-').replace('/', '-')
+        composite_key = f"{student_id}_{filename}_{safe_submit_date}"
+        return composite_key
+
+    def _ensure_headers(self, spreadsheet_id: str, sheet_name: str):
         """
         Ensure spreadsheet has proper headers
 
         Args:
             spreadsheet_id: Google Sheets spreadsheet ID
-            sheet_name: Sheet name (default: "シート1")
+            sheet_name: Sheet name (task_id)
         """
         try:
             # Check if headers exist
             result = self.service.spreadsheets().values().get(
                 spreadsheetId=spreadsheet_id,
-                range=f"{sheet_name}!A1:J1"
+                range=f"{sheet_name}!A1:H1"
             ).execute()
 
             values = result.get('values', [])
@@ -58,21 +75,19 @@ class SheetsService:
             # If headers don't exist, create them
             if not values or len(values[0]) == 0:
                 headers = [
-                    "学生名",
-                    "学生ID",
+                    "課題ID",
+                    "複合キー",
+                    "氏名",
+                    "日介番号",
+                    "提出日",
                     "ファイル名",
-                    "提出日時",
-                    "スコア",
-                    "合否",
-                    "状態",
-                    "Drive File ID",
-                    "Drive Link",
-                    "アップロード日時"
+                    "ファイルURL",
+                    "ダウンロード日時"
                 ]
 
                 self.service.spreadsheets().values().update(
                     spreadsheetId=spreadsheet_id,
-                    range=f"{sheet_name}!A1:J1",
+                    range=f"{sheet_name}!A1:H1",
                     valueInputOption="RAW",
                     body={"values": [headers]}
                 ).execute()
@@ -86,45 +101,49 @@ class SheetsService:
     def append_record(
         self,
         spreadsheet_id: str,
+        task_id: str,
         student_name: str,
+        student_id: str,
+        submit_date: str,
         filename: str,
-        drive_file_id: str,
-        metadata: Optional[dict] = None,
-        sheet_name: str = "シート1"
+        drive_file_id: str
     ) -> bool:
         """
         Append a new record to the spreadsheet
 
         Args:
             spreadsheet_id: Google Sheets spreadsheet ID
+            task_id: Task ID (e.g., "課題①") - used as sheet name
             student_name: Student name (without ID)
+            student_id: Student ID (e.g., N9902913)
+            submit_date: Submission date/time
             filename: Uploaded filename
             drive_file_id: Google Drive file ID
-            metadata: Additional metadata (student_id, submit_date, score, etc.)
-            sheet_name: Sheet name (default: "シート1")
 
         Returns:
             True if successful, False otherwise
         """
         try:
+            # Use task_id as sheet name
+            sheet_name = task_id
+
+            # Generate composite key
+            composite_key = self._generate_composite_key(student_id, filename, submit_date)
+
             # Ensure headers exist
             self._ensure_headers(spreadsheet_id, sheet_name)
 
             # Prepare row data
-            metadata = metadata or {}
-
             drive_link = f"https://drive.google.com/file/d/{drive_file_id}/view"
             upload_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
             row = [
+                task_id,
+                composite_key,
                 student_name,
-                metadata.get("student_id", ""),
+                student_id,
+                submit_date,
                 filename,
-                metadata.get("submit_date", ""),
-                metadata.get("score", ""),
-                metadata.get("pass_status", ""),
-                metadata.get("status", ""),
-                drive_file_id,
                 drive_link,
                 upload_time
             ]
@@ -132,13 +151,13 @@ class SheetsService:
             # Append row
             result = self.service.spreadsheets().values().append(
                 spreadsheetId=spreadsheet_id,
-                range=f"{sheet_name}!A:J",
+                range=f"{sheet_name}!A:H",
                 valueInputOption="RAW",
                 insertDataOption="INSERT_ROWS",
                 body={"values": [row]}
             ).execute()
 
-            logger.info(f"Appended record to spreadsheet: {student_name} ({metadata.get('student_id', '')}) - {filename}")
+            logger.info(f"Appended record to spreadsheet: {student_name} ({student_id}) - {filename}")
             return True
 
         except Exception as e:

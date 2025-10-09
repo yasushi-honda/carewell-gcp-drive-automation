@@ -25,7 +25,8 @@ def main(request):
     Expected request body:
     {
         "class_name": "令和7年度 デジタル中核人材養成研修 №01",
-        "task_name": "課題①業務分析　※～11/3〆切",
+        "task_id": "課題①",
+        "task_pattern": "課題①",
         "drive_folder_id": "1abc...xyz",
         "spreadsheet_id": "1def...uvw"
     }
@@ -37,7 +38,7 @@ def main(request):
             return {"error": "Request body must be JSON"}, 400
 
         # Validate required parameters
-        required_params = ["class_name", "task_name", "drive_folder_id", "spreadsheet_id"]
+        required_params = ["class_name", "task_id", "task_pattern", "drive_folder_id", "spreadsheet_id"]
         missing_params = [p for p in required_params if p not in request_json]
         if missing_params:
             return {
@@ -45,11 +46,12 @@ def main(request):
             }, 400
 
         class_name = request_json["class_name"]
-        task_name = request_json["task_name"]
+        task_id = request_json["task_id"]
+        task_pattern = request_json["task_pattern"]
         drive_folder_id = request_json["drive_folder_id"]
         spreadsheet_id = request_json["spreadsheet_id"]
 
-        logger.info(f"Starting file collection for class={class_name}, task={task_name}")
+        logger.info(f"Starting file collection for class={class_name}, task_id={task_id}, task_pattern={task_pattern}")
 
         # Initialize services
         engine = PlaywrightAutomationEngine()
@@ -59,7 +61,7 @@ def main(request):
 
         try:
             # Navigate to task page
-            page = engine.navigate_to_task(class_name, task_name)
+            page = engine.navigate_to_task(class_name, task_pattern)
             logger.info(f"Successfully navigated to task page: {page.url}")
 
             # Get submission list
@@ -78,7 +80,7 @@ def main(request):
                         # Check if already uploaded
                         existing_upload = firestore_service.check_already_uploaded(
                             class_name,
-                            task_name,
+                            task_id,
                             submission.get('student_id', ''),
                             submission['filename'],
                             submission.get('submit_date', '')
@@ -118,7 +120,7 @@ def main(request):
 
                         firestore_service.record_upload(
                             class_name,
-                            task_name,
+                            task_id,
                             submission['student_name'],
                             submission.get('student_id', ''),
                             submission['filename'],
@@ -131,10 +133,12 @@ def main(request):
                         # Record in Google Sheets
                         sheets_service.append_record(
                             spreadsheet_id,
+                            task_id,
                             submission['student_name'],
+                            submission.get('student_id', ''),
+                            submission.get('submit_date', ''),
                             submission['filename'],
-                            drive_file_id,
-                            metadata=metadata
+                            drive_file_id
                         )
 
                         downloaded_count += 1

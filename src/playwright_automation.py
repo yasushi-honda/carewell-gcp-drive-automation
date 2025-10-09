@@ -244,17 +244,17 @@ class PlaywrightAutomationEngine:
 
         self._wait_for_navigation()
 
-    def _select_task(self, task_name: str):
+    def _select_task(self, task_pattern: str):
         """
-        Select a specific task
+        Select a specific task using partial text match
 
         Args:
-            task_name: Name of the task to select
+            task_pattern: Pattern to match task name (e.g., "課題①")
         """
-        logger.info(f"Selecting task: {task_name}")
+        logger.info(f"Selecting task with pattern: {task_pattern}")
 
-        if not self._click_in_any_frame(f'text="{task_name}"', f'task "{task_name}"'):
-            raise Exception(f"Could not find task: {task_name}")
+        if not self._click_in_any_frame(f':has-text("{task_pattern}")', f'task pattern "{task_pattern}"'):
+            raise Exception(f"Could not find task matching pattern: {task_pattern}")
 
         self._wait_for_navigation()
 
@@ -265,13 +265,13 @@ class PlaywrightAutomationEngine:
 
         self._wait_for_navigation(CarewellConfig.FRAME_LOAD_WAIT)
 
-    def navigate_to_task(self, class_name: str, task_name: str) -> Page:
+    def navigate_to_task(self, class_name: str, task_pattern: str) -> Page:
         """
-        Navigate to specific task page
+        Navigate to specific task page using partial text match
 
         Args:
             class_name: Class name (e.g., "令和7年度 デジタル中核人材養成研修 №01")
-            task_name: Task name (e.g., "課題①業務分析　※～11/3〆切")
+            task_pattern: Task pattern for partial match (e.g., "課題①")
 
         Returns:
             Page object at the task page
@@ -284,7 +284,7 @@ class PlaywrightAutomationEngine:
         self._navigate_to_class_list()
         self._select_class(class_name)
         self._navigate_to_report_grading()
-        self._select_task(task_name)
+        self._select_task(task_pattern)
         self._show_all_submissions()
 
         logger.info("Successfully navigated to task page")
