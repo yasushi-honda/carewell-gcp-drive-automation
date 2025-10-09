@@ -253,20 +253,18 @@ class PlaywrightAutomationEngine:
         """
         logger.info(f"Selecting task with pattern: {task_pattern}")
 
-        if not self._click_in_any_frame(f':has-text("{task_pattern}")', f'task pattern "{task_pattern}"'):
+        # Use text= selector without quotes for partial match
+        if not self._click_in_any_frame(f'text={task_pattern}', f'task "{task_pattern}"'):
             raise Exception(f"Could not find task matching pattern: {task_pattern}")
 
         self._wait_for_navigation()
 
     def _show_all_submissions(self):
-        """Click '全て' tab to show all submissions (optional)"""
-        # Try to click '全て' tab, but don't fail if it doesn't exist
-        if self._click_in_any_frame(':has-text("全て")', '全て tab'):
-            logger.info("Clicked '全て' tab successfully")
-            self._wait_for_navigation(CarewellConfig.FRAME_LOAD_WAIT)
-        else:
-            logger.warning("'全て' tab not found, continuing without clicking (may already be on all submissions view)")
-            self._wait_for_navigation(CarewellConfig.FRAME_LOAD_WAIT)
+        """Click '全て' tab to show all submissions"""
+        if not self._click_in_any_frame('text="全て"', '全て tab'):
+            raise Exception("Could not click '全て' tab")
+
+        self._wait_for_navigation(CarewellConfig.FRAME_LOAD_WAIT)
 
     def navigate_to_task(self, class_name: str, task_pattern: str) -> Page:
         """
@@ -336,27 +334,19 @@ class PlaywrightAutomationEngine:
                 for i, row in enumerate(rows):
                     try:
                         cells = row.locator("td").all()
-                        num_cells = len(cells)
-
-                        # Log cell count for debugging
-                        if i == 0:
-                            logger.info(f"Row {i} has {num_cells} cells")
-
-                        if num_cells < 4:
-                            logger.warning(f"Row {i} has only {num_cells} cells, skipping")
+                        if len(cells) < 6:
+                            logger.warning(f"Row {i} has only {len(cells)} cells, skipping")
                             continue
 
-                        # Extract all data while row is still valid (with short timeout)
+                        # Extract all data while row is still valid
                         student_link_elem = cells[0].locator("a").first
-                        student_name_with_id = student_link_elem.text_content(timeout=5000)
-                        detail_url = student_link_elem.get_attribute("href", timeout=5000)
-
-                        # Handle variable cell counts
-                        log_no = cells[1].text_content(timeout=5000).strip() if num_cells > 1 else ""
-                        score = cells[2].text_content(timeout=5000).strip() if num_cells > 2 else ""
-                        pass_status = cells[3].text_content(timeout=5000).strip() if num_cells > 3 else ""
-                        status = cells[4].text_content(timeout=5000).strip() if num_cells > 4 else ""
-                        submit_date = cells[5].text_content(timeout=5000).strip() if num_cells > 5 else ""
+                        student_name_with_id = student_link_elem.text_content()
+                        detail_url = student_link_elem.get_attribute("href")
+                        log_no = cells[1].text_content().strip()
+                        score = cells[2].text_content().strip()
+                        pass_status = cells[3].text_content().strip()
+                        status = cells[4].text_content().strip()
+                        submit_date = cells[5].text_content().strip()
 
                         # Parse student name and ID
                         student_name, student_id = parse_student_info(student_name_with_id)
