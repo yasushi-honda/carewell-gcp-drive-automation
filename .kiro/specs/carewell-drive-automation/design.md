@@ -1653,3 +1653,352 @@ graph LR
 2. Carewell Webサービスのセッション管理とレート制限の調査
 3. Cloud Functions 2nd GenでのPlaywright実行パフォーマンステスト
 4. Firestoreバッチ読み取り/Google Sheetsバッチ書き込みの実装可否検証
+
+## 運用設計
+
+### Cloud Schedulerジョブアーキテクチャ
+
+**ジョブ設計原則**:
+- 各クラス×課題の組み合わせに対して個別のSchedulerジョブを作成
+- 30分間隔で実行タイミングをずらし、同時実行を回避
+- 課題ライフサイクル（開始→進行中→終了）に応じてジョブの有効/無効を切り替え
+
+**スケジュール構造**:
+
+```mermaid
+gantt
+    title Cloud Scheduler実行タイミング（24時間サイクル）
+    dateFormat HH:mm
+    axisFormat %H:%M
+
+    section クラス01
+    課題01 :c1t1, 00:00, 30m
+    課題02 :c1t2, 00:30, 30m
+
+    section クラス02
+    課題01 :c2t1, 01:00, 30m
+    課題02 :c2t2, 01:30, 30m
+
+    section クラス03
+    課題01 :c3t1, 02:00, 30m
+    課題02 :c3t2, 02:30, 30m
+
+    section クラス04-10
+    ... :c4, 03:00, 30m
+```
+
+**ジョブ命名規則**:
+- パターン: `carewell-class{クラス番号}-task{課題番号}`
+- 例: `carewell-class01-task01`, `carewell-class02-task03`
+- メリット: 一目でクラス・課題が識別可能、アルファベット順にソート可能
+
+**Cron式設計**:
+- 24時間・30分ごと実行: `*/30 * * * *`（毎時0分、30分に実行）
+- タイムゾーン: `Asia/Tokyo` (JST)
+- ジョブごとにオフセット設定:
+  - クラス01・課題01: 毎時0分 → `0,30 * * * *`
+  - クラス01・課題02: 毎時5分 → `5,35 * * * *`
+  - クラス02・課題01: 毎時10分 → `10,40 * * * *`
+  - ... (5分刻みで14ジョブまで配置可能、以降は次の5分枠)
+
+**HTTPターゲット設定**:
+```json
+{
+  "uri": "https://carewell-file-collector-{hash}.a.run.app",
+  "http_method": "POST",
+  "headers": {
+    "Content-Type": "application/json"
+  },
+  "body": {
+    "class_name": "令和7年度 デジタル中核人材養成研修 №01",
+    "task_name": "課題①業務分析　※～11/3〆切",
+    "drive_folder_id": "1abc...xyz",
+    "spreadsheet_id": "1def...uvw"
+  },
+  "oidc_token": {
+    "service_account_email": "cloud-scheduler@carewell-automation.iam.gserviceaccount.com"
+  }
+}
+```
+
+### 課題ライフサイクル管理
+
+**課題状態遷移モデル**:
+
+```mermaid
+stateDiagram-v2
+    [*] --> 未設定
+    未設定 --> アクティブ: ジョブ作成・有効化
+    アクティブ --> 一時停止: 締切到達・pause
+    一時停止 --> アクティブ: 新課題開始・resume + update
+    一時停止 --> 削除済み: ジョブ削除
+    アクティブ --> 削除済み: ジョブ削除
+    削除済み --> [*]
+```
+
+**運用フロー**:
+
+1. **課題開始時（新規ジョブ作成）**:
+   ```bash
+   # ジョブ作成
+   gcloud scheduler jobs create http carewell-class01-task01 \
+     --schedule="0,30 * * * *" \
+     --uri="https://carewell-file-collector-{hash}.a.run.app" \
+     --http-method=POST \
+     --headers="Content-Type=application/json" \
+     --message-body='{
+       "class_name": "令和7年度 デジタル中核人材養成研修 №01",
+       "task_name": "課題①業務分析　※～11/3〆切",
+       "drive_folder_id": "1abc...xyz",
+       "spreadsheet_id": "1def...uvw"
+     }' \
+     --oidc-service-account-email="cloud-scheduler@carewell-automation.iam.gserviceaccount.com" \
+     --time-zone="Asia/Tokyo" \
+     --location="asia-northeast1"
+   ```
+
+2. **課題終了時（ジョブ一時停止）**:
+   ```bash
+   # ジョブ一時停止
+   gcloud scheduler jobs pause carewell-class01-task01 \
+     --location="asia-northeast1"
+
+   # 確認
+   gcloud scheduler jobs describe carewell-class01-task01 \
+     --location="asia-northeast1" | grep state
+   # 出力例: state: PAUSED
+   ```
+
+3. **新課題開始時（ジョブ再利用）**:
+   ```bash
+   # パラメータ更新
+   gcloud scheduler jobs update http carewell-class01-task01 \
+     --message-body='{
+       "class_name": "令和7年度 デジタル中核人材養成研修 №01",
+       "task_name": "課題②システム設計　※～12/1〆切",
+       "drive_folder_id": "1xyz...abc",
+       "spreadsheet_id": "1uvw...def"
+     }' \
+     --location="asia-northeast1"
+
+   # ジョブ再開
+   gcloud scheduler jobs resume carewell-class01-task01 \
+     --location="asia-northeast1"
+   ```
+
+4. **ジョブ完全削除**:
+   ```bash
+   # ジョブ削除（不可逆）
+   gcloud scheduler jobs delete carewell-class01-task01 \
+     --location="asia-northeast1" \
+     --quiet
+   ```
+
+### 監視とログ分析
+
+**監視レイヤー**:
+
+```mermaid
+graph TB
+    Scheduler[Cloud Scheduler] -->|実行トリガー| CF[Cloud Run Functions]
+    CF -->|構造化ログ| CL[Cloud Logging]
+    CF -->|メトリクス| CM[Cloud Monitoring]
+
+    CL -->|ログベースメトリクス| CM
+    CL -->|BigQuery Export| BQ[BigQuery]
+
+    CM -->|アラート| Email[メール通知]
+    CM -->|ダッシュボード| Dashboard[監視ダッシュボード]
+
+    BQ -->|SQL分析| Reports[レポート生成]
+```
+
+**Cloud Logging フィルタパターン**:
+
+1. **特定実行の全ログ追跡**:
+   ```
+   resource.type="cloud_function"
+   resource.labels.function_name="carewell-file-collector"
+   jsonPayload.execution_id="uuid-1234-5678"
+   ```
+
+2. **エラーのみフィルタ**:
+   ```
+   resource.type="cloud_function"
+   resource.labels.function_name="carewell-file-collector"
+   severity>=ERROR
+   timestamp>="2025-10-01T00:00:00Z"
+   ```
+
+3. **特定クラス・課題の処理履歴**:
+   ```
+   resource.type="cloud_function"
+   resource.labels.function_name="carewell-file-collector"
+   jsonPayload.class_name="令和7年度 デジタル中核人材養成研修 №01"
+   jsonPayload.task_name="課題①業務分析　※～11/3〆切"
+   ```
+
+4. **処理サマリーのみ**:
+   ```
+   resource.type="cloud_function"
+   jsonPayload.message="Processing summary"
+   ```
+
+**Cloud Monitoring カスタムメトリクス**:
+
+| メトリクス名 | 説明 | ログベースメトリクス定義 |
+|------------|------|----------------------|
+| `file_processed_count` | 処理成功ファイル数 | `jsonPayload.processed_count` |
+| `file_skipped_count` | スキップファイル数（重複） | `jsonPayload.skipped_count` |
+| `file_failed_count` | 処理失敗ファイル数 | `jsonPayload.failed_count` |
+| `execution_time_ms` | 実行時間（ミリ秒） | `jsonPayload.execution_time_ms` |
+| `error_rate` | エラー率 | `severity>=ERROR` カウント / 総実行回数 |
+
+**アラートポリシー設定**:
+
+1. **高エラー率アラート**:
+   - 条件: エラー率が20%を超過
+   - 期間: 30分間
+   - 通知: メール（hy.unimail.11@gmail.com）
+   - 重大度: Critical
+
+2. **実行失敗連続アラート**:
+   - 条件: 同一ジョブが連続3回失敗
+   - 期間: 即座
+   - 通知: メール
+   - 重大度: Critical
+
+3. **実行時間超過アラート**:
+   - 条件: 実行時間が480秒（8分）を超過
+   - 期間: 1回でも発生
+   - 通知: メール
+   - 重大度: Warning
+
+**ダッシュボード構成**:
+
+```yaml
+ダッシュボード名: Carewell自動化システム運用
+ウィジェット:
+  - タイトル: 実行成功率（24時間）
+    種類: Scorecard
+    メトリクス: (総実行回数 - エラー回数) / 総実行回数 * 100
+
+  - タイトル: 処理ファイル数推移
+    種類: Line Chart
+    メトリクス: file_processed_count, file_skipped_count, file_failed_count
+    期間: 7日間
+
+  - タイトル: 平均実行時間
+    種類: Line Chart
+    メトリクス: execution_time_ms (平均)
+    期間: 7日間
+
+  - タイトル: エラー発生状況
+    種類: Table
+    データ: severity>=ERROR のログエントリ
+    カラム: timestamp, class_name, task_name, error_type
+```
+
+### コスト分析と最適化
+
+**コスト試算（月間）**:
+
+| サービス | 24時間実行 | 6-22時実行（16時間） | 差額 |
+|---------|-----------|------------------|------|
+| Cloud Scheduler | 14ジョブ × $0.10 = $1.40 | $1.40 | $0 |
+| Cloud Run Functions | 14ジョブ × 48回/日 × 30日 × 3分 × $0.0000025/GB-sec × 2GB = $0.60 | 14 × 32回/日 × 30日 × 3分 × $0.0000025/GB-sec × 2GB = $0.40 | $0.20 |
+| Firestore | 読み取り: 1,000件/日 × 30日 = 30,000件 → $0 (無料枠50,000件/日) | 同左 | $0 |
+| **合計** | **$2.00/月** | **$1.80/月** | **$0.20/月（約30円）** |
+
+**コスト最適化の判断**:
+- **推奨**: 24時間実行
+- **理由**:
+  - コスト差がわずか30円/月
+  - 深夜・早朝の提出にも即座対応可能
+  - スケジュール設定がシンプル（時間帯フィルタ不要）
+  - 運用負荷が低い
+
+**将来のコスト増加シナリオ**:
+
+| シナリオ | 現在（14ジョブ） | 最大（40ジョブ） | 増加額 |
+|---------|--------------|--------------|-------|
+| Cloud Scheduler | $1.40 | $4.00 | +$2.60 |
+| Cloud Run Functions | $0.60 | $1.71 | +$1.11 |
+| **合計** | **$2.00** | **$5.71** | **+$3.71 (+185%)** |
+
+**コスト削減策（最大スケール時）**:
+1. ジョブ実行頻度を30分→1時間に変更（コスト半減）
+2. 課題終了後のジョブ一時停止の徹底
+3. Cloud Functionsメモリを2GB→1GBに削減（Playwright動作検証必要）
+
+### 運用手順書
+
+**日常運用タスク**:
+
+| タスク | 頻度 | 手順 |
+|-------|------|------|
+| ジョブ実行状況確認 | 毎日1回 | Cloud Consoleで過去24時間のScheduler実行履歴を確認 |
+| エラーログ確認 | エラー発生時 | Cloud Loggingで`severity>=ERROR`フィルタ適用 |
+| ダッシュボード確認 | 週1回 | 処理ファイル数推移・エラー率を確認 |
+
+**課題管理タスク**:
+
+| タスク | トリガー | 手順 |
+|-------|---------|------|
+| 新課題開始 | 課題公開時 | 停止中のジョブを再利用してパラメータ更新・再開 |
+| 課題終了 | 締切到達時 | ジョブを一時停止 |
+| 課題削除 | 年度終了時 | ジョブを削除 |
+
+**トラブルシューティングフロー**:
+
+```mermaid
+graph TD
+    Error[エラー検知] --> CheckLog{ログ確認}
+    CheckLog -->|認証失敗| FixAuth[Secret Manager設定確認]
+    CheckLog -->|Playwright失敗| CheckUI[Carewell UI変更確認]
+    CheckLog -->|API失敗| CheckQuota[APIクォータ確認]
+    CheckLog -->|タイムアウト| CheckVolume[処理量確認]
+
+    FixAuth --> Retry[ジョブ手動リトライ]
+    CheckUI --> UpdateCode[コード修正・デプロイ]
+    CheckQuota --> WaitQuota[クォータ回復待機]
+    CheckVolume --> OptimizeParam[パラメータ最適化]
+
+    Retry --> Verify{復旧確認}
+    UpdateCode --> Verify
+    WaitQuota --> Verify
+    OptimizeParam --> Verify
+
+    Verify -->|成功| Resume[通常運用再開]
+    Verify -->|失敗| Escalate[エスカレーション]
+```
+
+**緊急時対応**:
+
+| 状況 | 対応手順 |
+|------|---------|
+| 全ジョブ連続失敗 | 1. 全ジョブを一時停止<br>2. Carewell接続性確認<br>3. 手動テスト実行<br>4. 原因特定後に再開 |
+| API quota超過 | 1. 該当ジョブを一時停止<br>2. クォータ回復待機（通常100秒）<br>3. ジョブ再開 |
+| Function OOM | 1. メモリ割り当てを2GB→4GBに増量<br>2. Function再デプロイ<br>3. 処理量の見直し |
+
+### 運用トレーサビリティ要件
+
+**要件10トレーサビリティ**:
+
+| 要件 | 設計コンポーネント | 実装方法 |
+|------|------------------|---------|
+| 10.1 | Cloud Schedulerジョブ | 各クラス×課題に個別ジョブ作成 |
+| 10.2 | ジョブ命名規則 | `carewell-class{番号}-task{番号}` |
+| 10.3 | スケジュール設定 | Cron式で30分間隔、5分刻みオフセット |
+| 10.4 | 実行頻度 | 24時間・30分ごと（`*/30 * * * *`） |
+| 10.5 | HTTPリクエストボディ | JSONパラメータ（class_name, task_name, drive_folder_id, spreadsheet_id） |
+| 10.6 | ジョブ一時停止 | `gcloud scheduler jobs pause` コマンド |
+| 10.7 | ジョブ再開・更新 | `gcloud scheduler jobs resume` + `update` コマンド |
+| 10.8 | パラメータ更新 | `gcloud scheduler jobs update http --message-body` |
+| 10.9 | ジョブ削除 | `gcloud scheduler jobs delete` コマンド |
+| 10.10 | ジョブ一覧確認 | Cloud Console Scheduler UI + `gcloud scheduler jobs list` |
+| 10.11 | 実行状況監視 | Cloud Loggingフィルタ + カスタムメトリクス |
+| 10.12 | アラート設定 | Cloud Monitoringアラートポリシー（エラー率20%、連続3回失敗） |
+| 10.13 | ログ追跡 | 実行IDフィルタリング |
+| 10.14 | スケール対応 | 最大40ジョブまで対応 |
+| 10.15 | コスト評価 | 24時間実行 $2.00/月 vs 16時間実行 $1.80/月（差額$0.20） |
