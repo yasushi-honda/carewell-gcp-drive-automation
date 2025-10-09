@@ -64,10 +64,10 @@ class SheetsService:
             sheet_name: Sheet name (task_id)
         """
         try:
-            # Check if headers exist
+            # Check if headers exist (quote sheet name for special characters)
             result = self.service.spreadsheets().values().get(
                 spreadsheetId=spreadsheet_id,
-                range=f"{sheet_name}!A1:H1"
+                range=f"'{sheet_name}'!A1:H1"
             ).execute()
 
             values = result.get('values', [])
@@ -87,7 +87,7 @@ class SheetsService:
 
                 self.service.spreadsheets().values().update(
                     spreadsheetId=spreadsheet_id,
-                    range=f"{sheet_name}!A1:H1",
+                    range=f"'{sheet_name}'!A1:H1",
                     valueInputOption="RAW",
                     body={"values": [headers]}
                 ).execute()
@@ -148,10 +148,10 @@ class SheetsService:
                 upload_time
             ]
 
-            # Append row
+            # Append row (quote sheet name for special characters)
             result = self.service.spreadsheets().values().append(
                 spreadsheetId=spreadsheet_id,
-                range=f"{sheet_name}!A:H",
+                range=f"'{sheet_name}'!A:H",
                 valueInputOption="RAW",
                 insertDataOption="INSERT_ROWS",
                 body={"values": [row]}
