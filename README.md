@@ -15,6 +15,8 @@ Carewell Webサービスから提出ファイルを自動収集し、Google Driv
 - **Secret Manager**: 認証情報の安全な管理
 - **Artifact Registry**: Dockerイメージの保存（最新2つのみ保持）
 - **Firestore**: 重複チェック用メタデータストア
+  - **使用DB**: `carewell-native` (FIRESTORE_NATIVE)
+  - **未使用DB**: `(default)` (DATASTORE_MODE) - 削除不可のため共存、コスト影響なし
 - **Google Drive API**: ファイル保存
 - **Google Sheets API**: 記録管理
 
@@ -137,6 +139,8 @@ playwright install chromium
 |---------|------|-----------|------|
 | Cloud Run | carewell-file-collector | asia-northeast1 | Functions実行 |
 | Artifact Registry | carewell-functions | asia-northeast1 | イメージ保存 |
+| Firestore | carewell-native | asia-northeast1 | 重複チェック用メタデータストア（NATIVE） |
+| Firestore | (default) | asia-northeast1 | 未使用（DATASTORE_MODE、削除不可） |
 | Secret Manager | carewell-user-id, carewell-password | global | 認証情報 |
 | Workload Identity Pool | github-actions-pool | global | GitHub Actions認証 |
 

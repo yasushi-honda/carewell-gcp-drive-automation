@@ -1103,6 +1103,16 @@ erDiagram
 
 #### Firestore（ドキュメントストア）
 
+**データベース設定**:
+- **使用データベース**: `carewell-native` (FIRESTORE_NATIVE)
+- **未使用データベース**: `(default)` (DATASTORE_MODE) - 削除不可のため共存
+- **選定理由**:
+  - 初期構築時に`(default)`がDATASTORE_MODEで作成されてしまった
+  - Firestore Client Libraryの全機能を利用するためNATIVEモードが必要
+  - GCPの仕様として`(default)`データベースは削除できないため、新規に`carewell-native`を作成
+  - 空の`(default)`データベースにコスト影響なし
+- **実装**: `firestore.Client(database='carewell-native')` で明示的に指定
+
 **コレクション構造**:
 ```
 {class_name} (collection)
