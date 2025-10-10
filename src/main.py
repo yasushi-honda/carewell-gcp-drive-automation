@@ -4,6 +4,7 @@ Carewell File Collector - Cloud Functions Entrypoint
 import json
 import logging
 import os
+from flask import Request
 from playwright_automation import PlaywrightAutomationEngine
 from google_drive_service import GoogleDriveService
 from firestore_service import FirestoreService
@@ -175,3 +176,131 @@ def main(request):
             "status": "error",
             "error": str(e)
         }, 500
+
+
+def cleanup_firestore(request):
+    """
+    Firestore cleanup endpoint for administrative operations
+
+    Expected request body:
+    {
+        "class_name": "令和7年度 デジタル中核人材養成研修 №01",
+        "task_id": "課題①",
+        "confirm": true
+    }
+    """
+    try:
+        # Parse request
+        request_json = request.get_json(silent=True)
+        if not request_json:
+            return {"error": "Request body must be JSON"}, 400
+
+        # Validate required parameters
+        required_params = ["class_name", "task_id", "confirm"]
+        missing_params = [p for p in required_params if p not in request_json]
+        if missing_params:
+            return {
+                "error": f"Missing required parameters: {', '.join(missing_params)}"
+            }, 400
+
+        class_name = request_json["class_name"]
+        task_id = request_json["task_id"]
+        confirm = request_json.get("confirm", False)
+
+        if not confirm:
+            return {
+                "error": "Set 'confirm': true to execute cleanup"
+            }, 400
+
+        logger.warning(f"Starting Firestore cleanup for class={class_name}, task_id={task_id}")
+
+        # Initialize Firestore service
+        firestore_service = FirestoreService()
+
+        # Get document count first
+        collection_ref = firestore_service.db.collection(class_name).document(task_id).collection('documents')
+        docs = list(collection_ref.stream())
+        doc_count = len(docs)
+
+        logger.info(f"Found {doc_count} documents to delete")
+
+        if doc_count == 0:
+            return {
+                "status": "success",
+                "message": "No documents found to delete",
+                "deleted_count": 0
+            }, 200
+
+        # Delete all documents
+        deleted_count = 0
+        failed_count = 0
+
+        for doc in docs:
+            try:
+                doc.reference.delete()
+                deleted_count += 1
+                if deleted_count % 10 == 0:
+                    logger.info(f"Deleted {deleted_count}/{doc_count} documents")
+            except Exception as e:
+                logger.error(f"Failed to delete document {doc.id}: {e}")
+                failed_count += 1
+
+        logger.warning(f"Cleanup completed: deleted={deleted_count}, failed={failed_count}")
+
+        # Verify cleanup
+        remaining_docs = list(collection_ref.stream())
+        remaining_count = len(remaining_docs)
+
+        return {
+            "status": "success",
+            "message": f"Deleted {deleted_count} documents",
+            "deleted_count": deleted_count,
+            "failed_count": failed_count,
+            "remaining_count": remaining_count
+        }, 200
+
+    except Exception as e:
+        logger.error(f"Error during cleanup: {str(e)}", exc_info=True)
+        return {
+            "status": "error",
+            "error": str(e)
+        }, 500
+
+
+def health_check(request):
+    """Health check endpoint"""
+    return {
+        "status": "healthy",
+        "service": "carewell-file-collector"
+    }, 200
+
+
+def app(request):
+    """
+    Main entrypoint with routing
+
+    Routes:
+    - POST /         → File collection (main)
+    - POST /cleanup  → Firestore cleanup (administrative)
+    - GET  /health   → Health check
+    """
+    path = request.path
+    method = request.method
+
+    logger.info(f"Request: {method} {path}")
+
+    if path == "/cleanup" and method == "POST":
+        return cleanup_firestore(request)
+    elif path == "/health" and method == "GET":
+        return health_check(request)
+    elif path == "/" and method == "POST":
+        return main(request)
+    else:
+        return {
+            "error": f"Not found: {method} {path}",
+            "available_endpoints": [
+                "POST /",
+                "POST /cleanup",
+                "GET /health"
+            ]
+        }, 404

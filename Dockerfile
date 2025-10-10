@@ -16,5 +16,5 @@ COPY src/ ./src/
 # Set environment variables
 ENV PYTHONUNBUFFERED=1
 
-# Run the function
-CMD ["functions-framework", "--target=main", "--source=src/main.py"]
+# Run the function with routing support
+CMD ["functions-framework", "--target=app", "--source=src/main.py"]
