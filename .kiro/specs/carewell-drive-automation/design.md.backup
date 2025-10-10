@@ -153,7 +153,7 @@ graph TB
 **選択したアプローチ**:
 ```python
 composite_key = f"{care_number}_{submitted_at}"  # 例: "N9903754_20251002095045"
-doc_ref = db.collection(class_name).document(task_id).collection("documents").document(composite_key)
+doc_ref = db.collection(class_name).document(task_name).collection("documents").document(composite_key)
 exists = doc_ref.get().exists
 ```
 
@@ -386,7 +386,7 @@ interface FunctionResponse {
 ```typescript
 interface PlaywrightAutomationEngineService {
   initialize(): Result<BrowserContext, InitializationError>;
-  navigate_to_task(class_name: string, task_pattern: string): Result<Page, NavigationError>;
+  navigate_to_task(class_name: string, task_name: string): Result<Page, NavigationError>;
   close(): Result<void, CleanupError>;
 }
 
@@ -438,7 +438,7 @@ type CleanupError = "BROWSER_CLOSE_FAILED";
 **Service Interface**:
 ```typescript
 interface SubmissionCollectorService {
-  collect_all_submissions(page: Page, class_name: string, task_id: string): Result<Submission[], CollectionError>;
+  collect_all_submissions(page: Page, class_name: string, task_name: string): Result<Submission[], CollectionError>;
 }
 
 interface Submission {
@@ -493,14 +493,14 @@ type CollectionError = "TABLE_NOT_FOUND" | "PAGINATION_ERROR" | "PARSE_ERROR";
     db = firestore.client()
     ```
   - ドキュメント存在チェック: `doc_ref.get().exists`
-  - コレクション階層: `db.collection(class_name).document(task_id).collection("documents")`
+  - コレクション階層: `db.collection(class_name).document(task_name).collection("documents")`
 
 **コントラクト定義**
 
 **Service Interface**:
 ```typescript
 interface DuplicationCheckerService {
-  is_duplicate(composite_key: string, class_name: string, task_id: string): Result<boolean, CheckError>;
+  is_duplicate(composite_key: string, class_name: string, task_name: string): Result<boolean, CheckError>;
 }
 
 type CheckError = "FIRESTORE_CONNECTION_FAILED" | "COLLECTION_NOT_FOUND";
@@ -514,7 +514,7 @@ type CheckError = "FIRESTORE_CONNECTION_FAILED" | "COLLECTION_NOT_FOUND";
 - 複合キーが存在する場合はtrue、存在しない場合はfalseを返す
 
 **不変条件**:
-- コレクション階層は常に`{class_name}/{task_id}/documents`
+- コレクション階層は常に`{class_name}/{task_name}/documents`
 
 ---
 
@@ -650,7 +650,7 @@ type UploadError = "AUTH_FAILED" | "UPLOAD_FAILED" | "QUOTA_EXCEEDED";
 **Service Interface**:
 ```typescript
 interface MetadataStoreService {
-  save_metadata(submission: Submission, uploaded_file: UploadedFile, class_name: string, task_id: string): Result<void, SaveError>;
+  save_metadata(submission: Submission, uploaded_file: UploadedFile, class_name: string, task_name: string): Result<void, SaveError>;
 }
 
 interface FileMetadata {
@@ -671,12 +671,12 @@ type SaveError = "FIRESTORE_WRITE_FAILED" | "VALIDATION_ERROR";
 - composite_keyが生成済み
 
 **事後条件**:
-- Firestoreに`{class_name}/{task_id}/documents/{composite_key}`ドキュメントが作成される
+- Firestoreに`{class_name}/{task_name}/documents/{composite_key}`ドキュメントが作成される
 - 全フィールドが保存される
 
 **不変条件**:
 - ドキュメントIDは常に複合キー
-- コレクション階層は`{class_name}/{task_id}/documents`
+- コレクション階層は`{class_name}/{task_name}/documents`
 
 ---
 
@@ -705,13 +705,13 @@ type SaveError = "FIRESTORE_WRITE_FAILED" | "VALIDATION_ERROR";
     sheets = {s['properties']['title']: s for s in spreadsheet['sheets']}
 
     # 存在しない場合は作成
-    if task_id not in sheets:
-        request = {'addSheet': {'properties': {'title': task_id}}}
+    if task_name not in sheets:
+        request = {'addSheet': {'properties': {'title': task_name}}}
         service.spreadsheets().batchUpdate(spreadsheetId=spreadsheet_id, body={'requests': [request]}).execute()
         # ヘッダー行追加
         values = [['複合キー', '氏名', '日介番号', '提出日', 'ファイル名', 'ファイルURL', 'ダウンロード日時']]
         service.spreadsheets().values().update(
-            spreadsheetId=spreadsheet_id, range=f'{task_id}!A1:G1',
+            spreadsheetId=spreadsheet_id, range=f'{task_name}!A1:G1',
             valueInputOption='RAW', body={'values': values}).execute()
     ```
   - データ追記:
@@ -719,7 +719,7 @@ type SaveError = "FIRESTORE_WRITE_FAILED" | "VALIDATION_ERROR";
     values = [[composite_key, name, care_number, submitted_at, file_name, file_url, downloaded_at]]
     service.spreadsheets().values().append(
         spreadsheetId=spreadsheet_id,
-        range=f'{task_id}!A:G',
+        range=f'{task_name}!A:G',
         valueInputOption='USER_ENTERED',
         insertDataOption='INSERT_ROWS',
         body={'values': values}
@@ -732,7 +732,7 @@ type SaveError = "FIRESTORE_WRITE_FAILED" | "VALIDATION_ERROR";
 **Service Interface**:
 ```typescript
 interface SheetsRecorderService {
-  append_row(submission: Submission, uploaded_file: UploadedFile, spreadsheet_id: string, task_id: string): Result<void, AppendError>;
+  append_row(submission: Submission, uploaded_file: UploadedFile, spreadsheet_id: string, task_name: string): Result<void, AppendError>;
 }
 
 type AppendError = "AUTH_FAILED" | "SPREADSHEET_NOT_FOUND" | "SHEET_CREATE_FAILED" | "APPEND_FAILED";
@@ -832,7 +832,7 @@ interface ErrorContext {
   component: string;
   operation: string;
   class_name: string;
-  task_id: string;
+  task_name: string;
   execution_id: string;
 }
 
@@ -953,7 +953,7 @@ interface LogContext {
   component: string;
   operation: string;
   class_name?: string;
-  task_id?: string;
+  task_name?: string;
   execution_time_ms?: number;
   [key: string]: any;  // 追加コンテキスト
 }
@@ -1051,14 +1051,14 @@ erDiagram
     }
 
     Task {
-        string task_id PK
+        string task_name PK
         string class_name FK
     }
 
     Submission {
         string composite_key PK
         string class_name FK
-        string task_id FK
+        string task_name FK
         string name
         string care_number
         datetime submitted_at
@@ -1304,7 +1304,7 @@ erDiagram
   "component": "PlaywrightAutomationEngine",
   "operation": "navigate_to_task",
   "class_name": "令和7年度 デジタル中核人材養成研修 №01",
-  "task_pattern": "課題①業務分析　※～11/3〆切",
+  "task_name": "課題①業務分析　※～11/3〆切",
   "error_type": "TASK_NOT_FOUND",
   "error_message": "...",
   "stack_trace": "...",
@@ -1844,7 +1844,7 @@ graph TB
    resource.type="cloud_function"
    resource.labels.function_name="carewell-file-collector"
    jsonPayload.class_name="令和7年度 デジタル中核人材養成研修 №01"
-   jsonPayload.task_id="課題①業務分析　※～11/3〆切"
+   jsonPayload.task_name="課題①業務分析　※～11/3〆切"
    ```
 
 4. **処理サマリーのみ**:
@@ -1905,7 +1905,7 @@ graph TB
   - タイトル: エラー発生状況
     種類: Table
     データ: severity>=ERROR のログエントリ
-    カラム: timestamp, class_name, task_id, error_type
+    カラム: timestamp, class_name, task_name, error_type
 ```
 
 ### コスト分析と最適化
@@ -2000,7 +2000,7 @@ graph TD
 | 10.2 | ジョブ命名規則 | `carewell-class{番号}-task{番号}` |
 | 10.3 | スケジュール設定 | Cron式で30分間隔、5分刻みオフセット |
 | 10.4 | 実行頻度 | 24時間・30分ごと（`*/30 * * * *`） |
-| 10.5 | HTTPリクエストボディ | JSONパラメータ（class_name, task_id, task_pattern, drive_folder_id, spreadsheet_id） |
+| 10.5 | HTTPリクエストボディ | JSONパラメータ（class_name, task_name, drive_folder_id, spreadsheet_id） |
 | 10.6 | ジョブ一時停止 | `gcloud scheduler jobs pause` コマンド |
 | 10.7 | ジョブ再開・更新 | `gcloud scheduler jobs resume` + `update` コマンド |
 | 10.8 | パラメータ更新 | `gcloud scheduler jobs update http --message-body` |

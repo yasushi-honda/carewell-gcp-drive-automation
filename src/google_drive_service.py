@@ -119,6 +119,8 @@ class GoogleDriveService:
         """
         Check if service account has access to the folder (Shared Drive supported)
 
+        NOTE: Currently unused but preserved for future validation/setup operations
+
         Args:
             folder_id: Google Drive folder ID (must be in Shared Drive)
 

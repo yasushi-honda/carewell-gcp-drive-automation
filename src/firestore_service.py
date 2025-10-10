@@ -130,6 +130,8 @@ class FirestoreService:
         """
         Get upload statistics for a specific class/task
 
+        NOTE: Currently unused but preserved for future monitoring/operations API
+
         Args:
             class_name: Class name
             task_id: Task ID (e.g., "課題①")

@@ -81,11 +81,16 @@ POST https://carewell-file-collector-imczapxkba-an.a.run.app
 ```json
 {
   "class_name": "令和7年度 デジタル中核人材養成研修 №01",
-  "task_name": "課題①業務分析　※～11/3〆切",
+  "task_id": "課題①",
+  "task_pattern": "課題①",
   "drive_folder_id": "1abc...xyz",
   "spreadsheet_id": "1def...uvw"
 }
 ```
+
+**パラメータ説明**:
+- `task_id`: Firestore/Sheetsでの管理用識別子（例: "課題①"）
+- `task_pattern`: Carewell画面での検索パターン（例: "課題①" で部分一致検索）
 
 ### レスポンス形式
 
@@ -195,11 +200,13 @@ playwright install chromium
 
 ### 重複チェック方式
 
-ファイルの一意性判定は以下の組み合わせのSHA256ハッシュで行います：
+ファイルの一意性判定は以下の複合キーで行います：
 
 ```
-class_name + task_name + student_id + filename + submit_date
+{student_id}_{filename}_{submit_date}
 ```
+
+Firestoreコレクション階層: `{class_name}/{task_id}/documents/{composite_key}`
 
 これにより：
 - ✅ 同一学生が同じファイル名で再提出した場合、提出日時が異なれば新しいファイルとして取得
@@ -237,6 +244,45 @@ class_name + task_name + student_id + filename + submit_date
 ### タイムアウトエラー
 
 Playwrightのデフォルトタイムアウトは180秒に設定されています。ネットワークが遅い場合は調整が必要です。
+
+## 開発者向けツール
+
+### テストスクリプト
+
+#### 単一パターンテスト
+
+```bash
+./scripts/test-single-pattern.sh
+```
+
+№01-課題①の単一パターンを本番環境でテストします。
+
+#### 全パターンテスト
+
+```bash
+./scripts/test-all-patterns.sh
+```
+
+7クラス × 2課題 = 14パターンを本番環境でテストします。
+
+### Firestoreデータクリーンアップ
+
+開発・テスト時にFirestoreのテストデータを削除する場合:
+
+```bash
+./scripts/cleanup-firestore.sh
+```
+
+**注意**: スクリプト内の変数を編集して、削除対象のクラス・課題を指定してください。
+
+```bash
+CLASS_NAME="令和7年度 デジタル中核人材養成研修 №01"
+TASK_ID="課題①"
+```
+
+## メンテナンス
+
+詳細なコード品質レポートは `docs/maintenance-report.md` を参照してください。
 
 ## 貢献
 

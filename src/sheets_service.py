@@ -210,51 +210,15 @@ class SheetsService:
             logger.error(f"Error appending record to spreadsheet: {e}", exc_info=True)
             return False
 
-    def check_record_exists(
-        self,
-        spreadsheet_id: str,
-        student_name: str,
-        filename: str,
-        sheet_name: str = "シート1"
-    ) -> bool:
-        """
-        Check if a record already exists in the spreadsheet
-
-        Args:
-            spreadsheet_id: Google Sheets spreadsheet ID
-            student_name: Student name
-            filename: Filename to check
-            sheet_name: Sheet name (default: "シート1")
-
-        Returns:
-            True if record exists, False otherwise
-        """
-        try:
-            # Get all records
-            result = self.service.spreadsheets().values().get(
-                spreadsheetId=spreadsheet_id,
-                range=f"{sheet_name}!A:B"
-            ).execute()
-
-            values = result.get('values', [])
-
-            # Skip header row and check each record
-            for row in values[1:]:
-                if len(row) >= 2:
-                    if row[0] == student_name and row[1] == filename:
-                        logger.info(f"Record already exists in spreadsheet: {student_name} - {filename}")
-                        return True
-
-            return False
-
-        except Exception as e:
-            logger.error(f"Error checking record existence: {e}", exc_info=True)
-            # Return False on error to allow retry
-            return False
+    # NOTE: check_record_exists() was removed as duplicate checking is handled by Firestore
+    # Firestore provides O(1) lookups vs Sheets O(n) full table scan
+    # See: maintenance-report.md section 3
 
     def get_stats(self, spreadsheet_id: str, sheet_name: str = "Sheet1") -> dict:
         """
         Get statistics from spreadsheet
+
+        NOTE: Currently unused but preserved for future monitoring/operations API
 
         Args:
             spreadsheet_id: Google Sheets spreadsheet ID
