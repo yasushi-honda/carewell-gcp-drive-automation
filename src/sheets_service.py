@@ -107,10 +107,13 @@ class SheetsService:
             sheet_name: Sheet name (task_id)
         """
         try:
+            # Escape single quotes in sheet name for A1 notation
+            escaped_name = sheet_name.replace("'", "''")
+
             # Check if headers exist
             result = self.service.spreadsheets().values().get(
                 spreadsheetId=spreadsheet_id,
-                range=f"'{sheet_name}'!A1:H1"
+                range=f"'{escaped_name}'!A1:H1"
             ).execute()
 
             values = result.get('values', [])
@@ -130,7 +133,7 @@ class SheetsService:
 
                 self.service.spreadsheets().values().update(
                     spreadsheetId=spreadsheet_id,
-                    range=f"'{sheet_name}'!A1:H1",
+                    range=f"'{escaped_name}'!A1:H1",
                     valueInputOption="RAW",
                     body={"values": [headers]}
                 ).execute()
@@ -194,10 +197,13 @@ class SheetsService:
                 upload_time
             ]
 
+            # Escape single quotes in sheet name for A1 notation
+            escaped_name = sheet_name.replace("'", "''")
+
             # Append row (sheet name with single quotes for special characters)
             result = self.service.spreadsheets().values().append(
                 spreadsheetId=spreadsheet_id,
-                range=f"'{sheet_name}'!A:H",
+                range=f"'{escaped_name}'!A:H",
                 valueInputOption="RAW",
                 insertDataOption="INSERT_ROWS",
                 body={"values": [row]}
