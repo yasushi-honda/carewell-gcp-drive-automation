@@ -1,0 +1,24 @@
+attemptDeadline: 180s
+httpTarget:
+  body: eyJzcHJlYWRzaGVldF9pZCI6IjFaaFNEcGd4c0MwTlJrWnkyY0NtVEJxWW5Lc1o5MEtSRGM4VXJLdW9kUU1RIiwic2hlZXRfbmFtZSI6IlRlYW04IiwidGFyZ2V0X3RyYWluaW5nIjoi5Luk5ZKMN-W5tOW6piDjg4fjgrjjgr_jg6vkuK3moLjkurrmnZDppIrmiJDnoJTkv64g4oSWMDgiLCJlbnZpcm9ubWVudCI6InByb2QifQ==
+  headers:
+    Content-Type: application/json
+    User-Agent: Google-Cloud-Scheduler
+  httpMethod: POST
+  oidcToken:
+    audience: https://carewell-automation-61759806259.asia-northeast1.run.app/run
+    serviceAccountEmail: carewell-automation-sa@carewell-automation.iam.gserviceaccount.com
+  uri: https://carewell-automation-61759806259.asia-northeast1.run.app/run
+lastAttemptTime: '2025-10-10T14:55:00.597124Z'
+name: projects/carewell-automation/locations/asia-northeast1/jobs/carewell-automation-pattern8
+retryConfig:
+  maxBackoffDuration: 3600s
+  maxDoublings: 5
+  maxRetryDuration: 0s
+  minBackoffDuration: 5s
+schedule: 25,55 * * * *
+scheduleTime: '2025-10-10T15:25:00.952836Z'
+state: ENABLED
+status: {}
+timeZone: Asia/Tokyo
+userUpdateTime: '2025-09-01T17:00:11Z'
