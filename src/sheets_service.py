@@ -55,6 +55,49 @@ class SheetsService:
         composite_key = f"{student_id}_{filename}_{safe_submit_date}"
         return composite_key
 
+    def _ensure_sheet_exists(self, spreadsheet_id: str, sheet_name: str):
+        """
+        Ensure sheet exists, create if it doesn't
+
+        Args:
+            spreadsheet_id: Google Sheets spreadsheet ID
+            sheet_name: Sheet name to create
+        """
+        try:
+            # Get all sheets in the spreadsheet
+            spreadsheet = self.service.spreadsheets().get(
+                spreadsheetId=spreadsheet_id
+            ).execute()
+
+            # Check if sheet already exists
+            for sheet in spreadsheet.get('sheets', []):
+                if sheet.get('properties', {}).get('title') == sheet_name:
+                    logger.info(f"Sheet '{sheet_name}' already exists")
+                    return
+
+            # Sheet doesn't exist, create it
+            logger.info(f"Creating new sheet: {sheet_name}")
+            request_body = {
+                'requests': [{
+                    'addSheet': {
+                        'properties': {
+                            'title': sheet_name
+                        }
+                    }
+                }]
+            }
+
+            self.service.spreadsheets().batchUpdate(
+                spreadsheetId=spreadsheet_id,
+                body=request_body
+            ).execute()
+
+            logger.info(f"Successfully created sheet: {sheet_name}")
+
+        except Exception as e:
+            logger.error(f"Error ensuring sheet exists: {e}", exc_info=True)
+            raise
+
     def _ensure_headers(self, spreadsheet_id: str, sheet_name: str):
         """
         Ensure spreadsheet has proper headers
@@ -64,10 +107,10 @@ class SheetsService:
             sheet_name: Sheet name (task_id)
         """
         try:
-            # Check if headers exist (sheet name without quotes - API auto-escapes)
+            # Check if headers exist
             result = self.service.spreadsheets().values().get(
                 spreadsheetId=spreadsheet_id,
-                range=f"{sheet_name}!A1:H1"
+                range=f"'{sheet_name}'!A1:H1"
             ).execute()
 
             values = result.get('values', [])
@@ -87,7 +130,7 @@ class SheetsService:
 
                 self.service.spreadsheets().values().update(
                     spreadsheetId=spreadsheet_id,
-                    range=f"{sheet_name}!A1:H1",
+                    range=f"'{sheet_name}'!A1:H1",
                     valueInputOption="RAW",
                     body={"values": [headers]}
                 ).execute()
@@ -130,6 +173,9 @@ class SheetsService:
             # Generate composite key
             composite_key = self._generate_composite_key(student_id, filename, submit_date)
 
+            # Ensure sheet exists
+            self._ensure_sheet_exists(spreadsheet_id, sheet_name)
+
             # Ensure headers exist
             self._ensure_headers(spreadsheet_id, sheet_name)
 
@@ -148,10 +194,10 @@ class SheetsService:
                 upload_time
             ]
 
-            # Append row (sheet name without quotes - API auto-escapes)
+            # Append row (sheet name with single quotes for special characters)
             result = self.service.spreadsheets().values().append(
                 spreadsheetId=spreadsheet_id,
-                range=f"{sheet_name}!A:H",
+                range=f"'{sheet_name}'!A:H",
                 valueInputOption="RAW",
                 insertDataOption="INSERT_ROWS",
                 body={"values": [row]}
