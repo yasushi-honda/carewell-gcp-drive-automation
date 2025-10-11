@@ -1,15 +1,24 @@
 # Carewell GCP Drive Automation
 
-Carewell Webサービスから提出ファイルを自動収集し、Google Driveへ保存、Googleスプレッドシートに記録するシステム
+Carewell Webサービスから提出ファイルを自動収集し、Google Driveへ保存、Googleスプレッドシートに記録するシステム + Firestore可視化ダッシュボード
 
 ## 概要
 
-このプロジェクトは、Carewell学習管理システムから学生の提出物を自動的に収集し、Google Driveに整理して保存、メタデータをGoogleスプレッドシートに記録する自動化システムです。
+このプロジェクトは2つのシステムで構成されています：
+
+### 1. ファイル自動収集システム（Cloud Run Functions）
+Carewell学習管理システムから学生の提出物を自動的に収集し、Google Driveに整理して保存、メタデータをGoogleスプレッドシートとFirestoreに記録する自動化システムです。
+
+### 2. Carewell Dashboard（Firebase Hosting）
+Firestoreに蓄積された提出ファイルのメタ情報を、講師が直感的に確認できるWebダッシュボードです。Vue.js 3で構築されたSPAで、3段階ドリルダウンUI（クラス一覧 → 課題一覧 → ファイル一覧）により、必要な情報へ素早くアクセスできます。
+
+詳細は [dashboard/README.md](dashboard/README.md) を参照してください。
 
 ## アーキテクチャ
 
 ### 主要コンポーネント
 
+**バックエンド（ファイル自動収集）**:
 - **Cloud Run Functions (2nd Gen)**: サーバーレス実行環境
 - **Playwright**: Carewell Webサイトの自動操作
 - **Secret Manager**: 認証情報の安全な管理
@@ -20,13 +29,24 @@ Carewell Webサービスから提出ファイルを自動収集し、Google Driv
 - **Google Drive API**: ファイル保存
 - **Google Sheets API**: 記録管理
 
+**フロントエンド（Dashboard）**:
+- **Firebase Hosting**: Vue.js 3 SPA配信（グローバルCDN）
+- **Firestore**: 読み取り専用データソース（メタ情報可視化）
+- **Vue.js 3 + Vite**: フロントエンドフレームワーク
+- **Tailwind CSS**: UIスタイリング
+
 ### CI/CDパイプライン
 
 GitHub Actions + Workload Identity Federationによる自動デプロイ
 
 ```
 GitHub Push → GitHub Actions → Artifact Registry → Cloud Run Functions
+GitHub Push → GitHub Actions → Firebase Hosting (Dashboard)
 ```
+
+**2つのデプロイパイプライン**:
+1. **Cloud Run Functions**: `src/`, `Dockerfile`, `requirements.txt`の変更時
+2. **Firebase Hosting**: `dashboard/`の変更時
 
 ## プロジェクト構成
 
@@ -34,16 +54,23 @@ GitHub Push → GitHub Actions → Artifact Registry → Cloud Run Functions
 .
 ├── .github/
 │   └── workflows/
-│       └── deploy.yml             # CI/CDパイプライン定義
+│       ├── deploy.yml                # CI/CD: Cloud Run Functions
+│       └── deploy-dashboard.yml      # CI/CD: Firebase Hosting
+├── dashboard/                        # Carewell Dashboard (Vue.js 3 SPA)
+│   ├── src/                          # ソースコード
+│   ├── public/                       # 静的ファイル
+│   ├── firebase.json                 # Firebase Hosting設定
+│   └── package.json                  # npm依存関係
 ├── src/
-│   ├── main.py                    # Cloud Functions エントリーポイント
-│   ├── playwright_automation.py   # Playwright自動化エンジン
-│   ├── google_drive_service.py    # Google Drive API サービス
-│   ├── firestore_service.py       # Firestore 重複チェックサービス
-│   └── sheets_service.py          # Google Sheets API サービス
-├── Dockerfile                     # コンテナイメージ定義
-├── requirements.txt               # Python依存関係
-└── .gitignore                     # Git除外設定
+│   ├── main.py                       # Cloud Functions エントリーポイント
+│   ├── playwright_automation.py      # Playwright自動化エンジン
+│   ├── google_drive_service.py       # Google Drive API サービス
+│   ├── firestore_service.py          # Firestore 重複チェックサービス
+│   └── sheets_service.py             # Google Sheets API サービス
+├── firestore.rules                   # Firestore Security Rules
+├── Dockerfile                        # コンテナイメージ定義
+├── requirements.txt                  # Python依存関係
+└── .gitignore                        # Git除外設定
 ```
 
 ## セットアップ

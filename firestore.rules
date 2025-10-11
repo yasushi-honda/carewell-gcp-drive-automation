@@ -1,0 +1,28 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Phase 1: 全ユーザー読み取り許可、書き込み完全禁止
+    // リンクを知っている人全員がアクセス可能
+    match /{document=**} {
+      allow read: if true;   // 誰でも読み取り可能
+      allow write: if false;  // フロントエンドからの書き込みは完全禁止
+    }
+
+    // Phase 2: 認証ユーザーのみ読み取り許可（将来実装）
+    // 以下をアンコメントして上記ルールを置き換えることで、認証を有効化できます
+    //
+    // match /{document=**} {
+    //   allow read: if request.auth != null;  // 認証済みユーザーのみ読み取り可能
+    //   allow write: if false;                 // 書き込みは引き続き禁止
+    // }
+
+    // Phase 3: 講師別の担当クラスフィルタリング（将来実装）
+    // 講師が自分の担当クラスのみ閲覧できるようにする場合は、以下のルールを使用
+    //
+    // match /{className}/{document=**} {
+    //   allow read: if request.auth != null &&
+    //                  className in get(/databases/$(database)/documents/teachers/$(request.auth.uid)).data.assignedClasses;
+    //   allow write: if false;
+    // }
+  }
+}

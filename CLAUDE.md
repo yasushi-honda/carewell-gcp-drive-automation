@@ -16,6 +16,7 @@ Kiro-style Spec Driven Development implementation using claude code slash comman
 
 ### Active Specifications
 - **carewell-drive-automation**: Carewell Webサービスからのファイル自動取得・Google Drive保存・スプレッドシート記録システム
+- **carewell-dashboard**: Firestore提出ファイルメタ情報可視化ダッシュボード（講師向けWebインターフェース）
 - Check `.kiro/specs/` for active specifications
 - Use `/kiro:spec-status [feature-name]` to check progress
 

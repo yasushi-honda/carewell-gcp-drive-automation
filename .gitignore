@@ -37,3 +37,14 @@ htmlcov/
 # Playwright
 playwright-report/
 test-results/
+
+# Dashboard (Node.js / Vue.js)
+dashboard/node_modules/
+dashboard/dist/
+dashboard/.env
+dashboard/.env.local
+dashboard/.env.production
+dashboard/.firebase
+dashboard/firebase-debug.log
+dashboard/firestore-debug.log
+dashboard/package-lock.json
