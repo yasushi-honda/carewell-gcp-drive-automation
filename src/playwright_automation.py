@@ -331,9 +331,14 @@ class PlaywrightAutomationEngine:
             count_elem = list_frame.locator(count_selector)
             count_text = count_elem.text_content()
             logger.info(f"DEBUG: Found count element with text: '{count_text}'")
-            
+            logger.info(f"DEBUG: count_text repr: {repr(count_text)}")
+            logger.info(f"DEBUG: count_text bytes: {count_text.encode('utf-8') if count_text else None}")
+
             # Parse "19件中 1 - 19件目表示" to extract total count (19)
-            match = re.match(r'(\d+)件中', count_text)
+            # Strip whitespace before matching
+            count_text_stripped = count_text.strip() if count_text else ''
+            logger.info(f"DEBUG: count_text_stripped: '{count_text_stripped}'")
+            match = re.match(r'(\d+)件中', count_text_stripped)
             if match:
                 total_count = int(match.group(1))
                 logger.info(f"✓ Total submission count from UI: {total_count}")
