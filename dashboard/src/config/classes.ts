@@ -19,3 +19,14 @@ export const KNOWN_CLASSES = [
   '令和7年度 デジタル中核人材養成研修 №08',
   '令和7年度 デジタル中核人材養成研修 №09',
 ];
+
+/**
+ * 既知のタスクIDリスト
+ *
+ * Note: Firestoreではサブコレクション（documents）にデータがあっても、
+ * 親ドキュメント（task_id）自体は自動作成されないため、
+ * task_idリストをフロントエンドで管理する。
+ *
+ * Cloud Schedulerで管理されている課題IDに対応。
+ */
+export const KNOWN_TASK_IDS = ['課題①', '課題②'];
