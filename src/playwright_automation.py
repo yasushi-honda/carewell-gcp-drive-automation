@@ -316,17 +316,21 @@ class PlaywrightAutomationEngine:
 
         # Extract total count from UI (must be in list frame after "全て" is selected)
         total_count = None
+        logger.info(f"DEBUG: Starting total_count extraction, list_frame={list_frame.name if hasattr(list_frame, 'name') else 'page'}")
+        
         try:
             count_selector = '#ctl00_masterMain_dpgMain_dpgMain_ctl00_lblDataCount'
             
-            logger.info(f"Waiting for count element in list frame: {count_selector}")
+            logger.info(f"DEBUG: Waiting for count element in list frame: {count_selector}")
             
             # Wait for the element to appear in list frame (with timeout)
             list_frame.wait_for_selector(count_selector, timeout=10000, state='visible')
             
+            logger.info(f"DEBUG: wait_for_selector completed successfully")
+            
             count_elem = list_frame.locator(count_selector)
             count_text = count_elem.text_content()
-            logger.info(f"Found count element with text: '{count_text}'")
+            logger.info(f"DEBUG: Found count element with text: '{count_text}'")
             
             # Parse "19件中 1 - 19件目表示" to extract total count (19)
             match = re.match(r'(\d+)件中', count_text)
@@ -337,7 +341,9 @@ class PlaywrightAutomationEngine:
                 logger.warning(f"Could not parse total count from: {count_text}")
                 
         except Exception as e:
-            logger.warning(f"Error extracting total count: {e}")
+            logger.warning(f"ERROR: Exception during total count extraction: {e}", exc_info=True)
+        
+        logger.info(f"DEBUG: Finished total_count extraction, total_count={total_count}")
 
         # Collect submissions from all pages
         all_submissions = []
@@ -456,6 +462,8 @@ class PlaywrightAutomationEngine:
         extracted_count = len(all_submissions)
         verified = False
 
+        logger.info(f"DEBUG: Before verification - total_count={total_count}, extracted_count={extracted_count}")
+
         if total_count is not None:
             verified = (extracted_count == total_count)
             if verified:
@@ -464,6 +472,8 @@ class PlaywrightAutomationEngine:
                 logger.warning(f"⚠️ Count mismatch! Extracted {extracted_count} submissions but UI shows {total_count}")
         else:
             logger.warning("Could not verify count: total_count not available from UI")
+
+        logger.info(f"DEBUG: Returning dict with total_count={total_count}, verified={verified}")
 
         return {
             "submissions": all_submissions,
