@@ -81,12 +81,25 @@ if [ "${HTTP_CODE}" == "200" ]; then
         PROCESSED=$(echo "${RESPONSE_BODY}" | jq -r '.processed // 0')
         SKIPPED=$(echo "${RESPONSE_BODY}" | jq -r '.skipped // 0')
         FAILED=$(echo "${RESPONSE_BODY}" | jq -r '.failed // 0')
+        TOTAL_COUNT=$(echo "${RESPONSE_BODY}" | jq -r '.total_count_from_ui // "N/A"')
+        COUNT_VERIFIED=$(echo "${RESPONSE_BODY}" | jq -r '.count_verified // "N/A"')
 
         echo ""
         echo "提出一覧: ${SUBMISSIONS}件"
         echo "処理成功: ${PROCESSED}件"
         echo "スキップ: ${SKIPPED}件"
         echo "失敗: ${FAILED}件"
+
+        if [ "${TOTAL_COUNT}" != "N/A" ]; then
+            echo ""
+            echo "【件数照合】"
+            echo "UI表示総件数: ${TOTAL_COUNT}件"
+            echo "照合結果: ${COUNT_VERIFIED}"
+
+            if [ "${COUNT_VERIFIED}" != "true" ]; then
+                echo -e "${YELLOW}⚠️ 件数不一致が検出されました${NC}"
+            fi
+        fi
         exit 0
     else
         echo -e "${RED}✗ レスポンスステータスがエラー${NC}"

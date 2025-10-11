@@ -31,6 +31,18 @@ def main(request):
         "drive_folder_id": "1abc...xyz",
         "spreadsheet_id": "1def...uvw"
     }
+
+    Returns:
+    {
+        "status": "success",
+        "message": "File collection completed",
+        "submissions_found": 12,
+        "processed": 10,
+        "skipped": 2,
+        "failed": 0,
+        "total_count_from_ui": 12,
+        "count_verified": true
+    }
     """
     try:
         # Parse request

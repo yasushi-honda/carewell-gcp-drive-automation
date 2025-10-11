@@ -103,9 +103,22 @@ POST https://carewell-file-collector-imczapxkba-an.a.run.app
   "submissions_found": 12,
   "processed": 10,
   "skipped": 2,
-  "failed": 0
+  "failed": 0,
+  "total_count_from_ui": 12,
+  "count_verified": true
 }
 ```
+
+**レスポンスフィールド説明**:
+- `status`: 処理ステータス（"success" または "error"）
+- `message`: 処理メッセージ
+- `submissions_found`: 検出された提出物の総数
+- `processed`: 新規ダウンロード・処理された件数
+- `skipped`: 既に処理済みでスキップされた件数
+- `failed`: 処理に失敗した件数
+- `total_count_from_ui`: UI画面から取得した総件数（データ完全性チェック用）
+- `count_verified`: 抽出件数とUI件数が一致しているか（true/false）
+- `warning`: 件数不一致時の警告メッセージ（オプション、count_verified=falseの場合のみ）
 
 ## 開発
 
@@ -176,6 +189,7 @@ playwright install chromium
 - ✅ Firestore統合（SHA256ハッシュによる重複チェック）
 - ✅ Googleスプレッドシート統合（自動記録・リンク生成）
 - ✅ 一時ファイル自動クリーンアップ
+- ✅ 総件数照合機能（データ完全性チェック）
 
 ## 処理フロー
 
@@ -189,6 +203,8 @@ playwright install chromium
 3. 指定クラス・課題ページへナビゲーション
    ↓
 4. 提出リスト取得（全学生）
+   ├─ UI画面から総件数を取得（「20件中 1 - 20件目表示」）
+   └─ 抽出した提出リストと件数を照合
    ↓
 5. 各提出ファイルについて：
    ├─ Firestoreで重複チェック
@@ -199,7 +215,7 @@ playwright install chromium
    ├─ Google Sheetsに記録
    └─ /tmp一時ファイル削除
    ↓
-6. レスポンス返却（処理件数サマリー）
+6. レスポンス返却（処理件数サマリー + 件数照合結果）
 ```
 
 ### 重複チェック方式
