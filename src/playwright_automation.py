@@ -316,44 +316,27 @@ class PlaywrightAutomationEngine:
 
         # Extract total count from UI (must be in list frame after "全て" is selected)
         total_count = None
-        logger.info(f"DEBUG: Starting total_count extraction, list_frame={list_frame.name if hasattr(list_frame, 'name') else 'page'}")
-        
+
         try:
             count_selector = '#ctl00_masterMain_dpgMain_dpgMain_ctl00_lblDataCount'
-            
-            logger.info(f"DEBUG: Waiting for count element in list frame: {count_selector}")
-            
+
             # Wait for the element to appear in list frame (with timeout)
             list_frame.wait_for_selector(count_selector, timeout=10000, state='visible')
-            
-            logger.info(f"DEBUG: wait_for_selector completed successfully")
-            
+
             count_elem = list_frame.locator(count_selector)
             count_text = count_elem.text_content()
-            logger.info(f"DEBUG: Found count element with text: '{count_text}'")
-            logger.info(f"DEBUG: count_text repr: {repr(count_text)}")
-            logger.info(f"DEBUG: count_text bytes: {count_text.encode('utf-8') if count_text else None}")
 
             # Parse "19件中 1 - 19件目表示" to extract total count (19)
-            # Strip whitespace before matching
-            count_text_stripped = count_text.strip() if count_text else ''
-            logger.info(f"DEBUG: count_text_stripped: '{count_text_stripped}'")
-            match = re.match(r'(\d+)件中', count_text_stripped)
-            logger.info(f"DEBUG: re.match result: {match}")
-            logger.info(f"DEBUG: match is None: {match is None}")
-            logger.info(f"DEBUG: bool(match): {bool(match)}")
-            if match:
-                logger.info(f"DEBUG: Entered if match block")
-                total_count = int(match.group(1))
-                logger.info(f"✓ Total submission count from UI: {total_count}")
-            else:
-                logger.info(f"DEBUG: Entered else block")
-                logger.warning(f"Could not parse total count from: {count_text}")
-                
+            if count_text:
+                match = re.match(r'(\d+)件中', count_text.strip())
+                if match:
+                    total_count = int(match.group(1))
+                    logger.info(f"✓ Total submission count from UI: {total_count}")
+                else:
+                    logger.warning(f"Could not parse total count from: {count_text}")
+
         except Exception as e:
-            logger.warning(f"ERROR: Exception during total count extraction: {e}", exc_info=True)
-        
-        logger.info(f"DEBUG: Finished total_count extraction, total_count={total_count}")
+            logger.warning(f"Could not extract total count from UI: {e}")
 
         # Collect submissions from all pages
         all_submissions = []
@@ -406,8 +389,8 @@ class PlaywrightAutomationEngine:
                             "submit_date": submit_date
                         })
 
-                    except Exception as re:
-                        logger.error(f"Could not parse row {i}: {re}", exc_info=True)
+                    except Exception as row_error:
+                        logger.error(f"Could not parse row {i}: {row_error}", exc_info=True)
 
                 logger.info(f"Extracted basic info for {len(submission_basics)} submissions on page {current_page}")
 
@@ -472,8 +455,6 @@ class PlaywrightAutomationEngine:
         extracted_count = len(all_submissions)
         verified = False
 
-        logger.info(f"DEBUG: Before verification - total_count={total_count}, extracted_count={extracted_count}")
-
         if total_count is not None:
             verified = (extracted_count == total_count)
             if verified:
@@ -482,8 +463,6 @@ class PlaywrightAutomationEngine:
                 logger.warning(f"⚠️ Count mismatch! Extracted {extracted_count} submissions but UI shows {total_count}")
         else:
             logger.warning("Could not verify count: total_count not available from UI")
-
-        logger.info(f"DEBUG: Returning dict with total_count={total_count}, verified={verified}")
 
         return {
             "submissions": all_submissions,
