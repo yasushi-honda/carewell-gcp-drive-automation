@@ -14,6 +14,8 @@ dist/
 # Secrets and credentials
 *.json
 !requirements.json
+!dashboard/firebase.json
+!dashboard/firestore.indexes.json
 *.key
 *.pem
 .env
