@@ -178,7 +178,7 @@ playwright install chromium
 
 ## 開発ステータス
 
-現在の実装状況:
+### 実装済み機能
 
 - ✅ CI/CDパイプライン
 - ✅ Playwright自動化基盤
@@ -190,6 +190,22 @@ playwright install chromium
 - ✅ Googleスプレッドシート統合（自動記録・リンク生成）
 - ✅ 一時ファイル自動クリーンアップ
 - ✅ 総件数照合機能（データ完全性チェック）
+
+### 未実装機能（今後のタスク）
+
+詳細は `.kiro/specs/carewell-drive-automation/tasks.md` を参照
+
+**優先度：高**
+- ⬜ Cloud Schedulerジョブの設定と運用基盤構築
+  - Schedulerジョブ作成（7クラス×2課題=14ジョブ）
+  - 監視・アラート設定
+  - 運用手順書作成
+
+**優先度：中**
+- ⬜ ユニットテスト・統合テストの実装
+
+**優先度：低（オプション）**
+- ⬜ エラー通知機能（Gmail API）の実装
 
 ## 処理フロー
 
