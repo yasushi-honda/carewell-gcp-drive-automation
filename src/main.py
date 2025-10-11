@@ -66,8 +66,14 @@ def main(request):
             logger.info(f"Successfully navigated to task page: {page.url}")
 
             # Get submission list
-            submissions = engine.get_submission_list()
+            submission_data = engine.get_submission_list()
+            submissions = submission_data["submissions"]
+            total_count = submission_data.get("total_count")
+            verified = submission_data.get("verified", False)
+
             logger.info(f"Found {len(submissions)} submissions")
+            if total_count is not None:
+                logger.info(f"Total count from UI: {total_count}, Verified: {verified}")
 
             # Process all submissions
             downloaded_count = 0
@@ -158,14 +164,23 @@ def main(request):
                         except Exception as cleanup_error:
                             logger.warning(f"Failed to clean up {file_path}: {cleanup_error}")
 
-            return {
+            response = {
                 "status": "success",
                 "message": "File collection completed",
                 "submissions_found": len(submissions),
                 "processed": downloaded_count,
                 "skipped": skipped_count,
                 "failed": failed_count
-            }, 200
+            }
+
+            # Add count verification info if available
+            if total_count is not None:
+                response["total_count_from_ui"] = total_count
+                response["count_verified"] = verified
+                if not verified:
+                    response["warning"] = f"Count mismatch: UI shows {total_count} but found {len(submissions)}"
+
+            return response, 200
 
         finally:
             engine.close()

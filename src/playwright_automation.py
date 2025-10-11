@@ -291,12 +291,15 @@ class PlaywrightAutomationEngine:
         logger.info("Successfully navigated to task page")
         return self.page
 
-    def get_submission_list(self) -> list[dict]:
+    def get_submission_list(self) -> dict:
         """
         Extract submission file information from all pages
 
         Returns:
-            List of submission dictionaries with metadata and download links
+            Dictionary containing:
+            - submissions: List of submission dictionaries with metadata and download links
+            - total_count: Total number of submissions (from UI counter)
+            - verified: Whether the count matches the extracted submissions
         """
         logger.info("Extracting submission list from all pages")
 
@@ -310,6 +313,24 @@ class PlaywrightAutomationEngine:
         if not list_frame:
             logger.warning("'list' frame not found, using main page")
             list_frame = self.page
+
+        # Extract total count from UI
+        total_count = None
+        try:
+            count_elem = list_frame.locator('#ctl00_masterMain_dpgMain_dpgMain_ctl00_lblDataCount')
+            if count_elem.count() > 0:
+                count_text = count_elem.text_content()
+                # Parse "19件中 1 - 19件目表示" to extract total count (19)
+                match = re.match(r'(\d+)件中', count_text)
+                if match:
+                    total_count = int(match.group(1))
+                    logger.info(f"Total submission count from UI: {total_count}")
+                else:
+                    logger.warning(f"Could not parse total count from: {count_text}")
+            else:
+                logger.warning("Total count element not found in UI")
+        except Exception as e:
+            logger.warning(f"Error extracting total count: {e}")
 
         # Collect submissions from all pages
         all_submissions = []
@@ -424,7 +445,25 @@ class PlaywrightAutomationEngine:
         except Exception as e:
             logger.error(f"Error extracting submissions: {e}", exc_info=True)
 
-        return all_submissions
+        # Verify count matches
+        extracted_count = len(all_submissions)
+        verified = False
+
+        if total_count is not None:
+            verified = (extracted_count == total_count)
+            if verified:
+                logger.info(f"✓ Count verification passed: {extracted_count}/{total_count}")
+            else:
+                logger.warning(f"⚠️ Count mismatch! Extracted {extracted_count} submissions but UI shows {total_count}")
+        else:
+            logger.warning("Could not verify count: total_count not available from UI")
+
+        return {
+            "submissions": all_submissions,
+            "total_count": total_count,
+            "extracted_count": extracted_count,
+            "verified": verified
+        }
 
     def _get_download_link(self, detail_url: str, list_url: str) -> dict:
         """
