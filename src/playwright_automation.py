@@ -339,10 +339,15 @@ class PlaywrightAutomationEngine:
             count_text_stripped = count_text.strip() if count_text else ''
             logger.info(f"DEBUG: count_text_stripped: '{count_text_stripped}'")
             match = re.match(r'(\d+)件中', count_text_stripped)
+            logger.info(f"DEBUG: re.match result: {match}")
+            logger.info(f"DEBUG: match is None: {match is None}")
+            logger.info(f"DEBUG: bool(match): {bool(match)}")
             if match:
+                logger.info(f"DEBUG: Entered if match block")
                 total_count = int(match.group(1))
                 logger.info(f"✓ Total submission count from UI: {total_count}")
             else:
+                logger.info(f"DEBUG: Entered else block")
                 logger.warning(f"Could not parse total count from: {count_text}")
                 
         except Exception as e:
