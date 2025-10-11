@@ -35,11 +35,14 @@ export function initializeFirebase(): FirebaseApp {
 /**
  * Firestoreインスタンスを取得
  * 自動的にFirebaseアプリを初期化
+ *
+ * Note: carewell-drive-automationが使用している`carewell-native`データベースに接続
  */
 export function getDb(): Firestore {
   if (!db) {
     const firebaseApp = initializeFirebase();
-    db = getFirestore(firebaseApp);
+    // carewell-nativeデータベースに接続
+    db = getFirestore(firebaseApp, 'carewell-native');
   }
   return db;
 }
