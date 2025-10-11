@@ -59,7 +59,7 @@ jobs:
       - name: Deploy Firestore Security Rules
         working-directory: ${{ env.WORKING_DIR }}
         run: |
-          firebase deploy --only firestore:rules --project ${{ env.PROJECT_ID }} --non-interactive
+          firebase deploy --only firestore --project ${{ env.PROJECT_ID }} --non-interactive
 
       - name: Deploy to Firebase Hosting
         working-directory: ${{ env.WORKING_DIR }}
