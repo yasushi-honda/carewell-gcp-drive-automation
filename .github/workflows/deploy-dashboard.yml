@@ -6,8 +6,6 @@ on:
       - main
     paths:
       - 'dashboard/**'
-      - 'firestore.rules'
-      - 'firestore.indexes.json'
       - '.github/workflows/deploy-dashboard.yml'
 
 env:
