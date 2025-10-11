@@ -33,7 +33,7 @@ jobs:
 
       - name: Install dependencies
         working-directory: ${{ env.WORKING_DIR }}
-        run: npm ci
+        run: npm install
 
       - name: Build application
         working-directory: ${{ env.WORKING_DIR }}
