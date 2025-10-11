@@ -319,22 +319,27 @@ class PlaywrightAutomationEngine:
         try:
             count_selector = '#ctl00_masterMain_dpgMain_dpgMain_ctl00_lblDataCount'
 
+            # Log all available frames for debugging
+            frame_names = [f.name or f.url for f in self.page.frames]
+            logger.info(f"Available frames: {frame_names}")
+
             # Try to find the count element in any frame
             count_frame = self._find_frame_with_selector(count_selector)
             if count_frame:
                 count_elem = count_frame.locator(count_selector)
                 count_text = count_elem.text_content()
+                logger.info(f"Found count element with text: '{count_text}'")
                 # Parse "19件中 1 - 19件目表示" to extract total count (19)
                 match = re.match(r'(\d+)件中', count_text)
                 if match:
                     total_count = int(match.group(1))
-                    logger.info(f"Total submission count from UI: {total_count} (found in frame: {count_frame.name or 'main'})")
+                    logger.info(f"✓ Total submission count from UI: {total_count} (found in frame: {count_frame.name or 'main'})")
                 else:
                     logger.warning(f"Could not parse total count from: {count_text}")
             else:
-                logger.warning("Total count element not found in any frame")
+                logger.warning(f"Total count element '{count_selector}' not found in any frame: {frame_names}")
         except Exception as e:
-            logger.warning(f"Error extracting total count: {e}")
+            logger.warning(f"Error extracting total count: {e}", exc_info=True)
 
         # Collect submissions from all pages
         all_submissions = []
