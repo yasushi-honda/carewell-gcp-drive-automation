@@ -314,21 +314,25 @@ class PlaywrightAutomationEngine:
             logger.warning("'list' frame not found, using main page")
             list_frame = self.page
 
-        # Extract total count from UI
+        # Extract total count from UI (search in all frames)
         total_count = None
         try:
-            count_elem = list_frame.locator('#ctl00_masterMain_dpgMain_dpgMain_ctl00_lblDataCount')
-            if count_elem.count() > 0:
+            count_selector = '#ctl00_masterMain_dpgMain_dpgMain_ctl00_lblDataCount'
+
+            # Try to find the count element in any frame
+            count_frame = self._find_frame_with_selector(count_selector)
+            if count_frame:
+                count_elem = count_frame.locator(count_selector)
                 count_text = count_elem.text_content()
                 # Parse "19件中 1 - 19件目表示" to extract total count (19)
                 match = re.match(r'(\d+)件中', count_text)
                 if match:
                     total_count = int(match.group(1))
-                    logger.info(f"Total submission count from UI: {total_count}")
+                    logger.info(f"Total submission count from UI: {total_count} (found in frame: {count_frame.name or 'main'})")
                 else:
                     logger.warning(f"Could not parse total count from: {count_text}")
             else:
-                logger.warning("Total count element not found in UI")
+                logger.warning("Total count element not found in any frame")
         except Exception as e:
             logger.warning(f"Error extracting total count: {e}")
 
