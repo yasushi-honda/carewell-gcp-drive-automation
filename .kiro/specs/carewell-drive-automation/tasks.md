@@ -204,13 +204,13 @@
   - _要件: 8.6, 8.7_
 
 - [ ] 10.4 Cloud Schedulerジョブの設定と運用基盤構築
-- [ ] 10.4.1 Schedulerジョブ作成準備
+- [x] 10.4.1 Schedulerジョブ作成準備
   - ジョブ命名規則の確認（carewell-class{番号}-task{番号}）
   - Cron式とオフセット設計（5分刻みで14ジョブ配置）
   - HTTPターゲットURL確認（Cloud Run FunctionsエンドポイントURL取得）
   - OIDC認証用サービスアカウント確認（cloud-scheduler@carewell-automation.iam.gserviceaccount.com）
   - _要件: 10.1, 10.2, 10.3, 10.4_
-- [ ] 10.4.2 初期Schedulerジョブ作成（現在の7クラス×2課題=14ジョブ）
+- [x] 10.4.2 初期Schedulerジョブ作成（現在の7クラス×2課題=14ジョブ）
   - クラス01・課題01-02のジョブ作成（Cron: 0,30と5,35）
   - クラス02・課題01-02のジョブ作成（Cron: 10,40と15,45）
   - クラス03・課題01-02のジョブ作成（Cron: 20,50と25,55）

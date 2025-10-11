@@ -151,6 +151,7 @@ playwright install chromium
 | リソース | 名前 | リージョン | 用途 |
 |---------|------|-----------|------|
 | Cloud Run | carewell-file-collector | asia-northeast1 | Functions実行 |
+| Cloud Scheduler | carewell-class{01-05,08-09}-task{01-02} | asia-northeast1 | 自動実行（14ジョブ、30分間隔） |
 | Artifact Registry | carewell-functions | asia-northeast1 | イメージ保存 |
 | Firestore | carewell-native | asia-northeast1 | 重複チェック用メタデータストア（NATIVE） |
 | Firestore | (default) | asia-northeast1 | 未使用（DATASTORE_MODE、削除不可） |
@@ -190,22 +191,110 @@ playwright install chromium
 - ✅ Googleスプレッドシート統合（自動記録・リンク生成）
 - ✅ 一時ファイル自動クリーンアップ
 - ✅ 総件数照合機能（データ完全性チェック）
+- ✅ Cloud Scheduler自動実行基盤（14ジョブ作成済み、段階的ロールアウト中）
 
 ### 未実装機能（今後のタスク）
 
 詳細は `.kiro/specs/carewell-drive-automation/tasks.md` を参照
-
-**優先度：高**
-- ⬜ Cloud Schedulerジョブの設定と運用基盤構築
-  - Schedulerジョブ作成（7クラス×2課題=14ジョブ）
-  - 監視・アラート設定
-  - 運用手順書作成
 
 **優先度：中**
 - ⬜ ユニットテスト・統合テストの実装
 
 **優先度：低（オプション）**
 - ⬜ エラー通知機能（Gmail API）の実装
+
+## Cloud Scheduler運用状態
+
+### 現在の構成
+
+システムは14個のCloud Schedulerジョブで自動実行されています：
+
+| ジョブ名 | 対象クラス | 対象課題 | 実行間隔 | 状態 |
+|---------|-----------|---------|---------|------|
+| carewell-class01-task01 | №01 | 課題① | 30分毎 | ✅ ENABLED |
+| carewell-class01-task02 | №01 | 課題② | 30分毎 | ✅ ENABLED |
+| carewell-class02-task01 | №02 | 課題① | 30分毎 | ⏸️ PAUSED |
+| carewell-class02-task02 | №02 | 課題② | 30分毎 | ⏸️ PAUSED |
+| carewell-class03-task01 | №03 | 課題① | 30分毎 | ⏸️ PAUSED |
+| carewell-class03-task02 | №03 | 課題② | 30分毎 | ⏸️ PAUSED |
+| carewell-class04-task01 | №04 | 課題① | 30分毎 | ⏸️ PAUSED |
+| carewell-class04-task02 | №04 | 課題② | 30分毎 | ⏸️ PAUSED |
+| carewell-class05-task01 | №05 | 課題① | 30分毎 | ⏸️ PAUSED |
+| carewell-class05-task02 | №05 | 課題② | 30分毎 | ⏸️ PAUSED |
+| carewell-class08-task01 | №08 | 課題① | 30分毎 | ⏸️ PAUSED |
+| carewell-class08-task02 | №08 | 課題② | 30分毎 | ⏸️ PAUSED |
+| carewell-class09-task01 | №09 | 課題① | 30分毎 | ⏸️ PAUSED |
+| carewell-class09-task02 | №09 | 課題② | 30分毎 | ⏸️ PAUSED |
+
+### 段階的ロールアウト戦略
+
+**フェーズ1: 初期有効化（完了）**
+- №01の2ジョブを有効化（2025-10-11 15:15）
+- 24時間監視期間を開始
+
+**フェーズ2: 全体有効化（24時間後予定）**
+- №01の監視結果が良好であれば、残り12ジョブを有効化
+- 監視結果に問題がある場合は、原因調査・修正後に再開
+
+### 監視コマンド
+
+#### ジョブ状態の確認
+
+```bash
+# 全ジョブの状態確認
+gcloud scheduler jobs list --location asia-northeast1 | grep carewell
+
+# 特定ジョブの詳細確認
+gcloud scheduler jobs describe carewell-class01-task01 --location asia-northeast1
+```
+
+#### 実行ログの確認
+
+```bash
+# Cloud Runの最新ログ確認（最近10分間）
+gcloud logging read "resource.type=cloud_run_revision AND resource.labels.service_name=carewell-file-collector" \
+  --limit 50 \
+  --format json \
+  --freshness 10m
+
+# 特定時間範囲のログ確認
+gcloud logging read "resource.type=cloud_run_revision AND resource.labels.service_name=carewell-file-collector" \
+  --limit 100 \
+  --format json \
+  --freshness 1h
+```
+
+#### ジョブの有効化
+
+```bash
+# 残り12ジョブを有効化（フェーズ2実行時）
+for job in carewell-class{02..05}-task{01,02} carewell-class{08,09}-task{01,02}; do
+  gcloud scheduler jobs resume $job --location asia-northeast1
+  echo "✅ Enabled: $job"
+done
+```
+
+#### ジョブの一時停止
+
+```bash
+# 問題発生時の緊急停止
+for job in carewell-class{01..05}-task{01,02} carewell-class{08,09}-task{01,02}; do
+  gcloud scheduler jobs pause $job --location asia-northeast1
+  echo "⏸️ Paused: $job"
+done
+```
+
+### 監視ポイント
+
+24時間監視期間中に以下を確認してください：
+
+1. **実行成功率**: Cloud Runログで200ステータスを確認
+2. **データ整合性**: Firestore/Drive/Sheets間の一貫性を確認
+3. **重複防止**: 同一ファイルが複数回処理されていないことを確認
+4. **エラーログ**: 予期しないエラーが発生していないか確認
+5. **実行時間**: タイムアウト（540秒）に近い実行がないか確認
+
+問題が発見された場合は、全ジョブを一時停止し、原因を調査してください。
 
 ## 処理フロー
 
