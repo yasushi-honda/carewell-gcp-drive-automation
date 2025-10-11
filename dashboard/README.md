@@ -216,6 +216,64 @@ npm install
 - Tailwind CSSでレスポンシブデザインを実装
 - コミット前に`npm run build`でビルドエラーがないか確認
 
+## 開発ステータス
+
+### 🎉 Phase 0: CI/CD構築（完了）
+
+**実装済み**:
+- ✅ Vue.js 3 + Vite + TypeScript プロジェクト骨格
+- ✅ Tailwind CSS スタイリング基盤
+- ✅ Vue Router 4 ルーティング設定
+- ✅ Firebase プロジェクト初期化
+- ✅ GitHub Actions CI/CDパイプライン
+- ✅ Firestore Security Rules デプロイ自動化
+- ✅ Firebase Hosting デプロイ自動化
+- ✅ Hello World ページデプロイ
+
+**公開URL**: https://carewell-automation.web.app
+
+**ワークフロー**: `.github/workflows/deploy-dashboard.yml`
+
+### 📋 Phase 1: 基本機能実装（未着手）
+
+**次に実装する機能** (`.kiro/specs/carewell-dashboard/tasks.md`参照):
+
+1. **Task 2**: Firestore データアクセス層
+   - `useFirestore` composable 実装
+   - クラス・課題・ファイルのデータ取得ロジック
+
+2. **Task 3**: クラス一覧表示（ClassList View）
+   - クラスカード表示
+   - 課題数・提出状況の集計表示
+
+3. **Task 4**: 課題一覧表示（TaskList View）
+   - 課題カード表示
+   - 提出数・未提出数の表示
+
+4. **Task 5**: ファイル一覧表示（FileList View）
+   - ファイルテーブル表示
+   - Google Drive リンク
+
+5. **Task 6-8**: 検索・フィルタ・ソート機能
+   - 学生名・学生IDによる検索
+   - 提出日時ソート
+
+### 🔐 Phase 2: 認証・セキュリティ（計画中）
+
+- Firebase Authentication 統合
+- 講師別クラスフィルタリング
+- Firestore Security Rules 更新
+
+### 🚀 実装開始方法
+
+Phase 1の実装を開始する場合は、以下のコマンドでTDD（テスト駆動開発）に従った実装を開始できます：
+
+```bash
+/kiro:spec-impl carewell-dashboard
+```
+
+または、`.kiro/specs/carewell-dashboard/tasks.md`を参照して、タスク順に手動で実装を進めることもできます。
+
 ## ライセンス
 
 このプロジェクトは内部利用を目的としています。

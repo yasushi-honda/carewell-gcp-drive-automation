@@ -12,6 +12,9 @@ Carewell学習管理システムから学生の提出物を自動的に収集し
 ### 2. Carewell Dashboard（Firebase Hosting）
 Firestoreに蓄積された提出ファイルのメタ情報を、講師が直感的に確認できるWebダッシュボードです。Vue.js 3で構築されたSPAで、3段階ドリルダウンUI（クラス一覧 → 課題一覧 → ファイル一覧）により、必要な情報へ素早くアクセスできます。
 
+**現在の状態**: CI/CDパイプライン構築完了、Hello Worldページ公開中（https://carewell-automation.web.app）
+**次のステップ**: Phase 1 基本機能実装（クラス・課題・ファイル一覧表示）
+
 詳細は [dashboard/README.md](dashboard/README.md) を参照してください。
 
 ## アーキテクチャ
