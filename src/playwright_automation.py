@@ -314,32 +314,30 @@ class PlaywrightAutomationEngine:
             logger.warning("'list' frame not found, using main page")
             list_frame = self.page
 
-        # Extract total count from UI (search in all frames)
+        # Extract total count from UI (must be in list frame after "全て" is selected)
         total_count = None
         try:
             count_selector = '#ctl00_masterMain_dpgMain_dpgMain_ctl00_lblDataCount'
-
-            # Log all available frames for debugging
-            frame_names = [f.name or f.url for f in self.page.frames]
-            logger.info(f"Available frames: {frame_names}")
-
-            # Try to find the count element in any frame
-            count_frame = self._find_frame_with_selector(count_selector)
-            if count_frame:
-                count_elem = count_frame.locator(count_selector)
-                count_text = count_elem.text_content()
-                logger.info(f"Found count element with text: '{count_text}'")
-                # Parse "19件中 1 - 19件目表示" to extract total count (19)
-                match = re.match(r'(\d+)件中', count_text)
-                if match:
-                    total_count = int(match.group(1))
-                    logger.info(f"✓ Total submission count from UI: {total_count} (found in frame: {count_frame.name or 'main'})")
-                else:
-                    logger.warning(f"Could not parse total count from: {count_text}")
+            
+            logger.info(f"Waiting for count element in list frame: {count_selector}")
+            
+            # Wait for the element to appear in list frame (with timeout)
+            list_frame.wait_for_selector(count_selector, timeout=10000, state='visible')
+            
+            count_elem = list_frame.locator(count_selector)
+            count_text = count_elem.text_content()
+            logger.info(f"Found count element with text: '{count_text}'")
+            
+            # Parse "19件中 1 - 19件目表示" to extract total count (19)
+            match = re.match(r'(\d+)件中', count_text)
+            if match:
+                total_count = int(match.group(1))
+                logger.info(f"✓ Total submission count from UI: {total_count}")
             else:
-                logger.warning(f"Total count element '{count_selector}' not found in any frame: {frame_names}")
+                logger.warning(f"Could not parse total count from: {count_text}")
+                
         except Exception as e:
-            logger.warning(f"Error extracting total count: {e}", exc_info=True)
+            logger.warning(f"Error extracting total count: {e}")
 
         # Collect submissions from all pages
         all_submissions = []
