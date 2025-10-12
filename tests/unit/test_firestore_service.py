@@ -129,48 +129,40 @@ class TestFirestoreService:
     def test_record_upload_updates_parent_and_adds_file(self):
         """Test that record_upload calls _update_task_metadata and creates file document."""
         with patch("firestore_service.firestore.Client") as mock_client:
-            # Setup
             mock_db = Mock()
             mock_client.return_value = mock_db
-            mock_collection = Mock()
-            mock_task_doc = Mock()
-            mock_file_doc = Mock()
-            mock_db.collection.return_value = mock_collection
-
-            # Mock document references for both parent and file
-            def mock_document_side_effect(doc_id):
-                if doc_id == "課題①":
-                    return mock_task_doc
-                else:
-                    # File document path
-                    mock_subcoll = Mock()
-                    mock_task_doc.collection.return_value = mock_subcoll
-                    mock_subcoll.document.return_value = mock_file_doc
-                    return mock_task_doc
-
-            mock_collection.document.side_effect = mock_document_side_effect
 
             service = self.FirestoreService()
 
-            # Execute
-            result = service.record_upload(
-                class_name="テストクラス",
-                task_id="課題①",
-                student_name="テスト太郎",
-                student_id="N9902913",
-                filename="test.pdf",
-                drive_file_id="file123",
-                drive_folder_id="folder456",
-                submit_date="2025-10-12 10:00:00",
-                task_pattern="課題①業務分析",
-            )
+            # Patch _update_task_metadata to verify it's called
+            with patch.object(service, "_update_task_metadata", return_value=True) as mock_update:
+                # Setup mock for file document creation
+                mock_task_doc = Mock()
+                mock_subcoll = Mock()
+                mock_file_doc = Mock()
+                mock_db.collection.return_value.document.return_value = mock_task_doc
+                mock_task_doc.collection.return_value = mock_subcoll
+                mock_subcoll.document.return_value = mock_file_doc
 
-            # Assert
-            assert result is True
-            # Verify parent document was updated
-            mock_task_doc.set.assert_called()
-            # Verify file document was created
-            mock_file_doc.set.assert_called()
+                # Execute
+                result = service.record_upload(
+                    class_name="テストクラス",
+                    task_id="課題①",
+                    student_name="テスト太郎",
+                    student_id="N9902913",
+                    filename="test.pdf",
+                    drive_file_id="file123",
+                    drive_folder_id="folder456",
+                    submit_date="2025-10-12 10:00:00",
+                    task_pattern="課題①業務分析",
+                )
+
+                # Assert
+                assert result is True
+                # Verify _update_task_metadata was called
+                mock_update.assert_called_once_with("テストクラス", "課題①", "課題①業務分析")
+                # Verify file document was created
+                mock_file_doc.set.assert_called_once()
 
     def test_record_upload_with_default_task_pattern(self):
         """Test that if task_pattern is None, task_id is used as default."""
@@ -218,47 +210,40 @@ class TestFirestoreService:
     def test_record_upload_continues_on_parent_update_failure(self):
         """Test fail-open: file document is created even if parent update fails."""
         with patch("firestore_service.firestore.Client") as mock_client:
-            # Setup
             mock_db = Mock()
             mock_client.return_value = mock_db
-            mock_collection = Mock()
-            mock_task_doc = Mock()
-            mock_file_doc = Mock()
-            mock_db.collection.return_value = mock_collection
-
-            # Simulate parent document update failure
-            mock_task_doc.set.side_effect = Exception("Firestore error")
-
-            def mock_document_side_effect(doc_id):
-                if doc_id == "課題①":
-                    return mock_task_doc
-                else:
-                    mock_subcoll = Mock()
-                    mock_task_doc.collection.return_value = mock_subcoll
-                    mock_subcoll.document.return_value = mock_file_doc
-                    return mock_task_doc
-
-            mock_collection.document.side_effect = mock_document_side_effect
 
             service = self.FirestoreService()
 
-            # Execute
-            result = service.record_upload(
-                class_name="テストクラス",
-                task_id="課題①",
-                student_name="テスト太郎",
-                student_id="N9902913",
-                filename="test.pdf",
-                drive_file_id="file123",
-                drive_folder_id="folder456",
-                submit_date="2025-10-12 10:00:00",
-                task_pattern="課題①業務分析",
-            )
+            # Patch _update_task_metadata to simulate failure (returns False)
+            with patch.object(service, "_update_task_metadata", return_value=False) as mock_update:
+                # Setup mock for file document creation
+                mock_task_doc = Mock()
+                mock_subcoll = Mock()
+                mock_file_doc = Mock()
+                mock_db.collection.return_value.document.return_value = mock_task_doc
+                mock_task_doc.collection.return_value = mock_subcoll
+                mock_subcoll.document.return_value = mock_file_doc
 
-            # Assert
-            assert result is True  # Should still return True (fail-open)
-            # File document should still be created
-            mock_file_doc.set.assert_called()
+                # Execute
+                result = service.record_upload(
+                    class_name="テストクラス",
+                    task_id="課題①",
+                    student_name="テスト太郎",
+                    student_id="N9902913",
+                    filename="test.pdf",
+                    drive_file_id="file123",
+                    drive_folder_id="folder456",
+                    submit_date="2025-10-12 10:00:00",
+                    task_pattern="課題①業務分析",
+                )
+
+                # Assert
+                assert result is True  # Should still return True (fail-open)
+                # Verify _update_task_metadata was called
+                mock_update.assert_called_once()
+                # Verify file document was still created despite parent update failure
+                mock_file_doc.set.assert_called_once()
 
     def test_check_already_uploaded_unchanged(self):
         """Test that check_already_uploaded logic is unchanged and doesn't touch parent documents."""
