@@ -37,6 +37,54 @@ class FirestoreService:
         composite_key = f"{student_id}_{filename}_{safe_submit_date}"
         return composite_key
 
+    def _update_task_metadata(
+        self,
+        class_name: str,
+        task_id: str,
+        task_pattern: str
+    ) -> bool:
+        """
+        Update or create task parent document with metadata.
+
+        This method atomically increments the file_count using Firestore's
+        Increment operation to ensure accuracy during concurrent uploads.
+
+        Args:
+            class_name: Class name
+            task_id: Task ID (e.g., "課題①")
+            task_pattern: Task pattern/title for display
+
+        Returns:
+            True if successful, False if error occurred (fail-open strategy)
+
+        Note:
+            Uses merge=True to create document if it doesn't exist, or update
+            only the specified fields if it does exist.
+        """
+        try:
+            task_ref = self.db.collection(class_name).document(task_id)
+
+            # Prepare update data with atomic increment
+            update_data = {
+                "task_id": task_id,
+                "task_pattern": task_pattern,
+                "file_count": firestore.Increment(1),
+                "last_updated": firestore.SERVER_TIMESTAMP
+            }
+
+            # Use merge=True to create or update
+            # If document doesn't exist, all fields will be set
+            # If document exists, only specified fields will be updated
+            task_ref.set(update_data, merge=True)
+
+            logger.info(f"Updated task document: {class_name}/{task_id}")
+            return True
+
+        except Exception as e:
+            logger.error(f"Failed to update task document {class_name}/{task_id}: {e}", exc_info=True)
+            # Continue processing (fail-open strategy for high availability)
+            return False
+
     def check_already_uploaded(self, class_name: str, task_id: str, student_id: str, filename: str, submit_date: str) -> Optional[dict]:
         """
         Check if file has already been uploaded
@@ -79,10 +127,11 @@ class FirestoreService:
         drive_file_id: str,
         drive_folder_id: str,
         submit_date: str,
-        metadata: Optional[dict] = None
+        metadata: Optional[dict] = None,
+        task_pattern: Optional[str] = None
     ) -> bool:
         """
-        Record successful file upload
+        Record successful file upload and update parent document metadata.
 
         Args:
             class_name: Class name
@@ -94,11 +143,23 @@ class FirestoreService:
             drive_folder_id: Google Drive folder ID
             submit_date: Submission date/time
             metadata: Additional metadata (optional)
+            task_pattern: Task pattern/title (optional, defaults to task_id)
 
         Returns:
             True if recorded successfully, False otherwise
+
+        Note:
+            Uses fail-open strategy: even if parent document update fails,
+            file document will still be created to ensure high availability.
         """
         try:
+            # Default task_pattern to task_id if not provided
+            task_pattern = task_pattern or task_id
+
+            # Update parent document metadata (fail-open: continue even if this fails)
+            self._update_task_metadata(class_name, task_id, task_pattern)
+
+            # Create file document record
             composite_key = self._generate_composite_key(student_id, filename, submit_date)
 
             record = {

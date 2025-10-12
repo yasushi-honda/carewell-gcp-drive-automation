@@ -4,6 +4,13 @@ on:
   push:
     branches:
       - main
+  workflow_dispatch:
+    inputs:
+      skip_tests:
+        description: 'Skip tests (emergency deployment only)'
+        required: false
+        type: boolean
+        default: false
 
 env:
   PROJECT_ID: carewell-automation
@@ -12,8 +19,51 @@ env:
   ARTIFACT_REGISTRY: asia-northeast1-docker.pkg.dev/carewell-automation/carewell-functions
 
 jobs:
-  deploy:
+  test:
+    name: Run Tests
     runs-on: ubuntu-latest
+    if: github.event.inputs.skip_tests != 'true'
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install -r requirements-dev.txt
+
+      - name: Run unit tests
+        run: |
+          pytest tests/unit/ -v --cov=src --cov-fail-under=80
+
+      - name: Set up Firebase CLI
+        run: npm install -g firebase-tools
+
+      - name: Start Firestore Emulator
+        run: |
+          firebase emulators:start --only firestore --project demo-test &
+          sleep 10
+
+      - name: Run integration tests
+        run: |
+          pytest tests/integration/ -v
+        env:
+          FIRESTORE_EMULATOR_HOST: localhost:8080
+          GCP_PROJECT: demo-test
+
+  deploy:
+    name: Deploy to Cloud Run
+    runs-on: ubuntu-latest
+    needs: test
+    if: always() && (needs.test.result == 'success' || github.event.inputs.skip_tests == 'true')
 
     permissions:
       contents: read
