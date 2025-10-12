@@ -87,7 +87,7 @@ export function useFileList(className: string, taskId: string): UseFileListRetur
         student_name: doc.student_name,
         filename: doc.filename,
         submit_date: doc.submit_date,
-        drive_url: doc.drive_url,
+        drive_file_id: doc.drive_file_id,
       }));
     } catch (err) {
       error.value = getErrorMessage(err);

@@ -101,10 +101,10 @@
 
           <td class="px-6 py-4 whitespace-nowrap text-sm">
             <button
-              @click="$emit('open-drive', file.drive_url)"
-              :disabled="!file.drive_url"
+              @click="$emit('open-drive', getDriveUrl(file.drive_file_id))"
+              :disabled="!file.drive_file_id"
               class="inline-flex items-center px-3 py-1.5 border border-transparent text-xs font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors"
-              :title="file.drive_url ? 'Google Driveで開く' : 'リンクが無効です'"
+              :title="file.drive_file_id ? 'Google Driveで開く' : 'リンクが無効です'"
             >
               <svg
                 class="mr-1.5 h-4 w-4"
@@ -182,5 +182,14 @@ function formatDate(dateString: string): string {
     console.warn('Failed to format date:', dateString, error);
     return dateString;
   }
+}
+
+/**
+ * drive_file_idからGoogle DriveのURLを生成
+ * Firestoreには正規化されたdrive_file_idのみが保存されており、
+ * フロントエンドで動的にURLを生成する
+ */
+function getDriveUrl(driveFileId: string): string {
+  return `https://drive.google.com/file/d/${driveFileId}/view`;
 }
 </script>

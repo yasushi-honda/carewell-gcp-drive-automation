@@ -30,7 +30,7 @@ export interface FileData {
   student_name: string;
   filename: string;
   submit_date: string;
-  drive_url: string;
+  drive_file_id: string; // Google Drive file ID (URLは動的生成)
 }
 
 /**
