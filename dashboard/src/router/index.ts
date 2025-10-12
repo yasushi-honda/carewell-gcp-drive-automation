@@ -6,16 +6,15 @@ const router = createRouter({
   routes: [
     {
       path: '/',
-      name: 'classes',
+      name: 'home',
       component: ClassListView,
     },
-    // 将来の拡張用ルート（Task 4で実装）
-    // {
-    //   path: '/class/:className',
-    //   name: 'tasks',
-    //   component: () => import('../views/TaskListView.vue'),
-    //   props: true,
-    // },
+    {
+      path: '/class/:className',
+      name: 'tasks',
+      component: () => import('../views/TaskListView.vue'),
+      props: true,
+    },
     // {
     //   path: '/class/:className/task/:taskId',
     //   name: 'files',
