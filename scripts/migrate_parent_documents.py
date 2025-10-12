@@ -109,12 +109,13 @@ def validate_migration() -> Dict:
     return result
 
 
-def migrate_parent_documents(dry_run: bool = True) -> Dict:
+def migrate_parent_documents(dry_run: bool = True, db=None) -> Dict:
     """
     Migrate parent documents for all known classes and tasks.
 
     Args:
         dry_run: If True, preview only without writing
+        db: Firestore client instance (optional, for testing with emulator)
 
     Returns:
         Dict with migration results:
@@ -127,7 +128,8 @@ def migrate_parent_documents(dry_run: bool = True) -> Dict:
         - errors: List[Dict]
         - preview: List[Dict] (if dry_run)
     """
-    db = firestore.Client(database="carewell-native")
+    if db is None:
+        db = firestore.Client(database="carewell-native")
 
     result = {
         "success": True,

@@ -66,8 +66,8 @@ class TestMigrationIntegration:
             not parent_doc.exists
         ), "Parent document should not exist before migration"
 
-        # Run migration (execute mode)
-        result = migrate_parent_documents(dry_run=False)
+        # Run migration (execute mode) with emulator client
+        result = migrate_parent_documents(dry_run=False, db=self.db)
 
         # Verify migration succeeded
         assert result["success"] is True, "Migration should succeed"
@@ -134,8 +134,8 @@ class TestMigrationIntegration:
                 }
             )
 
-        # Run migration
-        result = migrate_parent_documents(dry_run=False)
+        # Run migration with emulator client
+        result = migrate_parent_documents(dry_run=False, db=self.db)
 
         # Verify migration succeeded but skipped this document
         assert result["success"] is True
@@ -181,8 +181,8 @@ class TestMigrationIntegration:
                 }
             )
 
-        # Run migration in dry-run mode
-        result = migrate_parent_documents(dry_run=True)
+        # Run migration in dry-run mode with emulator client
+        result = migrate_parent_documents(dry_run=True, db=self.db)
 
         # Verify result indicates dry-run
         assert result["success"] is True
