@@ -1,6 +1,7 @@
 """
 Google Sheets Service for recording uploaded files
 """
+
 import logging
 from datetime import datetime
 from typing import Optional, List
@@ -27,18 +28,22 @@ class SheetsService:
         Uses Application Default Credentials (ADC)
         """
         try:
-            credentials, project = default(scopes=[
-                'https://www.googleapis.com/auth/spreadsheets'
-            ])
+            credentials, project = default(
+                scopes=["https://www.googleapis.com/auth/spreadsheets"]
+            )
 
-            self.service = build('sheets', 'v4', credentials=credentials)
+            self.service = build("sheets", "v4", credentials=credentials)
             logger.info("Google Sheets service initialized successfully")
 
         except Exception as e:
-            logger.error(f"Failed to initialize Google Sheets service: {e}", exc_info=True)
+            logger.error(
+                f"Failed to initialize Google Sheets service: {e}", exc_info=True
+            )
             raise
 
-    def _generate_composite_key(self, student_id: str, filename: str, submit_date: str) -> str:
+    def _generate_composite_key(
+        self, student_id: str, filename: str, submit_date: str
+    ) -> str:
         """
         Generate composite key for file identification (same logic as FirestoreService)
 
@@ -51,7 +56,9 @@ class SheetsService:
             Composite key string in format: {student_id}_{filename}_{submit_date}
         """
         # Sanitize submit_date to remove special characters
-        safe_submit_date = submit_date.replace(' ', '_').replace(':', '-').replace('/', '-')
+        safe_submit_date = (
+            submit_date.replace(" ", "_").replace(":", "-").replace("/", "-")
+        )
         composite_key = f"{student_id}_{filename}_{safe_submit_date}"
         return composite_key
 
@@ -65,31 +72,24 @@ class SheetsService:
         """
         try:
             # Get all sheets in the spreadsheet
-            spreadsheet = self.service.spreadsheets().get(
-                spreadsheetId=spreadsheet_id
-            ).execute()
+            spreadsheet = (
+                self.service.spreadsheets().get(spreadsheetId=spreadsheet_id).execute()
+            )
 
             # Check if sheet already exists
-            for sheet in spreadsheet.get('sheets', []):
-                if sheet.get('properties', {}).get('title') == sheet_name:
+            for sheet in spreadsheet.get("sheets", []):
+                if sheet.get("properties", {}).get("title") == sheet_name:
                     logger.info(f"Sheet '{sheet_name}' already exists")
                     return
 
             # Sheet doesn't exist, create it
             logger.info(f"Creating new sheet: {sheet_name}")
             request_body = {
-                'requests': [{
-                    'addSheet': {
-                        'properties': {
-                            'title': sheet_name
-                        }
-                    }
-                }]
+                "requests": [{"addSheet": {"properties": {"title": sheet_name}}}]
             }
 
             self.service.spreadsheets().batchUpdate(
-                spreadsheetId=spreadsheet_id,
-                body=request_body
+                spreadsheetId=spreadsheet_id, body=request_body
             ).execute()
 
             logger.info(f"Successfully created sheet: {sheet_name}")
@@ -111,12 +111,14 @@ class SheetsService:
             escaped_name = sheet_name.replace("'", "''")
 
             # Check if headers exist
-            result = self.service.spreadsheets().values().get(
-                spreadsheetId=spreadsheet_id,
-                range=f"'{escaped_name}'!A1:H1"
-            ).execute()
+            result = (
+                self.service.spreadsheets()
+                .values()
+                .get(spreadsheetId=spreadsheet_id, range=f"'{escaped_name}'!A1:H1")
+                .execute()
+            )
 
-            values = result.get('values', [])
+            values = result.get("values", [])
 
             # If headers don't exist, create them
             if not values or len(values[0]) == 0:
@@ -128,14 +130,14 @@ class SheetsService:
                     "提出日",
                     "ファイル名",
                     "ファイルURL",
-                    "ダウンロード日時"
+                    "ダウンロード日時",
                 ]
 
                 self.service.spreadsheets().values().update(
                     spreadsheetId=spreadsheet_id,
                     range=f"'{escaped_name}'!A1:H1",
                     valueInputOption="RAW",
-                    body={"values": [headers]}
+                    body={"values": [headers]},
                 ).execute()
 
                 logger.info(f"Created headers in {sheet_name}")
@@ -152,7 +154,7 @@ class SheetsService:
         student_id: str,
         submit_date: str,
         filename: str,
-        drive_file_id: str
+        drive_file_id: str,
     ) -> bool:
         """
         Append a new record to the spreadsheet
@@ -174,7 +176,9 @@ class SheetsService:
             sheet_name = task_id
 
             # Generate composite key
-            composite_key = self._generate_composite_key(student_id, filename, submit_date)
+            composite_key = self._generate_composite_key(
+                student_id, filename, submit_date
+            )
 
             # Ensure sheet exists
             self._ensure_sheet_exists(spreadsheet_id, sheet_name)
@@ -194,22 +198,29 @@ class SheetsService:
                 submit_date,
                 filename,
                 drive_link,
-                upload_time
+                upload_time,
             ]
 
             # Escape single quotes in sheet name for A1 notation
             escaped_name = sheet_name.replace("'", "''")
 
             # Append row (sheet name with single quotes for special characters)
-            result = self.service.spreadsheets().values().append(
-                spreadsheetId=spreadsheet_id,
-                range=f"'{escaped_name}'!A:H",
-                valueInputOption="RAW",
-                insertDataOption="INSERT_ROWS",
-                body={"values": [row]}
-            ).execute()
+            result = (
+                self.service.spreadsheets()
+                .values()
+                .append(
+                    spreadsheetId=spreadsheet_id,
+                    range=f"'{escaped_name}'!A:H",
+                    valueInputOption="RAW",
+                    insertDataOption="INSERT_ROWS",
+                    body={"values": [row]},
+                )
+                .execute()
+            )
 
-            logger.info(f"Appended record to spreadsheet: {student_name} ({student_id}) - {filename}")
+            logger.info(
+                f"Appended record to spreadsheet: {student_name} ({student_id}) - {filename}"
+            )
             return True
 
         except Exception as e:
@@ -234,25 +245,20 @@ class SheetsService:
             Dictionary with statistics
         """
         try:
-            result = self.service.spreadsheets().values().get(
-                spreadsheetId=spreadsheet_id,
-                range=f"{sheet_name}!A:A"
-            ).execute()
+            result = (
+                self.service.spreadsheets()
+                .values()
+                .get(spreadsheetId=spreadsheet_id, range=f"{sheet_name}!A:A")
+                .execute()
+            )
 
-            values = result.get('values', [])
+            values = result.get("values", [])
 
             # Subtract 1 for header row
             total_records = len(values) - 1 if len(values) > 0 else 0
 
-            return {
-                "total_records": total_records,
-                "sheet_name": sheet_name
-            }
+            return {"total_records": total_records, "sheet_name": sheet_name}
 
         except Exception as e:
             logger.error(f"Error getting spreadsheet stats: {e}", exc_info=True)
-            return {
-                "total_records": 0,
-                "sheet_name": sheet_name,
-                "error": str(e)
-            }
+            return {"total_records": 0, "sheet_name": sheet_name, "error": str(e)}

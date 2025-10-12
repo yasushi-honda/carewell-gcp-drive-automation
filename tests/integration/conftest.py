@@ -8,7 +8,7 @@ import time
 from google.cloud import firestore
 
 
-@pytest.fixture(scope='session')
+@pytest.fixture(scope="session")
 def emulator_client():
     """
     Create a Firestore client connected to the emulator.
@@ -17,11 +17,11 @@ def emulator_client():
     for each test.
     """
     # Ensure we're using the emulator
-    emulator_host = os.getenv('FIRESTORE_EMULATOR_HOST', 'localhost:8080')
-    os.environ['FIRESTORE_EMULATOR_HOST'] = emulator_host
+    emulator_host = os.getenv("FIRESTORE_EMULATOR_HOST", "localhost:8080")
+    os.environ["FIRESTORE_EMULATOR_HOST"] = emulator_host
 
-    project_id = os.getenv('GCP_PROJECT', 'demo-test')
-    db = firestore.Client(project=project_id, database='carewell-native')
+    project_id = os.getenv("GCP_PROJECT", "demo-test")
+    db = firestore.Client(project=project_id, database="carewell-native")
 
     yield db
 

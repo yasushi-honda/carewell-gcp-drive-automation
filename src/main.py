@@ -1,6 +1,7 @@
 """
 Carewell File Collector - Cloud Functions Entrypoint
 """
+
 import json
 import logging
 import os
@@ -11,10 +12,10 @@ from firestore_service import FirestoreService
 from sheets_service import SheetsService
 
 # Configure logging
-log_level = os.environ.get('LOG_LEVEL', 'INFO').upper()
+log_level = os.environ.get("LOG_LEVEL", "INFO").upper()
 logging.basicConfig(
     level=getattr(logging, log_level, logging.INFO),
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
 )
 logger = logging.getLogger(__name__)
 
@@ -51,7 +52,13 @@ def main(request):
             return {"error": "Request body must be JSON"}, 400
 
         # Validate required parameters
-        required_params = ["class_name", "task_id", "task_pattern", "drive_folder_id", "spreadsheet_id"]
+        required_params = [
+            "class_name",
+            "task_id",
+            "task_pattern",
+            "drive_folder_id",
+            "spreadsheet_id",
+        ]
         missing_params = [p for p in required_params if p not in request_json]
         if missing_params:
             return {
@@ -64,7 +71,9 @@ def main(request):
         drive_folder_id = request_json["drive_folder_id"]
         spreadsheet_id = request_json["spreadsheet_id"]
 
-        logger.info(f"Starting file collection for class={class_name}, task_id={task_id}, task_pattern={task_pattern}")
+        logger.info(
+            f"Starting file collection for class={class_name}, task_id={task_id}, task_pattern={task_pattern}"
+        )
 
         # Initialize services
         engine = PlaywrightAutomationEngine()
@@ -95,18 +104,24 @@ def main(request):
             for submission in submissions:
                 file_path = None
                 try:
-                    if submission.get("download_url") and submission.get("filename") and submission.get("detail_url"):
+                    if (
+                        submission.get("download_url")
+                        and submission.get("filename")
+                        and submission.get("detail_url")
+                    ):
                         # Check if already uploaded
                         existing_upload = firestore_service.check_already_uploaded(
                             class_name,
                             task_id,
-                            submission.get('student_id', ''),
-                            submission['filename'],
-                            submission.get('submit_date', '')
+                            submission.get("student_id", ""),
+                            submission["filename"],
+                            submission.get("submit_date", ""),
                         )
 
                         if existing_upload:
-                            logger.info(f"Skipping already uploaded file: {submission['filename']} (Drive ID: {existing_upload.get('drive_file_id')})")
+                            logger.info(
+                                f"Skipping already uploaded file: {submission['filename']} (Drive ID: {existing_upload.get('drive_file_id')})"
+                            )
                             skipped_count += 1
                             continue
 
@@ -115,57 +130,59 @@ def main(request):
                         file_path = engine.download_file(
                             submission["download_url"],
                             submission["filename"],
-                            submission["detail_url"]
+                            submission["detail_url"],
                         )
                         logger.info(f"Downloaded to: {file_path}")
 
                         # Upload to Google Drive
                         drive_file_id = drive_service.upload_file(
-                            file_path,
-                            submission['filename'],
-                            drive_folder_id
+                            file_path, submission["filename"], drive_folder_id
                         )
                         logger.info(f"Uploaded to Drive: {drive_file_id}")
 
                         # Record upload in Firestore
                         metadata = {
-                            "student_id": submission.get('student_id'),
-                            "log_no": submission.get('log_no'),
-                            "score": submission.get('score'),
-                            "pass_status": submission.get('pass_status'),
-                            "status": submission.get('status'),
-                            "submit_date": submission.get('submit_date')
+                            "student_id": submission.get("student_id"),
+                            "log_no": submission.get("log_no"),
+                            "score": submission.get("score"),
+                            "pass_status": submission.get("pass_status"),
+                            "status": submission.get("status"),
+                            "submit_date": submission.get("submit_date"),
                         }
 
                         firestore_service.record_upload(
                             class_name,
                             task_id,
-                            submission['student_name'],
-                            submission.get('student_id', ''),
-                            submission['filename'],
+                            submission["student_name"],
+                            submission.get("student_id", ""),
+                            submission["filename"],
                             drive_file_id,
                             drive_folder_id,
-                            submission.get('submit_date', ''),
-                            metadata=metadata
+                            submission.get("submit_date", ""),
+                            metadata=metadata,
                         )
 
                         # Record in Google Sheets
                         sheets_service.append_record(
                             spreadsheet_id,
                             task_id,
-                            submission['student_name'],
-                            submission.get('student_id', ''),
-                            submission.get('submit_date', ''),
-                            submission['filename'],
-                            drive_file_id
+                            submission["student_name"],
+                            submission.get("student_id", ""),
+                            submission.get("submit_date", ""),
+                            submission["filename"],
+                            drive_file_id,
                         )
 
                         downloaded_count += 1
                     else:
-                        logger.warning(f"No download link for {submission['student_name']}")
+                        logger.warning(
+                            f"No download link for {submission['student_name']}"
+                        )
                         failed_count += 1
                 except Exception as e:
-                    logger.error(f"Failed to download {submission.get('filename', 'unknown')}: {e}")
+                    logger.error(
+                        f"Failed to download {submission.get('filename', 'unknown')}: {e}"
+                    )
                     failed_count += 1
                 finally:
                     # Clean up temporary file
@@ -174,7 +191,9 @@ def main(request):
                             os.remove(file_path)
                             logger.info(f"Cleaned up temporary file: {file_path}")
                         except Exception as cleanup_error:
-                            logger.warning(f"Failed to clean up {file_path}: {cleanup_error}")
+                            logger.warning(
+                                f"Failed to clean up {file_path}: {cleanup_error}"
+                            )
 
             response = {
                 "status": "success",
@@ -182,7 +201,7 @@ def main(request):
                 "submissions_found": len(submissions),
                 "processed": downloaded_count,
                 "skipped": skipped_count,
-                "failed": failed_count
+                "failed": failed_count,
             }
 
             # Add count verification info if available
@@ -190,7 +209,9 @@ def main(request):
                 response["total_count_from_ui"] = total_count
                 response["count_verified"] = verified
                 if not verified:
-                    response["warning"] = f"Count mismatch: UI shows {total_count} but found {len(submissions)}"
+                    response["warning"] = (
+                        f"Count mismatch: UI shows {total_count} but found {len(submissions)}"
+                    )
 
             return response, 200
 
@@ -199,10 +220,7 @@ def main(request):
 
     except Exception as e:
         logger.error(f"Error during execution: {str(e)}", exc_info=True)
-        return {
-            "status": "error",
-            "error": str(e)
-        }, 500
+        return {"status": "error", "error": str(e)}, 500
 
 
 def cleanup_firestore(request):
@@ -235,17 +253,21 @@ def cleanup_firestore(request):
         confirm = request_json.get("confirm", False)
 
         if not confirm:
-            return {
-                "error": "Set 'confirm': true to execute cleanup"
-            }, 400
+            return {"error": "Set 'confirm': true to execute cleanup"}, 400
 
-        logger.warning(f"Starting Firestore cleanup for class={class_name}, task_id={task_id}")
+        logger.warning(
+            f"Starting Firestore cleanup for class={class_name}, task_id={task_id}"
+        )
 
         # Initialize Firestore service
         firestore_service = FirestoreService()
 
         # Get document count first
-        collection_ref = firestore_service.db.collection(class_name).document(task_id).collection('documents')
+        collection_ref = (
+            firestore_service.db.collection(class_name)
+            .document(task_id)
+            .collection("documents")
+        )
         docs = list(collection_ref.stream())
         doc_count = len(docs)
 
@@ -255,7 +277,7 @@ def cleanup_firestore(request):
             return {
                 "status": "success",
                 "message": "No documents found to delete",
-                "deleted_count": 0
+                "deleted_count": 0,
             }, 200
 
         # Delete all documents
@@ -272,7 +294,9 @@ def cleanup_firestore(request):
                 logger.error(f"Failed to delete document {doc.id}: {e}")
                 failed_count += 1
 
-        logger.warning(f"Cleanup completed: deleted={deleted_count}, failed={failed_count}")
+        logger.warning(
+            f"Cleanup completed: deleted={deleted_count}, failed={failed_count}"
+        )
 
         # Verify cleanup
         remaining_docs = list(collection_ref.stream())
@@ -283,23 +307,17 @@ def cleanup_firestore(request):
             "message": f"Deleted {deleted_count} documents",
             "deleted_count": deleted_count,
             "failed_count": failed_count,
-            "remaining_count": remaining_count
+            "remaining_count": remaining_count,
         }, 200
 
     except Exception as e:
         logger.error(f"Error during cleanup: {str(e)}", exc_info=True)
-        return {
-            "status": "error",
-            "error": str(e)
-        }, 500
+        return {"status": "error", "error": str(e)}, 500
 
 
 def health_check(request):
     """Health check endpoint"""
-    return {
-        "status": "healthy",
-        "service": "carewell-file-collector"
-    }, 200
+    return {"status": "healthy", "service": "carewell-file-collector"}, 200
 
 
 def app(request):
@@ -325,9 +343,5 @@ def app(request):
     else:
         return {
             "error": f"Not found: {method} {path}",
-            "available_endpoints": [
-                "POST /",
-                "POST /cleanup",
-                "GET /health"
-            ]
+            "available_endpoints": ["POST /", "POST /cleanup", "GET /health"],
         }, 404

@@ -17,23 +17,24 @@ class TestFirestoreService:
         """Set up test fixtures."""
         # Import here to avoid circular imports
         import sys
-        sys.path.insert(0, 'src')
+
+        sys.path.insert(0, "src")
         from firestore_service import FirestoreService
 
         self.FirestoreService = FirestoreService
 
-    @patch('firestore_service.firestore.Client')
+    @patch("firestore_service.firestore.Client")
     def test_init(self, mock_client):
         """Test FirestoreService initialization."""
         service = self.FirestoreService()
 
         # Verify Firestore client was created with correct database
-        mock_client.assert_called_once_with(database='carewell-native')
+        mock_client.assert_called_once_with(database="carewell-native")
         assert service.db is not None
 
     def test_update_task_metadata_creates_new_document(self):
         """Test that _update_task_metadata creates a new parent document."""
-        with patch('firestore_service.firestore.Client') as mock_client:
+        with patch("firestore_service.firestore.Client") as mock_client:
             # Setup
             mock_db = Mock()
             mock_client.return_value = mock_db
@@ -62,18 +63,18 @@ class TestFirestoreService:
 
             # Check the data dictionary
             data = call_args[0][0]
-            assert data['task_id'] == task_id
-            assert data['task_pattern'] == task_pattern
-            assert isinstance(data['file_count'], firestore_module.Increment)
-            assert data['file_count']._value == 1
-            assert data['last_updated'] == firestore_module.SERVER_TIMESTAMP
+            assert data["task_id"] == task_id
+            assert data["task_pattern"] == task_pattern
+            assert isinstance(data["file_count"], firestore_module.Increment)
+            assert data["file_count"]._value == 1
+            assert data["last_updated"] == firestore_module.SERVER_TIMESTAMP
 
             # Check merge=True is specified
-            assert call_args[1]['merge'] is True
+            assert call_args[1]["merge"] is True
 
     def test_update_task_metadata_increments_file_count(self):
         """Test that _update_task_metadata uses Increment(1) for file_count."""
-        with patch('firestore_service.firestore.Client') as mock_client:
+        with patch("firestore_service.firestore.Client") as mock_client:
             # Setup
             mock_db = Mock()
             mock_client.return_value = mock_db
@@ -85,7 +86,9 @@ class TestFirestoreService:
             service = self.FirestoreService()
 
             # Execute
-            result = service._update_task_metadata("テストクラス", "課題①", "課題①パターン")
+            result = service._update_task_metadata(
+                "テストクラス", "課題①", "課題①パターン"
+            )
 
             # Assert
             assert result is True
@@ -94,13 +97,13 @@ class TestFirestoreService:
             call_args = mock_document.set.call_args
             data = call_args[0][0]
 
-            assert isinstance(data['file_count'], firestore_module.Increment)
-            assert data['file_count']._value == 1
-            assert data['last_updated'] == firestore_module.SERVER_TIMESTAMP
+            assert isinstance(data["file_count"], firestore_module.Increment)
+            assert data["file_count"]._value == 1
+            assert data["last_updated"] == firestore_module.SERVER_TIMESTAMP
 
     def test_update_task_metadata_fails_gracefully(self):
         """Test fail-open behavior: returns False on error without raising exception."""
-        with patch('firestore_service.firestore.Client') as mock_client:
+        with patch("firestore_service.firestore.Client") as mock_client:
             # Setup
             mock_db = Mock()
             mock_client.return_value = mock_db
@@ -115,7 +118,9 @@ class TestFirestoreService:
             service = self.FirestoreService()
 
             # Execute
-            result = service._update_task_metadata("テストクラス", "課題①", "課題①パターン")
+            result = service._update_task_metadata(
+                "テストクラス", "課題①", "課題①パターン"
+            )
 
             # Assert
             assert result is False
@@ -123,7 +128,7 @@ class TestFirestoreService:
 
     def test_record_upload_updates_parent_and_adds_file(self):
         """Test that record_upload calls _update_task_metadata and creates file document."""
-        with patch('firestore_service.firestore.Client') as mock_client:
+        with patch("firestore_service.firestore.Client") as mock_client:
             # Setup
             mock_db = Mock()
             mock_client.return_value = mock_db
@@ -157,7 +162,7 @@ class TestFirestoreService:
                 drive_file_id="file123",
                 drive_folder_id="folder456",
                 submit_date="2025-10-12 10:00:00",
-                task_pattern="課題①業務分析"
+                task_pattern="課題①業務分析",
             )
 
             # Assert
@@ -169,7 +174,7 @@ class TestFirestoreService:
 
     def test_record_upload_with_default_task_pattern(self):
         """Test that if task_pattern is None, task_id is used as default."""
-        with patch('firestore_service.firestore.Client') as mock_client:
+        with patch("firestore_service.firestore.Client") as mock_client:
             # Setup
             mock_db = Mock()
             mock_client.return_value = mock_db
@@ -200,7 +205,7 @@ class TestFirestoreService:
                 filename="test.pdf",
                 drive_file_id="file123",
                 drive_folder_id="folder456",
-                submit_date="2025-10-12 10:00:00"
+                submit_date="2025-10-12 10:00:00",
             )
 
             # Assert
@@ -208,11 +213,11 @@ class TestFirestoreService:
             # Verify task_id was used as task_pattern
             call_args = mock_task_doc.set.call_args_list[0]
             data = call_args[0][0]
-            assert data['task_pattern'] == "課題①"
+            assert data["task_pattern"] == "課題①"
 
     def test_record_upload_continues_on_parent_update_failure(self):
         """Test fail-open: file document is created even if parent update fails."""
-        with patch('firestore_service.firestore.Client') as mock_client:
+        with patch("firestore_service.firestore.Client") as mock_client:
             # Setup
             mock_db = Mock()
             mock_client.return_value = mock_db
@@ -247,7 +252,7 @@ class TestFirestoreService:
                 drive_file_id="file123",
                 drive_folder_id="folder456",
                 submit_date="2025-10-12 10:00:00",
-                task_pattern="課題①業務分析"
+                task_pattern="課題①業務分析",
             )
 
             # Assert
@@ -257,7 +262,7 @@ class TestFirestoreService:
 
     def test_check_already_uploaded_unchanged(self):
         """Test that check_already_uploaded logic is unchanged and doesn't touch parent documents."""
-        with patch('firestore_service.firestore.Client') as mock_client:
+        with patch("firestore_service.firestore.Client") as mock_client:
             # Setup
             mock_db = Mock()
             mock_client.return_value = mock_db
@@ -285,14 +290,14 @@ class TestFirestoreService:
                 task_id="課題①",
                 student_id="N9902913",
                 filename="test.pdf",
-                submit_date="2025-10-12 10:00:00"
+                submit_date="2025-10-12 10:00:00",
             )
 
             # Assert
             assert result is not None
             assert result["filename"] == "test.pdf"
             # Verify only subcollection was accessed, not parent document
-            mock_task_doc.collection.assert_called_once_with('documents')
+            mock_task_doc.collection.assert_called_once_with("documents")
             # Parent document should not be updated
             mock_task_doc.set.assert_not_called()
             mock_task_doc.update.assert_not_called()

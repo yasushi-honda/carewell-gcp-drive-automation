@@ -11,7 +11,7 @@ from google.cloud import firestore
 from typing import Dict, List
 
 # Import KNOWN_CLASSES and KNOWN_TASK_IDS
-sys.path.insert(0, 'src')
+sys.path.insert(0, "src")
 from config.classes import KNOWN_CLASSES, KNOWN_TASK_IDS
 
 
@@ -22,13 +22,9 @@ def verify_file_count() -> Dict:
     Returns:
         Dict with verification results
     """
-    db = firestore.Client(database='carewell-native')
+    db = firestore.Client(database="carewell-native")
 
-    results = {
-        'total_checked': 0,
-        'mismatches': [],
-        'success': True
-    }
+    results = {"total_checked": 0, "mismatches": [], "success": True}
 
     for class_name in KNOWN_CLASSES:
         for task_id in KNOWN_TASK_IDS:
@@ -40,23 +36,25 @@ def verify_file_count() -> Dict:
                 continue
 
             task_data = task_doc.to_dict()
-            stored_count = task_data.get('file_count', 0)
+            stored_count = task_data.get("file_count", 0)
 
             # Count actual documents in subcollection
-            docs = task_ref.collection('documents').stream()
+            docs = task_ref.collection("documents").stream()
             actual_count = sum(1 for _ in docs)
 
-            results['total_checked'] += 1
+            results["total_checked"] += 1
 
             if stored_count != actual_count:
-                results['mismatches'].append({
-                    'class_name': class_name,
-                    'task_id': task_id,
-                    'stored_count': stored_count,
-                    'actual_count': actual_count,
-                    'difference': actual_count - stored_count
-                })
-                results['success'] = False
+                results["mismatches"].append(
+                    {
+                        "class_name": class_name,
+                        "task_id": task_id,
+                        "stored_count": stored_count,
+                        "actual_count": actual_count,
+                        "difference": actual_count - stored_count,
+                    }
+                )
+                results["success"] = False
 
     return results
 
@@ -70,9 +68,9 @@ def main():
 
         print(f"\n✅ Checked {results['total_checked']} parent documents")
 
-        if results['mismatches']:
+        if results["mismatches"]:
             print(f"\n❌ Found {len(results['mismatches'])} mismatches:\n")
-            for mismatch in results['mismatches']:
+            for mismatch in results["mismatches"]:
                 print(f"  {mismatch['class_name']}/{mismatch['task_id']}:")
                 print(f"    Stored: {mismatch['stored_count']}")
                 print(f"    Actual: {mismatch['actual_count']}")
@@ -89,9 +87,10 @@ def main():
     except Exception as e:
         print(f"\n❌ Error during verification: {e}")
         import traceback
+
         traceback.print_exc()
         sys.exit(1)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

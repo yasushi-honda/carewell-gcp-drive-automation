@@ -6,7 +6,8 @@ These tests use Firestore Emulator for realistic end-to-end testing.
 
 import pytest
 import sys
-sys.path.insert(0, 'src')
+
+sys.path.insert(0, "src")
 
 
 class TestFileUploadIntegration:
@@ -20,7 +21,7 @@ class TestFileUploadIntegration:
         self.db = emulator_client
         # Mock the Firestore client in FirestoreService to use emulator
         with pytest.MonkeyPatch.context() as m:
-            m.setattr('firestore_service.firestore.Client', lambda **kwargs: self.db)
+            m.setattr("firestore_service.firestore.Client", lambda **kwargs: self.db)
             self.service = FirestoreService()
 
     # TODO: Implement test_new_file_upload_creates_parent_and_increments_count
