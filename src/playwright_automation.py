@@ -234,21 +234,26 @@ class PlaywrightAutomationEngine:
 
         self._wait_for_navigation(CarewellConfig.DATA_LOAD_WAIT)
 
-    def _select_class(self, class_name: str):
+    def _select_class(self, class_name: str) -> bool:
         """
         Select a specific class
 
         Args:
             class_name: Name of the class to select
+
+        Returns:
+            True if class found and selected, False if not found
         """
         logger.info(f"Selecting class: {class_name}")
 
         if not self._click_in_any_frame(
             f'text="{class_name}"', f'class "{class_name}"'
         ):
-            raise Exception(f"Could not find class: {class_name}")
+            logger.info(f"Class not found (likely not yet created): {class_name}")
+            return False
 
         self._wait_for_navigation()
+        return True
 
     def _navigate_to_report_grading(self):
         """Navigate to report grading section"""
@@ -257,12 +262,15 @@ class PlaywrightAutomationEngine:
 
         self._wait_for_navigation()
 
-    def _select_task(self, task_pattern: str):
+    def _select_task(self, task_pattern: str) -> bool:
         """
         Select a specific task using partial text match
 
         Args:
             task_pattern: Pattern to match task name (e.g., "課題①")
+
+        Returns:
+            True if task found and selected, False if not found
         """
         logger.info(f"Selecting task with pattern: {task_pattern}")
 
@@ -270,9 +278,11 @@ class PlaywrightAutomationEngine:
         if not self._click_in_any_frame(
             f"text={task_pattern}", f'task "{task_pattern}"'
         ):
-            raise Exception(f"Could not find task matching pattern: {task_pattern}")
+            logger.info(f"Task not found (likely not yet created): {task_pattern}")
+            return False
 
         self._wait_for_navigation()
+        return True
 
     def _show_all_submissions(self):
         """Click '全て' tab to show all submissions"""
@@ -281,7 +291,7 @@ class PlaywrightAutomationEngine:
 
         self._wait_for_navigation(CarewellConfig.FRAME_LOAD_WAIT)
 
-    def navigate_to_task(self, class_name: str, task_pattern: str) -> Page:
+    def navigate_to_task(self, class_name: str, task_pattern: str):
         """
         Navigate to specific task page using partial text match
 
@@ -290,7 +300,7 @@ class PlaywrightAutomationEngine:
             task_pattern: Task pattern for partial match (e.g., "課題①")
 
         Returns:
-            Page object at the task page
+            Page object at the task page, or None if class/task not found
         """
         # Launch browser and login
         self._launch_browser()
@@ -298,9 +308,19 @@ class PlaywrightAutomationEngine:
 
         # Navigate through the pages
         self._navigate_to_class_list()
-        self._select_class(class_name)
+        
+        # Check if class exists
+        if not self._select_class(class_name):
+            logger.info(f"Class not found, skipping: {class_name}")
+            return None
+        
         self._navigate_to_report_grading()
-        self._select_task(task_pattern)
+        
+        # Check if task exists
+        if not self._select_task(task_pattern):
+            logger.info(f"Task not found, skipping: {task_pattern}")
+            return None
+        
         self._show_all_submissions()
 
         logger.info("Successfully navigated to task page")
