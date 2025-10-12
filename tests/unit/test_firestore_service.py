@@ -135,7 +135,9 @@ class TestFirestoreService:
             service = self.FirestoreService()
 
             # Patch _update_task_metadata to verify it's called
-            with patch.object(service, "_update_task_metadata", return_value=True) as mock_update:
+            with patch.object(
+                service, "_update_task_metadata", return_value=True
+            ) as mock_update:
                 # Setup mock for file document creation
                 mock_task_doc = Mock()
                 mock_subcoll = Mock()
@@ -160,7 +162,9 @@ class TestFirestoreService:
                 # Assert
                 assert result is True
                 # Verify _update_task_metadata was called
-                mock_update.assert_called_once_with("テストクラス", "課題①", "課題①業務分析")
+                mock_update.assert_called_once_with(
+                    "テストクラス", "課題①", "課題①業務分析"
+                )
                 # Verify file document was created
                 mock_file_doc.set.assert_called_once()
 
@@ -216,7 +220,9 @@ class TestFirestoreService:
             service = self.FirestoreService()
 
             # Patch _update_task_metadata to simulate failure (returns False)
-            with patch.object(service, "_update_task_metadata", return_value=False) as mock_update:
+            with patch.object(
+                service, "_update_task_metadata", return_value=False
+            ) as mock_update:
                 # Setup mock for file document creation
                 mock_task_doc = Mock()
                 mock_subcoll = Mock()

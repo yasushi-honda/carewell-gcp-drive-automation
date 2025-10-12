@@ -14,20 +14,30 @@ from google.auth import default
 
 
 def main():
-    parser = argparse.ArgumentParser(description='Firestore Native データベースのデータをクリア')
-    parser.add_argument('class_name', help='クラス名')
-    parser.add_argument('task_id', help='課題ID（例: 課題①）')
-    parser.add_argument('--execute', action='store_true', help='実際に削除を実行（指定しない場合はドライラン）')
-    parser.add_argument('--database', default='carewell-native', help='データベース名（デフォルト: carewell-native）')
+    parser = argparse.ArgumentParser(
+        description="Firestore Native データベースのデータをクリア"
+    )
+    parser.add_argument("class_name", help="クラス名")
+    parser.add_argument("task_id", help="課題ID（例: 課題①）")
+    parser.add_argument(
+        "--execute",
+        action="store_true",
+        help="実際に削除を実行（指定しない場合はドライラン）",
+    )
+    parser.add_argument(
+        "--database",
+        default="carewell-native",
+        help="データベース名（デフォルト: carewell-native）",
+    )
 
     args = parser.parse_args()
 
     # 色付きログ
-    RED = '\033[0;31m'
-    GREEN = '\033[0;32m'
-    YELLOW = '\033[1;33m'
-    BLUE = '\033[0;34m'
-    NC = '\033[0m'
+    RED = "\033[0;31m"
+    GREEN = "\033[0;32m"
+    YELLOW = "\033[1;33m"
+    BLUE = "\033[0;34m"
+    NC = "\033[0m"
 
     print(f"{BLUE}{'=' * 60}{NC}")
     print(f"{BLUE}  Firestore Native データクリア{NC}")
@@ -47,10 +57,16 @@ def main():
     try:
         # Firestore クライアント初期化
         credentials, project = default()
-        db = firestore.Client(project=project, database=args.database, credentials=credentials)
+        db = firestore.Client(
+            project=project, database=args.database, credentials=credentials
+        )
 
         # コレクション参照取得
-        collection_ref = db.collection(args.class_name).document(args.task_id).collection('documents')
+        collection_ref = (
+            db.collection(args.class_name)
+            .document(args.task_id)
+            .collection("documents")
+        )
 
         # ドキュメント一覧取得
         print(f"{BLUE}ドキュメント数を確認中...{NC}")
@@ -69,8 +85,8 @@ def main():
         print("削除対象のドキュメント（最初の10件）:")
         for i, doc in enumerate(docs[:10]):
             data = doc.to_dict()
-            student_id = data.get('student_id', 'N/A')
-            filename = data.get('filename', 'N/A')
+            student_id = data.get("student_id", "N/A")
+            filename = data.get("filename", "N/A")
             print(f"  - {doc.id}")
             print(f"    学生ID: {student_id}, ファイル名: {filename}")
 
@@ -125,6 +141,7 @@ def main():
     except Exception as e:
         print(f"{RED}エラー: {e}{NC}")
         import traceback
+
         traceback.print_exc()
         return 1
 
@@ -132,5 +149,5 @@ def main():
     return 0
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     sys.exit(main())
