@@ -48,6 +48,21 @@ export interface FirestoreDocument {
 }
 
 /**
+ * 親ドキュメント（タスクメタデータ）
+ *
+ * Firestore Schema Improvementで追加された親ドキュメント構造。
+ * file_count, last_updatedフィールドにより、サブコレクションをスキャンせずに
+ * 統計情報を効率的に取得できる。
+ */
+export interface FirestoreTaskDocument {
+  task_id: string;
+  task_pattern: string;
+  file_count: number;
+  created_at: string; // Firestore Timestamp (ISO 8601)
+  last_updated: string; // Firestore Timestamp (ISO 8601)
+}
+
+/**
  * ソートカラム
  */
 export type SortColumn = 'student_name' | 'submit_date';

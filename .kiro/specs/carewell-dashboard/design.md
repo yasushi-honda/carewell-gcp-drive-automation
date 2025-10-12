@@ -585,6 +585,12 @@ export function useClassList(): UseClassListReturn {
       // クラス一覧取得ロジック
       // 実装方針: src/config/classes.tsから既知のクラス名リストを読み込み
       // 各クラスの統計情報（課題数、ファイル数）をFirestoreから集計
+      //
+      // 親ドキュメント活用による効率的な集計:
+      // - 各クラスの親ドキュメント（collection(db, className)）を列挙
+      // - 親ドキュメントのfile_countを合計してクラス全体のファイル数を算出
+      // - 親ドキュメントのlast_updatedから最新日時を取得
+      // - サブコレクションをスキャンする必要なし（パフォーマンス向上）
     } catch (e) {
       error.value = e as Error;
     } finally {
@@ -640,8 +646,19 @@ export function useTaskList(className: string): UseTaskListReturn {
     loading.value = true;
     error.value = null;
     try {
-      // Firestore query: collection(db, className)
-      // 各task_idの統計情報を集計
+      // Firestore query: collection(db, className).getDocs()
+      // 親ドキュメントを取得し、メタデータを直接利用（効率的）
+      //
+      // 親ドキュメントメタデータの活用:
+      // - file_count: 親ドキュメントから直接取得（サブコレクションスキャン不要）
+      // - last_updated: 親ドキュメントから直接取得（最終提出日時）
+      // - task_pattern: 親ドキュメントから課題表示名を取得
+      //
+      // studentCount算出のみサブコレクションから計算が必要:
+      // - collection(db, className, taskId, 'documents')から
+      //   ユニークなstudent_idの数を計算
+      //
+      // パフォーマンス向上: ファイル数と最終更新日時はメタデータから即座に取得可能
     } catch (e) {
       error.value = e as Error;
     } finally {
@@ -899,8 +916,13 @@ export async function getDocuments<T>(
 ```
 Firestore Database: carewell-native
 ├─ {class_name} (Collection)
-│  └─ {task_id} (Document)
-│     └─ documents (Subcollection)
+│  └─ {task_id} (Parent Document)
+│     ├─ task_id: string               # タスクID（例: "課題①"）
+│     ├─ task_pattern: string          # タスク表示名
+│     ├─ file_count: number            # ファイル数（アトミックインクリメント管理）
+│     ├─ created_at: timestamp         # 作成日時
+│     ├─ last_updated: timestamp       # 最終更新日時
+│     └─ documents/ (Subcollection)
 │        └─ {composite_key} (Document)
 │           ├─ composite_key: string
 │           ├─ student_id: string
@@ -918,6 +940,11 @@ Firestore Database: carewell-native
 {
   "令和7年度 デジタル中核人材養成研修 №01": {
     "課題①": {
+      "task_id": "課題①",
+      "task_pattern": "課題①",
+      "file_count": 20,
+      "created_at": "2025-10-10T10:00:00Z",
+      "last_updated": "2025-10-11T15:30:00Z",
       "documents": {
         "N9902913_report.pdf_20251010183000": {
           "composite_key": "N9902913_report.pdf_20251010183000",
@@ -937,10 +964,20 @@ Firestore Database: carewell-native
 
 **Query Patterns**:
 - **クラス一覧**: 既知のクラス名リストから構築（Firestore listCollections() は Admin SDK のみ）
-- **課題一覧**: `collection(db, className)` → ドキュメントIDが課題ID
-- **ファイル一覧**: `collection(db, className, taskId, 'documents')` → 全ドキュメント取得
+  - 各クラスの統計情報: 親ドキュメント（`{task_id}`）を列挙してメタデータ集計
+- **課題一覧**: `collection(db, className).getDocs()` → 親ドキュメント取得
+  - `file_count`フィールドから提出ファイル数を直接取得（効率的）
+  - `last_updated`フィールドから最終提出日時を取得
+  - サブコレクションをスキャンする必要なし（パフォーマンス向上）
+- **ファイル一覧**: `collection(db, className, taskId, 'documents').getDocs()` → 全ドキュメント取得
+  - 提出者総数: ユニークな`student_id`の数を計算
+  - 最終提出日時: `submit_date`フィールドから最新を取得
 
 **Index Requirements**: なし（既存インデックスを使用）
+
+**Performance Benefits**:
+- 親ドキュメントのメタデータ活用により、課題一覧のクエリコストを大幅削減
+- サブコレクション全体をスキャンせずに統計情報を取得可能
 
 ### Frontend Data Types
 
@@ -979,6 +1016,15 @@ export interface FirestoreDocument {
   drive_file_id: string;
   drive_url: string;
   uploaded_at: string;
+}
+
+// 親ドキュメント（タスクメタデータ）の型定義
+export interface FirestoreTaskDocument {
+  task_id: string;
+  task_pattern: string;
+  file_count: number;
+  created_at: string; // Firestore Timestamp (ISO 8601)
+  last_updated: string; // Firestore Timestamp (ISO 8601)
 }
 ```
 

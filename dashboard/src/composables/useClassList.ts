@@ -4,7 +4,7 @@
 import { ref, Ref } from 'vue';
 import { ClassData } from '../types/models';
 import { KNOWN_CLASSES, KNOWN_TASK_IDS } from '../config/classes';
-import { getDocuments, getErrorMessage } from './useFirestore';
+import { getTaskDocument, getErrorMessage } from './useFirestore';
 
 interface UseClassListReturn {
   classes: Ref<ClassData[]>;
@@ -30,14 +30,16 @@ export function useClassList(): UseClassListReturn {
   /**
    * クラス一覧を取得
    *
-   * 実装方針:
+   * 実装方針（Firestore Schema Improvement対応）:
    * 1. KNOWN_CLASSESから既知のクラス名リストを取得
    * 2. KNOWN_TASK_IDSから既知のタスクIDリストを取得
-   * 3. 各クラス×タスクのdocumentsサブコレクションから統計情報を集計
+   * 3. 各クラス×タスクの親ドキュメント（{className}/{taskId}）からメタデータを取得
+   * 4. 親ドキュメントのfile_count, last_updatedフィールドを活用して統計情報を集計
    *
-   * Note: Firestoreではサブコレクション（documents）にデータがあっても、
-   * 親ドキュメント（task_id）自体は自動作成されないため、
-   * 既知のタスクIDリストを使用して直接documentsサブコレクションを確認する。
+   * パフォーマンス向上:
+   * - サブコレクション（documents）の全スキャンが不要
+   * - 親ドキュメントのメタデータから直接統計情報を取得
+   * - Firestoreクエリコストを大幅削減
    */
   const fetchClasses = async (): Promise<void> => {
     loading.value = true;
@@ -49,28 +51,25 @@ export function useClassList(): UseClassListReturn {
       // 各クラスの統計情報を取得
       for (const className of KNOWN_CLASSES) {
         try {
-          // 各課題配下のファイル数を集計
           let totalFileCount = 0;
           let latestUpdate: string | null = null;
-          let taskCountWithFiles = 0;
+          let taskCount = 0;
 
-          // 既知のタスクIDを使って直接documentsサブコレクションを確認
+          // 親ドキュメントからメタデータを取得
           for (const taskId of KNOWN_TASK_IDS) {
             try {
-              // documents サブコレクションからファイル一覧を取得
-              const files = await getDocuments(className, taskId, 'documents');
+              // 親ドキュメント（タスクメタデータ）を取得
+              const taskDoc = await getTaskDocument(className, taskId);
 
-              if (files.length > 0) {
-                taskCountWithFiles++;
-                totalFileCount += files.length;
+              if (taskDoc) {
+                // 親ドキュメントが存在する場合、メタデータから統計情報を取得
+                taskCount++;
+                totalFileCount += taskDoc.file_count;
 
-                // 最終更新日時を取得（uploaded_at フィールド）
-                for (const file of files) {
-                  const uploadedAt = (file as any).uploaded_at;
-                  if (uploadedAt) {
-                    if (!latestUpdate || uploadedAt > latestUpdate) {
-                      latestUpdate = uploadedAt;
-                    }
+                // 最終更新日時を比較
+                if (taskDoc.last_updated) {
+                  if (!latestUpdate || taskDoc.last_updated > latestUpdate) {
+                    latestUpdate = taskDoc.last_updated;
                   }
                 }
               }
@@ -82,7 +81,7 @@ export function useClassList(): UseClassListReturn {
 
           classDataList.push({
             name: className,
-            taskCount: taskCountWithFiles,
+            taskCount: taskCount,
             fileCount: totalFileCount,
             lastUpdated: latestUpdate,
           });

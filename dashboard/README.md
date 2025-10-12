@@ -234,29 +234,38 @@ npm install
 
 **ワークフロー**: `.github/workflows/deploy-dashboard.yml`
 
-### 📋 Phase 1: 基本機能実装（未着手）
+### 📋 Phase 1: 基本機能実装（進行中）
+
+**実装済み機能**:
+
+1. ✅ **Task 2**: Firestore データアクセス層
+   - `useFirestore` composable 実装（親ドキュメント取得関数追加）
+   - `useClassList` composable 実装（親ドキュメントメタデータ活用）
+   - `useTaskList` composable 実装（親ドキュメントメタデータ活用）
+   - `useFileList` composable 実装（検索・ソート機能付き）
+   - FirestoreTaskDocument型定義追加
+
+2. ✅ **Task 3**: クラス一覧表示（ClassList View）
+   - ClassListView実装済み
+   - ClassCard実装済み
+   - ErrorAlert, LoadingSkeleton実装済み
 
 **次に実装する機能** (`.kiro/specs/carewell-dashboard/tasks.md`参照):
 
-1. **Task 2**: Firestore データアクセス層
-   - `useFirestore` composable 実装
-   - クラス・課題・ファイルのデータ取得ロジック
-
-2. **Task 3**: クラス一覧表示（ClassList View）
-   - クラスカード表示
-   - 課題数・提出状況の集計表示
-
 3. **Task 4**: 課題一覧表示（TaskList View）
-   - 課題カード表示
+   - TaskListView実装
+   - TaskCard実装
    - 提出数・未提出数の表示
 
 4. **Task 5**: ファイル一覧表示（FileList View）
-   - ファイルテーブル表示
+   - FileListView実装
+   - FileTable実装
+   - SearchBox実装
    - Google Drive リンク
 
-5. **Task 6-8**: 検索・フィルタ・ソート機能
-   - 学生名・学生IDによる検索
-   - 提出日時ソート
+5. **Task 6-8**: ナビゲーション・検索・ソート機能
+   - ルーティング有効化
+   - 検索・ソート機能統合
 
 ### 🔐 Phase 2: 認証・セキュリティ（計画中）
 

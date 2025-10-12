@@ -2,7 +2,16 @@
 // Firestore data access layer
 
 import { getDb } from '../config/firebase';
-import { collection, getDocs, DocumentData, CollectionReference } from 'firebase/firestore';
+import {
+  collection,
+  getDocs,
+  doc,
+  getDoc,
+  DocumentData,
+  CollectionReference,
+  DocumentSnapshot,
+} from 'firebase/firestore';
+import { FirestoreTaskDocument } from '../types/models';
 
 /**
  * 汎用ドキュメント取得関数
@@ -35,6 +44,46 @@ export async function getDocuments<T = DocumentData>(
     console.error('Firestore getDocuments error:', {
       collectionPath,
       pathSegments,
+      error,
+    });
+    throw error;
+  }
+}
+
+/**
+ * 親ドキュメント（タスクメタデータ）を取得
+ *
+ * Firestore Schema Improvementで追加された親ドキュメントから、
+ * file_count, last_updatedなどのメタデータを効率的に取得する。
+ *
+ * @param className - クラス名（例: "令和7年度 デジタル中核人材養成研修 №01"）
+ * @param taskId - タスクID（例: "課題①"）
+ * @returns 親ドキュメントデータ、存在しない場合はnull
+ *
+ * @example
+ * const taskDoc = await getTaskDocument("令和7年度 デジタル中核人材養成研修 №01", "課題①");
+ * if (taskDoc) {
+ *   console.log(`File count: ${taskDoc.file_count}`);
+ *   console.log(`Last updated: ${taskDoc.last_updated}`);
+ * }
+ */
+export async function getTaskDocument(
+  className: string,
+  taskId: string
+): Promise<FirestoreTaskDocument | null> {
+  try {
+    const db = getDb();
+    const docRef = doc(db, className, taskId);
+    const docSnap: DocumentSnapshot<DocumentData> = await getDoc(docRef);
+
+    if (docSnap.exists()) {
+      return { id: docSnap.id, ...docSnap.data() } as FirestoreTaskDocument;
+    }
+    return null;
+  } catch (error) {
+    console.error('Firestore getTaskDocument error:', {
+      className,
+      taskId,
       error,
     });
     throw error;
