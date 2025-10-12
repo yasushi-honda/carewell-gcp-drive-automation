@@ -14,6 +14,41 @@ import {
 import { FirestoreTaskDocument } from '../types/models';
 
 /**
+ * Helper function to recursively convert Firestore Timestamps to ISO 8601 strings
+ *
+ * @param obj - Object potentially containing Timestamp fields
+ * @returns Object with all Timestamps converted to strings
+ */
+function convertTimestampsToStrings(obj: any): any {
+  if (obj === null || obj === undefined) {
+    return obj;
+  }
+
+  // Check if it's a Firestore Timestamp
+  if (obj.toDate && typeof obj.toDate === 'function') {
+    return obj.toDate().toISOString();
+  }
+
+  // If it's an array, convert each element
+  if (Array.isArray(obj)) {
+    return obj.map((item) => convertTimestampsToStrings(item));
+  }
+
+  // If it's an object, convert each property
+  if (typeof obj === 'object') {
+    const converted: any = {};
+    for (const key in obj) {
+      if (Object.prototype.hasOwnProperty.call(obj, key)) {
+        converted[key] = convertTimestampsToStrings(obj[key]);
+      }
+    }
+    return converted;
+  }
+
+  return obj;
+}
+
+/**
  * 汎用ドキュメント取得関数
  *
  * @param collectionPath - コレクションパス（例: "令和7年度 デジタル中核人材養成研修 №01"）
@@ -36,10 +71,15 @@ export async function getDocuments<T = DocumentData>(
     const colRef: CollectionReference<DocumentData> = collection(db, collectionPath, ...pathSegments);
     const snapshot = await getDocs(colRef);
 
-    return snapshot.docs.map((doc) => ({
-      id: doc.id,
-      ...doc.data(),
-    })) as T[];
+    return snapshot.docs.map((doc) => {
+      const data = doc.data();
+      // Convert all Timestamp fields to ISO strings
+      const convertedData = convertTimestampsToStrings(data);
+      return {
+        id: doc.id,
+        ...convertedData,
+      } as T;
+    });
   } catch (error) {
     console.error('Firestore getDocuments error:', {
       collectionPath,
@@ -77,7 +117,19 @@ export async function getTaskDocument(
     const docSnap: DocumentSnapshot<DocumentData> = await getDoc(docRef);
 
     if (docSnap.exists()) {
-      return { id: docSnap.id, ...docSnap.data() } as FirestoreTaskDocument;
+      const data = docSnap.data();
+
+      // Convert Firestore Timestamps to ISO 8601 strings
+      // Firestore returns Timestamp objects for timestamp fields, which need to be converted
+      const taskDoc: FirestoreTaskDocument = {
+        task_id: data.task_id,
+        task_pattern: data.task_pattern,
+        file_count: data.file_count,
+        created_at: data.created_at?.toDate ? data.created_at.toDate().toISOString() : data.created_at,
+        last_updated: data.last_updated?.toDate ? data.last_updated.toDate().toISOString() : data.last_updated,
+      };
+
+      return taskDoc;
     }
     return null;
   } catch (error) {
