@@ -50,9 +50,12 @@ class TestMigrationIntegration:
             documents_ref.add(
                 {
                     "student_id": f"TEST{i:03d}",
-                    "file_name": f"test_file{i}.pdf",
-                    "file_url": f"https://example.com/test_file{i}.pdf",
-                    "composite_key": f"{class_name}_{task_id}_TEST{i:03d}_test_file{i}.pdf",
+                    "student_name": f"Test Student {i:03d}",
+                    "filename": f"test_file{i}.pdf",
+                    "drive_file_id": f"test_drive_id_{i:03d}",
+                    "drive_folder_id": "test_folder_id",
+                    "submit_date": f"2025-01-01 10:{i:02d}:00",
+                    "composite_key": f"TEST{i:03d}_test_file{i}.pdf_2025-01-01_10-{i:02d}-00",
                     "uploaded_at": datetime.now(),
                 }
             )
@@ -121,9 +124,12 @@ class TestMigrationIntegration:
             documents_ref.add(
                 {
                     "student_id": f"TEST{i:03d}",
-                    "file_name": f"test_file{i}.pdf",
-                    "file_url": f"https://example.com/test_file{i}.pdf",
-                    "composite_key": f"{class_name}_{task_id}_TEST{i:03d}_test_file{i}.pdf",
+                    "student_name": f"Test Student {i:03d}",
+                    "filename": f"test_file{i}.pdf",
+                    "drive_file_id": f"test_drive_id_{i:03d}",
+                    "drive_folder_id": "test_folder_id",
+                    "submit_date": f"2025-01-01 10:{i:02d}:00",
+                    "composite_key": f"TEST{i:03d}_test_file{i}.pdf_2025-01-01_10-{i:02d}-00",
                     "uploaded_at": datetime.now(),
                 }
             )
@@ -165,9 +171,12 @@ class TestMigrationIntegration:
             documents_ref.add(
                 {
                     "student_id": f"TEST{i:03d}",
-                    "file_name": f"test_file{i}.pdf",
-                    "file_url": f"https://example.com/test_file{i}.pdf",
-                    "composite_key": f"{class_name}_{task_id}_TEST{i:03d}_test_file{i}.pdf",
+                    "student_name": f"Test Student {i:03d}",
+                    "filename": f"test_file{i}.pdf",
+                    "drive_file_id": f"test_drive_id_{i:03d}",
+                    "drive_folder_id": "test_folder_id",
+                    "submit_date": f"2025-01-01 10:{i:02d}:00",
+                    "composite_key": f"TEST{i:03d}_test_file{i}.pdf_2025-01-01_10-{i:02d}-00",
                     "uploaded_at": datetime.now(),
                 }
             )

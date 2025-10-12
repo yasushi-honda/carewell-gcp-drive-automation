@@ -43,9 +43,12 @@ class TestFileUploadIntegration:
             class_name=class_name,
             task_id=task_id,
             task_pattern=task_pattern,
+            student_name="Test Student 001",
             student_id="TEST001",
-            file_name="test_file.pdf",
-            file_url="https://example.com/test_file.pdf",
+            filename="test_file.pdf",
+            drive_file_id="test_drive_id_001",
+            drive_folder_id="test_folder_id",
+            submit_date="2025-01-01 10:00:00",
         )
 
         assert result is not None, "record_upload should return file document data"
@@ -69,8 +72,8 @@ class TestFileUploadIntegration:
 
         file_data = file_docs[0].to_dict()
         assert file_data["student_id"] == "TEST001"
-        assert file_data["file_name"] == "test_file.pdf"
-        assert file_data["file_url"] == "https://example.com/test_file.pdf"
+        assert file_data["filename"] == "test_file.pdf"
+        assert file_data["drive_file_id"] == "test_drive_id_001"
 
     def test_second_file_upload_increments_count(self):
         """
@@ -91,9 +94,12 @@ class TestFileUploadIntegration:
             class_name=class_name,
             task_id=task_id,
             task_pattern=task_pattern,
+            student_name="Test Student 001",
             student_id="TEST001",
-            file_name="test_file1.pdf",
-            file_url="https://example.com/test_file1.pdf",
+            filename="test_file1.pdf",
+            drive_file_id="test_drive_id_001",
+            drive_folder_id="test_folder_id",
+            submit_date="2025-01-01 10:00:00",
         )
 
         # Upload second file
@@ -101,9 +107,12 @@ class TestFileUploadIntegration:
             class_name=class_name,
             task_id=task_id,
             task_pattern=task_pattern,
+            student_name="Test Student 002",
             student_id="TEST002",
-            file_name="test_file2.pdf",
-            file_url="https://example.com/test_file2.pdf",
+            filename="test_file2.pdf",
+            drive_file_id="test_drive_id_002",
+            drive_folder_id="test_folder_id",
+            submit_date="2025-01-01 10:05:00",
         )
 
         # Verify parent document file_count incremented
@@ -138,9 +147,12 @@ class TestFileUploadIntegration:
                 class_name=class_name,
                 task_id=task_id,
                 task_pattern=task_pattern,
+                student_name=f"Test Student {i:03d}",
                 student_id=f"TEST{i:03d}",
-                file_name=f"test_file{i}.pdf",
-                file_url=f"https://example.com/test_file{i}.pdf",
+                filename=f"test_file{i}.pdf",
+                drive_file_id=f"test_drive_id_{i:03d}",
+                drive_folder_id="test_folder_id",
+                submit_date=f"2025-01-01 10:{i:02d}:00",
             )
 
         # Verify parent document file_count is accurate
@@ -170,9 +182,12 @@ class TestFileUploadIntegration:
             class_name=class_name,
             task_id=task_id,
             # task_pattern not specified
+            student_name="Test Student 001",
             student_id="TEST001",
-            file_name="test_file.pdf",
-            file_url="https://example.com/test_file.pdf",
+            filename="test_file.pdf",
+            drive_file_id="test_drive_id_001",
+            drive_folder_id="test_folder_id",
+            submit_date="2025-01-01 10:00:00",
         )
 
         # Verify parent document task_pattern defaults to task_id
@@ -204,9 +219,12 @@ class TestFileUploadIntegration:
             class_name=class_name,
             task_id=task_id,
             task_pattern=task_pattern,
+            student_name="Test Student 001",
             student_id="TEST001",
-            file_name="test_file.pdf",
-            file_url="https://example.com/test_file.pdf",
+            filename="test_file.pdf",
+            drive_file_id="test_drive_id_001",
+            drive_folder_id="test_folder_id",
+            submit_date="2025-01-01 10:00:00",
         )
 
         assert result1 is not None, "First upload should succeed"
@@ -216,12 +234,13 @@ class TestFileUploadIntegration:
             class_name=class_name,
             task_id=task_id,
             student_id="TEST001",
-            file_name="test_file.pdf",
+            filename="test_file.pdf",
+            submit_date="2025-01-01 10:00:00",
         )
 
         assert existing is not None, "Duplicate check should return existing record"
         assert existing["student_id"] == "TEST001"
-        assert existing["file_name"] == "test_file.pdf"
+        assert existing["filename"] == "test_file.pdf"
 
         # Verify parent document file_count remains 1
         parent_ref = self.db.collection(class_name).document(task_id)
@@ -261,9 +280,12 @@ class TestFileUploadIntegration:
                 class_name=class_name,
                 task_id=task_id,
                 task_pattern=task_pattern,
+                student_name=f"Test Student {index:03d}",
                 student_id=f"TEST{index:03d}",
-                file_name=f"concurrent_file{index}.pdf",
-                file_url=f"https://example.com/concurrent_file{index}.pdf",
+                filename=f"concurrent_file{index}.pdf",
+                drive_file_id=f"test_drive_id_{index:03d}",
+                drive_folder_id="test_folder_id",
+                submit_date=f"2025-01-01 10:{index:02d}:00",
             )
             elapsed = time.time() - start_time
             return result, elapsed
