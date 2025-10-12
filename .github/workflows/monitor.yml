@@ -1,0 +1,167 @@
+name: Post-Deployment Monitoring
+
+on:
+  workflow_dispatch:
+    inputs:
+      duration_hours:
+        description: 'Monitoring duration (hours)'
+        required: true
+        type: number
+        default: 24
+
+env:
+  PROJECT_ID: carewell-automation
+  REGION: asia-northeast1
+  FUNCTION_NAME: carewell-file-collector
+
+jobs:
+  monitor:
+    name: Monitor Cloud Run Function
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: read
+      id-token: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: 'projects/61759806259/locations/global/workloadIdentityPools/github-actions-pool/providers/github-provider'
+          service_account: 'github-actions-sa@carewell-automation.iam.gserviceaccount.com'
+
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Check error rate
+        id: error_check
+        run: |
+          echo "🔍 Checking error rate for the last hour..."
+
+          # Get logs from the last hour
+          ERROR_COUNT=$(gcloud logging read \
+            "resource.type=cloud_run_revision AND resource.labels.service_name=${FUNCTION_NAME} AND severity>=ERROR" \
+            --limit=1000 \
+            --freshness=1h \
+            --format="value(timestamp)" | wc -l)
+
+          TOTAL_COUNT=$(gcloud logging read \
+            "resource.type=cloud_run_revision AND resource.labels.service_name=${FUNCTION_NAME}" \
+            --limit=10000 \
+            --freshness=1h \
+            --format="value(timestamp)" | wc -l)
+
+          if [ "$TOTAL_COUNT" -gt 0 ]; then
+            ERROR_RATE=$(echo "scale=2; ($ERROR_COUNT / $TOTAL_COUNT) * 100" | bc)
+            echo "Error rate: ${ERROR_RATE}%"
+            echo "error_rate=${ERROR_RATE}" >> $GITHUB_OUTPUT
+
+            if (( $(echo "$ERROR_RATE > 5.0" | bc -l) )); then
+              echo "❌ Error rate is above threshold: ${ERROR_RATE}%"
+              exit 1
+            else
+              echo "✅ Error rate is within acceptable range: ${ERROR_RATE}%"
+            fi
+          else
+            echo "⚠️  No logs found in the last hour"
+          fi
+
+      - name: Check Firestore operations
+        run: |
+          echo "🔍 Checking Firestore operations..."
+
+          # Check for failed parent document updates
+          FAILED_UPDATES=$(gcloud logging read \
+            "resource.type=cloud_run_revision AND resource.labels.service_name=${FUNCTION_NAME} AND textPayload=~\"Failed to update task document\"" \
+            --limit=100 \
+            --freshness=1h \
+            --format="value(textPayload)")
+
+          if [ -n "$FAILED_UPDATES" ]; then
+            echo "⚠️  Found failed parent document updates:"
+            echo "$FAILED_UPDATES"
+          else
+            echo "✅ No failed parent document updates"
+          fi
+
+      - name: Verify file_count accuracy
+        run: |
+          echo "🔍 Verifying file_count accuracy..."
+          python scripts/verify_file_count.py
+        env:
+          GOOGLE_CLOUD_PROJECT: ${{ env.PROJECT_ID }}
+
+      - name: Check Cloud Scheduler jobs
+        run: |
+          echo "🔍 Checking Cloud Scheduler job executions..."
+
+          FAILED_JOBS=$(gcloud scheduler jobs list \
+            --location=asia-northeast1 \
+            --filter="state=FAILED" \
+            --format="value(name)")
+
+          if [ -n "$FAILED_JOBS" ]; then
+            echo "❌ Failed scheduler jobs found:"
+            echo "$FAILED_JOBS"
+            exit 1
+          else
+            echo "✅ All scheduler jobs are running successfully"
+          fi
+
+      - name: Generate monitoring report
+        if: always()
+        run: |
+          cat > monitoring_report.md << EOF
+          # Post-Deployment Monitoring Report
+
+          **Date**: $(date -u +"%Y-%m-%d %H:%M:%S UTC")
+          **Function**: ${FUNCTION_NAME}
+          **Region**: ${REGION}
+
+          ## Metrics
+
+          - **Error Rate**: ${{ steps.error_check.outputs.error_rate }}%
+          - **Target**: < 5%
+
+          ## Status
+
+          - [x] Error rate check
+          - [x] Firestore operations check
+          - [x] file_count accuracy check
+          - [x] Cloud Scheduler jobs check
+
+          ## Actions Required
+
+          $(if [ "${{ job.status }}" == "failure" ]; then
+            echo "🚨 **IMMEDIATE ACTION REQUIRED**: Errors detected during monitoring"
+            echo ""
+            echo "### Rollback Steps:"
+            echo "1. Download rollback script from migration artifacts"
+            echo "2. Execute: \`./rollback.sh\`"
+            echo "3. Verify rollback: \`./test_request.sh\`"
+          else
+            echo "✅ No action required - all checks passed"
+          fi)
+
+          EOF
+
+      - name: Upload monitoring report
+        uses: actions/upload-artifact@v4
+        with:
+          name: monitoring-report
+          path: monitoring_report.md
+        if: always()
+
+      - name: Notify on failure
+        if: failure()
+        run: |
+          echo "🚨 Monitoring detected issues!"
+          echo "Please review the monitoring report and consider rollback."
+          echo "To rollback:"
+          echo "  1. Go to Actions tab"
+          echo "  2. Find the migration workflow run"
+          echo "  3. Download rollback script"
+          echo "  4. Execute rollback"
