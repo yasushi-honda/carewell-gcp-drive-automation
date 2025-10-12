@@ -7,12 +7,14 @@ Usage:
 """
 
 import sys
-from typing import Dict, List
-
-from google.cloud import firestore
 
 # Import KNOWN_CLASSES and KNOWN_TASK_IDS
 sys.path.insert(0, "src")
+
+from typing import Dict
+
+from google.cloud import firestore
+
 from config.classes import KNOWN_CLASSES, KNOWN_TASK_IDS
 
 

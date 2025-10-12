@@ -3,7 +3,6 @@ Integration test configuration and fixtures.
 """
 
 import os
-import time
 
 import pytest
 from google.cloud import firestore
