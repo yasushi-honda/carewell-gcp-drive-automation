@@ -15,12 +15,12 @@ const router = createRouter({
       component: () => import('../views/TaskListView.vue'),
       props: true,
     },
-    // {
-    //   path: '/class/:className/task/:taskId',
-    //   name: 'files',
-    //   component: () => import('../views/FileListView.vue'),
-    //   props: true,
-    // },
+    {
+      path: '/class/:className/task/:taskId',
+      name: 'files',
+      component: () => import('../views/FileListView.vue'),
+      props: true,
+    },
   ],
 })
 
