@@ -2,10 +2,11 @@
 Firestore Service for tracking uploaded files
 """
 
-import logging
 import hashlib
+import logging
 from datetime import datetime
 from typing import Optional
+
 from google.cloud import firestore
 
 logger = logging.getLogger(__name__)

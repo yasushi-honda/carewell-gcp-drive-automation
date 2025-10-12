@@ -4,8 +4,9 @@ Unit tests for FirestoreService class.
 These tests use mocking to avoid actual Firestore operations.
 """
 
+from unittest.mock import MagicMock, Mock, patch
+
 import pytest
-from unittest.mock import Mock, patch, MagicMock
 from google.cloud import firestore as firestore_module
 
 

@@ -4,9 +4,10 @@ Google Sheets Service for recording uploaded files
 
 import logging
 from datetime import datetime
-from typing import Optional, List
-from googleapiclient.discovery import build
+from typing import List, Optional
+
 from google.auth import default
+from googleapiclient.discovery import build
 
 logger = logging.getLogger(__name__)
 

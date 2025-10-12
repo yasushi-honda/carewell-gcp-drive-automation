@@ -7,8 +7,9 @@ import os
 import re
 import time
 from typing import Optional
-from playwright.sync_api import sync_playwright, Browser, Page, Frame
+
 from google.cloud import secretmanager
+from playwright.sync_api import Browser, Frame, Page, sync_playwright
 
 logger = logging.getLogger(__name__)
 

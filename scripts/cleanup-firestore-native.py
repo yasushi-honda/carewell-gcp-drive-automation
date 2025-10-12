@@ -7,10 +7,11 @@ Usage:
     python3 scripts/cleanup-firestore-native.py "クラス名" "課題ID"
     python3 scripts/cleanup-firestore-native.py "クラス名" "課題ID" --execute
 """
-import sys
 import argparse
-from google.cloud import firestore
+import sys
+
 from google.auth import default
+from google.cloud import firestore
 
 
 def main():

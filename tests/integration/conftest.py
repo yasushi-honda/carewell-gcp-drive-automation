@@ -3,8 +3,9 @@ Integration test configuration and fixtures.
 """
 
 import os
-import pytest
 import time
+
+import pytest
 from google.cloud import firestore
 
 

@@ -4,8 +4,9 @@ Integration tests for file upload scenarios.
 These tests use Firestore Emulator for realistic end-to-end testing.
 """
 
-import pytest
 import sys
+
+import pytest
 
 sys.path.insert(0, "src")
 

@@ -3,6 +3,7 @@ Pytest configuration and shared fixtures.
 """
 
 import os
+
 import pytest
 from google.cloud import firestore
 

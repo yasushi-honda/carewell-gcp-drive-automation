@@ -7,8 +7,9 @@ Usage:
 """
 
 import sys
-from google.cloud import firestore
 from typing import Dict, List
+
+from google.cloud import firestore
 
 # Import KNOWN_CLASSES and KNOWN_TASK_IDS
 sys.path.insert(0, "src")
