@@ -61,9 +61,13 @@ class FirestoreService:
         Note:
             Uses merge=True to create document if it doesn't exist, or update
             only the specified fields if it does exist.
+            created_at is only set on first creation.
         """
         try:
             task_ref = self.db.collection(class_name).document(task_id)
+
+            # Check if document exists to determine if created_at should be set
+            doc = task_ref.get()
 
             # Prepare update data with atomic increment
             update_data = {
@@ -72,6 +76,10 @@ class FirestoreService:
                 "file_count": firestore.Increment(1),
                 "last_updated": firestore.SERVER_TIMESTAMP,
             }
+
+            # Add created_at only for new documents
+            if not doc.exists:
+                update_data["created_at"] = firestore.SERVER_TIMESTAMP
 
             # Use merge=True to create or update
             # If document doesn't exist, all fields will be set
