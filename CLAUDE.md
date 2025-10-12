@@ -24,6 +24,34 @@ Kiro-style Spec Driven Development implementation using claude code slash comman
 ## Development Guidelines
 - Think in English, but generate responses in Japanese (思考は英語、回答の生成は日本語で行うように)
 
+## Dashboard Development Workflow
+
+**IMPORTANT: ローカル開発環境を使用しないワークフロー**
+
+Dashboard (`dashboard/`ディレクトリ) の開発では、以下のルールを厳守してください：
+
+### 禁止事項
+- ❌ `npm run dev` (ローカル開発サーバー起動)
+- ❌ `npm run build` (ローカルビルド実行)
+- ❌ `npm install` (dashboardディレクトリでの依存関係インストール)
+- ❌ その他、`dashboard/`ディレクトリ内でのnpmコマンド実行
+
+### 必須ワークフロー
+1. **コード変更**: コンポーネント・composables・設定ファイル等を編集
+2. **Git操作**: `git add` → `git commit` → `git push origin main`
+3. **自動デプロイ**: GitHub Actionsが自動実行
+   - 依存関係インストール
+   - 本番ビルド
+   - Firestore Security Rulesデプロイ
+   - Firebase Hostingデプロイ
+4. **動作確認**: https://carewell-automation.web.app/ で確認
+
+### 理由
+- CI/CDパイプラインで全て自動化済み
+- ローカル環境のセットアップ不要
+- 環境差異によるトラブル回避
+- デプロイフローの統一
+
 ## Workflow
 
 ### Phase 0: Steering (Optional)
@@ -67,6 +95,8 @@ Managed by `/kiro:steering` command. Updates here reflect command changes.
   Mode: Always|Conditional|Manual
   Pattern: File patterns for Conditional mode
 -->
+
+- `dashboard-workflow.md`: Conditional - `dashboard/**` - Dashboard開発時のローカル環境使用禁止とGitHub Actions CI/CDワークフロー
 
 ### Inclusion Modes
 - **Always**: Loaded in every interaction (default)
