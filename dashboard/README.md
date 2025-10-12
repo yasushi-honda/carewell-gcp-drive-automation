@@ -240,6 +240,7 @@ npm install
 
 1. ✅ **Task 2**: Firestore データアクセス層
    - `useFirestore` composable 実装（親ドキュメント取得関数追加）
+   - Firestore Timestamp → ISO 8601文字列自動変換機能（`convertTimestampsToStrings`）
    - `useClassList` composable 実装（親ドキュメントメタデータ活用）
    - `useTaskList` composable 実装（親ドキュメントメタデータ活用）
    - `useFileList` composable 実装（検索・ソート機能付き）

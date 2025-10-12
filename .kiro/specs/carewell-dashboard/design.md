@@ -851,6 +851,27 @@ export function getDb(): Firestore {
   return db;
 }
 
+// Timestamp変換ヘルパー
+function convertTimestampsToStrings(obj: any): any {
+  if (obj === null || obj === undefined) return obj;
+  if (obj.toDate && typeof obj.toDate === 'function') {
+    return obj.toDate().toISOString();
+  }
+  if (Array.isArray(obj)) {
+    return obj.map((item) => convertTimestampsToStrings(item));
+  }
+  if (typeof obj === 'object') {
+    const converted: any = {};
+    for (const key in obj) {
+      if (Object.prototype.hasOwnProperty.call(obj, key)) {
+        converted[key] = convertTimestampsToStrings(obj[key]);
+      }
+    }
+    return converted;
+  }
+  return obj;
+}
+
 // 汎用クエリヘルパー
 export async function getDocuments<T>(
   collectionPath: string,
@@ -859,7 +880,12 @@ export async function getDocuments<T>(
   const db = getDb();
   const colRef = collection(db, collectionPath, ...pathSegments);
   const snapshot = await getDocs(colRef);
-  return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as T));
+  return snapshot.docs.map(doc => {
+    const data = doc.data();
+    // Firestore TimestampをISO 8601文字列に自動変換
+    const convertedData = convertTimestampsToStrings(data);
+    return { id: doc.id, ...convertedData } as T;
+  });
 }
 ```
 
