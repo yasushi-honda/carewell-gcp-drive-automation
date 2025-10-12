@@ -122,7 +122,8 @@ jobs:
         uses: github/codeql-action/upload-sarif@v3
         with:
           sarif_file: 'trivy-results.sarif'
-        if: always()
+        if: false  # Disabled: Code scanning not available for this repository
+        # To enable: Go to Settings → Code security and analysis → Enable Code scanning
 
   lint:
     name: Code Quality
