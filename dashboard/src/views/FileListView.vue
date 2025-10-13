@@ -98,7 +98,7 @@
       title="提出ファイルがありません"
       message="この課題にはまだ提出ファイルがありません。"
       action-label="課題一覧に戻る"
-      :action-to="`/tasks/${className}`"
+      :action-to="`/class/${className}`"
     />
 
     <!-- ファイル一覧テーブル -->
@@ -153,8 +153,8 @@ const {
 // パンくずリスト
 const breadcrumbItems = computed<BreadcrumbItem[]>(() => [
   { label: 'ホーム', to: '/' },
-  { label: className, to: `/tasks/${className}` },
-  { label: taskId, to: `/files/${className}/${taskId}` },
+  { label: className, to: `/class/${className}` },
+  { label: taskId, to: `/class/${className}/task/${taskId}` },
 ]);
 
 /**

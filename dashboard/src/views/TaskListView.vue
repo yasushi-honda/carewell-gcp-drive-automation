@@ -94,7 +94,7 @@ const { tasks, loading, error, fetchTasks } = useTaskList(className);
 // パンくずリスト
 const breadcrumbItems = computed<BreadcrumbItem[]>(() => [
   { label: 'ホーム', to: '/' },
-  { label: className, to: `/tasks/${className}` },
+  { label: className, to: `/class/${className}` },
 ]);
 
 /**
