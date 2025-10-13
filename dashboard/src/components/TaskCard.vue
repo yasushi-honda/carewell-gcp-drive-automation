@@ -1,6 +1,6 @@
 <template>
   <div
-    class="bg-white rounded-lg shadow-md hover:shadow-lg transition-shadow duration-200 cursor-pointer p-6"
+    class="bg-white rounded-lg shadow-md hover:shadow-lg active:shadow-xl transition-shadow duration-200 cursor-pointer p-6 min-h-[12rem] sm:min-h-0"
     @click="$emit('click')"
     @keypress.enter="$emit('click')"
     tabindex="0"
