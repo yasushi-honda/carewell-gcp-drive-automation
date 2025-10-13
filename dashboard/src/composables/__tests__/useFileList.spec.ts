@@ -88,9 +88,10 @@ describe('useFileList', () => {
     await fetchFiles();
     setSortColumn('student_name');
 
+    // Unicode順: 佐(U+4F50) < 森(U+68EE) < 田(U+7530)
     expect(filteredFiles.value[0].student_name).toBe('佐藤次郎');
-    expect(filteredFiles.value[1].student_name).toBe('田中花子');
-    expect(filteredFiles.value[2].student_name).toBe('森平太郎');
+    expect(filteredFiles.value[1].student_name).toBe('森平太郎');
+    expect(filteredFiles.value[2].student_name).toBe('田中花子');
   });
 
   it('should sort files by student name (descending)', async () => {
@@ -102,8 +103,9 @@ describe('useFileList', () => {
     setSortColumn('student_name'); // First click: asc
     setSortColumn('student_name'); // Second click: desc
 
-    expect(filteredFiles.value[0].student_name).toBe('森平太郎');
-    expect(filteredFiles.value[1].student_name).toBe('田中花子');
+    // Unicode降順: 田(U+7530) > 森(U+68EE) > 佐(U+4F50)
+    expect(filteredFiles.value[0].student_name).toBe('田中花子');
+    expect(filteredFiles.value[1].student_name).toBe('森平太郎');
     expect(filteredFiles.value[2].student_name).toBe('佐藤次郎');
   });
 
@@ -126,7 +128,7 @@ describe('useFileList', () => {
     const { filteredFiles, fetchFiles, setSearch, setSortColumn } = useFileList(className, taskId);
 
     await fetchFiles();
-    setSearch('太'); // Matches "森平太郎" and "佐藤次郎"
+    setSearch('郎'); // Matches "森平太郎" and "佐藤次郎"
     setSortColumn('student_name');
 
     expect(filteredFiles.value).toHaveLength(2);
