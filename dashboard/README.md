@@ -2,9 +2,13 @@
 
 Firestoreに蓄積された提出ファイルのメタ情報を可視化するWebダッシュボード
 
+**バージョン**: Ver1（Phase 1完了）
+**リリース日**: 2025-10-13
+**公開URL**: https://carewell-automation.web.app
+
 ## 概要
 
-講師がFirestoreに保存された学生の提出ファイル情報を直感的に確認できるSPA（Single Page Application）です。
+講師がFirestoreに保存された学生の提出ファイル情報を直感的に確認できるSPA（Single Page Application）です。Ver1として基本機能実装が完了し、本番環境で稼働中です。
 
 ### 主要機能
 
