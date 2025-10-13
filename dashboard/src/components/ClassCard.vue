@@ -2,7 +2,7 @@
   <div
     class="bg-white rounded-lg shadow-md hover:shadow-lg active:shadow-xl transition-shadow duration-200 cursor-pointer p-6 min-h-[12rem] sm:min-h-0"
     @click="$emit('click')"
-    @keypress.enter="$emit('click')"
+    @keydown.enter="$emit('click')"
     tabindex="0"
     role="button"
     :aria-label="`${className}を開く`"
@@ -48,7 +48,7 @@
         <span>提出ファイル数: <span class="font-semibold">{{ fileCount }}</span></span>
       </div>
 
-      <div v-if="lastUpdated" class="flex items-center">
+      <div class="flex items-center">
         <svg
           class="h-5 w-5 text-gray-400 mr-2"
           fill="none"
@@ -62,7 +62,7 @@
             d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
           />
         </svg>
-        <span>最終更新: <span class="font-semibold">{{ formatDate(lastUpdated) }}</span></span>
+        <span>最終更新: <span class="font-semibold">{{ lastUpdated ? formatDate(lastUpdated) : '未更新' }}</span></span>
       </div>
     </div>
   </div>
