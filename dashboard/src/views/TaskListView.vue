@@ -1,5 +1,8 @@
 <template>
   <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+    <!-- パンくずリスト -->
+    <Breadcrumb :items="breadcrumbItems" class="mb-4" />
+
     <!-- 戻るボタン -->
     <button
       @click="navigateBack"
@@ -38,28 +41,14 @@
     />
 
     <!-- 空状態 -->
-    <div
+    <EmptyState
       v-else-if="tasks.length === 0"
-      class="text-center py-12"
-    >
-      <svg
-        class="mx-auto h-12 w-12 text-gray-400"
-        fill="none"
-        stroke="currentColor"
-        viewBox="0 0 24 24"
-      >
-        <path
-          stroke-linecap="round"
-          stroke-linejoin="round"
-          stroke-width="2"
-          d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
-        />
-      </svg>
-      <h3 class="mt-2 text-sm font-medium text-gray-900">課題がありません</h3>
-      <p class="mt-1 text-sm text-gray-500">
-        このクラスには課題データが見つかりませんでした。
-      </p>
-    </div>
+      icon="document"
+      title="課題がありません"
+      message="このクラスには課題データが見つかりませんでした。"
+      action-label="クラス一覧に戻る"
+      action-to="/"
+    />
 
     <!-- 課題一覧 -->
     <div
@@ -80,12 +69,14 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, watch } from 'vue';
+import { onMounted, watch, computed } from 'vue';
 import { useRouter, useRoute } from 'vue-router';
 import { useTaskList } from '../composables/useTaskList';
 import TaskCard from '../components/TaskCard.vue';
 import LoadingSkeleton from '../components/LoadingSkeleton.vue';
 import ErrorAlert from '../components/ErrorAlert.vue';
+import EmptyState from '../components/EmptyState.vue';
+import Breadcrumb, { type BreadcrumbItem } from '../components/Breadcrumb.vue';
 
 /**
  * TaskListView
@@ -99,6 +90,12 @@ const route = useRoute();
 const className = route.params.className as string;
 
 const { tasks, loading, error, fetchTasks } = useTaskList(className);
+
+// パンくずリスト
+const breadcrumbItems = computed<BreadcrumbItem[]>(() => [
+  { label: 'ホーム', to: '/' },
+  { label: className, to: `/tasks/${className}` },
+]);
 
 /**
  * 初回マウント時に課題一覧を取得

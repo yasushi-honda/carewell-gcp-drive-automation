@@ -1,5 +1,8 @@
 <template>
   <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+    <!-- パンくずリスト -->
+    <Breadcrumb :items="breadcrumbItems" class="mb-4" />
+
     <!-- 戻るボタン -->
     <button
       @click="navigateBack"
@@ -89,28 +92,14 @@
     />
 
     <!-- 空状態 -->
-    <div
+    <EmptyState
       v-else-if="files.length === 0"
-      class="text-center py-12"
-    >
-      <svg
-        class="mx-auto h-12 w-12 text-gray-400"
-        fill="none"
-        stroke="currentColor"
-        viewBox="0 0 24 24"
-      >
-        <path
-          stroke-linecap="round"
-          stroke-linejoin="round"
-          stroke-width="2"
-          d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z"
-        />
-      </svg>
-      <h3 class="mt-2 text-sm font-medium text-gray-900">提出ファイルがありません</h3>
-      <p class="mt-1 text-sm text-gray-500">
-        この課題にはまだ提出ファイルがありません。
-      </p>
-    </div>
+      icon="document"
+      title="提出ファイルがありません"
+      message="この課題にはまだ提出ファイルがありません。"
+      action-label="課題一覧に戻る"
+      :action-to="`/tasks/${className}`"
+    />
 
     <!-- ファイル一覧テーブル -->
     <div v-else>
@@ -133,6 +122,8 @@ import FileTable from '../components/FileTable.vue';
 import SearchBox from '../components/SearchBox.vue';
 import LoadingSkeleton from '../components/LoadingSkeleton.vue';
 import ErrorAlert from '../components/ErrorAlert.vue';
+import EmptyState from '../components/EmptyState.vue';
+import Breadcrumb, { type BreadcrumbItem } from '../components/Breadcrumb.vue';
 
 /**
  * FileListView
@@ -158,6 +149,13 @@ const {
   setSearch,
   setSortColumn,
 } = useFileList(className, taskId);
+
+// パンくずリスト
+const breadcrumbItems = computed<BreadcrumbItem[]>(() => [
+  { label: 'ホーム', to: '/' },
+  { label: className, to: `/tasks/${className}` },
+  { label: taskId, to: `/files/${className}/${taskId}` },
+]);
 
 /**
  * 統計情報: 提出者総数（ユニークな学生ID数）
