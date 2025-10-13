@@ -1,5 +1,5 @@
 <template>
-  <div class="bg-red-50 border border-red-200 rounded-lg p-4">
+  <div class="bg-red-50 border border-red-200 rounded-lg p-4" role="alert" aria-live="assertive">
     <div class="flex items-start">
       <!-- エラーアイコン -->
       <div class="flex-shrink-0">

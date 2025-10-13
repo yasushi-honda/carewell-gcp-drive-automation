@@ -1,5 +1,5 @@
 <template>
-  <div class="animate-pulse">
+  <div class="animate-pulse" role="status" aria-busy="true" aria-label="読み込み中">
     <!-- カード形式のスケルトン -->
     <div
       v-if="variant === 'card'"

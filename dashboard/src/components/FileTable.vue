@@ -132,10 +132,12 @@
     <!-- モバイル: カード表示 (md未満) -->
     <div class="md:hidden space-y-4">
       <!-- ソートボタン（モバイル） -->
-      <div class="flex gap-2 pb-4">
+      <div class="flex gap-2 pb-4" role="group" aria-label="ソートオプション">
         <button
           @click="$emit('sort', 'student_name')"
           class="flex-1 inline-flex items-center justify-center px-3 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+          :aria-pressed="sortColumn === 'student_name'"
+          :aria-label="`学生名順でソート${sortColumn === 'student_name' ? (sortOrder === 'asc' ? '（昇順）' : '（降順）') : ''}`"
         >
           学生名順
           <svg
@@ -145,6 +147,7 @@
             fill="none"
             stroke="currentColor"
             viewBox="0 0 24 24"
+            aria-hidden="true"
           >
             <path
               stroke-linecap="round"
@@ -157,6 +160,8 @@
         <button
           @click="$emit('sort', 'submit_date')"
           class="flex-1 inline-flex items-center justify-center px-3 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+          :aria-pressed="sortColumn === 'submit_date'"
+          :aria-label="`提出日時順でソート${sortColumn === 'submit_date' ? (sortOrder === 'asc' ? '（昇順）' : '（降順）') : ''}`"
         >
           提出日時順
           <svg
@@ -166,6 +171,7 @@
             fill="none"
             stroke="currentColor"
             viewBox="0 0 24 24"
+            aria-hidden="true"
           >
             <path
               stroke-linecap="round"
