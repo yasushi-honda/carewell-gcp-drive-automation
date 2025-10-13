@@ -89,14 +89,16 @@ def main(request):
 
             # If class or task not found (likely not yet created), return success with zero counts
             if page is None:
-                logger.info(f"Class or task not yet created, skipping: {class_name}/{task_pattern}")
+                logger.info(
+                    f"Class or task not yet created, skipping: {class_name}/{task_pattern}"
+                )
                 return {
                     "status": "success",
                     "message": "Task not yet created",
                     "submissions_found": 0,
                     "processed": 0,
                     "skipped": 0,
-                    "failed": 0
+                    "failed": 0,
                 }, 200
 
             logger.info(f"Successfully navigated to task page: {page.url}")

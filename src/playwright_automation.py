@@ -308,19 +308,19 @@ class PlaywrightAutomationEngine:
 
         # Navigate through the pages
         self._navigate_to_class_list()
-        
+
         # Check if class exists
         if not self._select_class(class_name):
             logger.info(f"Class not found, skipping: {class_name}")
             return None
-        
+
         self._navigate_to_report_grading()
-        
+
         # Check if task exists
         if not self._select_task(task_pattern):
             logger.info(f"Task not found, skipping: {task_pattern}")
             return None
-        
+
         self._show_all_submissions()
 
         logger.info("Successfully navigated to task page")
