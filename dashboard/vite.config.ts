@@ -10,6 +10,24 @@ export default defineConfig({
       '@': fileURLToPath(new URL('./src', import.meta.url))
     }
   },
+  test: {
+    globals: true,
+    environment: 'happy-dom',
+    setupFiles: ['./src/test/setup.ts'],
+    coverage: {
+      provider: 'v8',
+      reporter: ['text', 'json', 'html'],
+      exclude: [
+        'node_modules/',
+        'src/test/',
+        '**/*.spec.ts',
+        '**/*.test.ts',
+        'vite.config.ts',
+        'tailwind.config.js',
+        'postcss.config.js'
+      ]
+    }
+  },
   build: {
     outDir: 'dist',
     sourcemap: false,
