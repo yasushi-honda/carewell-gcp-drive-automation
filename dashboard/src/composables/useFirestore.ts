@@ -1,5 +1,18 @@
 // src/composables/useFirestore.ts
 // Firestore data access layer
+//
+// Phase 2 認証対応について:
+// このファイルは認証対応のための変更は不要です。
+// Firebase SDKが自動的に認証トークンをリクエストに含めるため、
+// Firestore Security Rulesの変更だけで認証制御が可能です。
+//
+// Phase 2での変更点:
+// - firestore.rules を変更: allow read: if request.auth != null;
+// - useAuth.ts を追加（認証状態管理）
+// - LoginView.vue を追加（ログイン画面）
+// - Router に認証ガードを追加
+//
+// 参考: docs/phase2-authentication-design.md
 
 import { getDb } from '../config/firebase';
 import {
