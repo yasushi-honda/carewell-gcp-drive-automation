@@ -387,6 +387,56 @@
 
 ## 実装完了記録（Implementation Log）
 
+### 2025-10-14: パンくずリストナビゲーションバグ修正
+
+**問題**: パンくずリストのリンクをクリックしても何も表示されない
+
+**症状**:
+- TaskListView: クラス名のパンくずリストリンクをクリックしても反応なし
+- FileListView: クラス名、タスクIDのパンくずリストリンクが機能しない
+- EmptyState: アクションボタンのリンクも同様の問題
+
+**根本原因**:
+- Router定義: `/class/:className`, `/class/:className/task/:taskId`
+- ビュー実装（誤）: `/tasks/${className}`, `/files/${className}/${taskId}`
+- パス不一致によりルーターが該当ルートを見つけられない
+
+**修正内容**:
+
+1. **TaskListView.vue** (line 97)
+   ```typescript
+   // 修正前
+   { label: className, to: `/tasks/${className}` }
+   // 修正後
+   { label: className, to: `/class/${className}` }
+   ```
+
+2. **FileListView.vue** (lines 156-157)
+   ```typescript
+   // パンくずリスト修正前
+   { label: className, to: `/tasks/${className}` }
+   { label: taskId, to: `/files/${className}/${taskId}` }
+   // 修正後
+   { label: className, to: `/class/${className}` }
+   { label: taskId, to: `/class/${className}/task/${taskId}` }
+   ```
+
+3. **FileListView.vue** (line 101)
+   ```typescript
+   // EmptyState修正前
+   :action-to="`/tasks/${className}`"
+   // 修正後
+   :action-to="`/class/${className}`"
+   ```
+
+**コミット**: `09b6289` - "fix: Correct breadcrumb and navigation paths"
+
+**検証**: 本番環境（https://carewell-automation.web.app/）で動作確認済み
+- パンくずリストリンク正常動作
+- EmptyStateアクションボタン正常動作
+
+---
+
 ### 2025-10-13: Phase 1 全タスク完了 🎉
 
 **完了タスク数**: 48/48 (100%)
