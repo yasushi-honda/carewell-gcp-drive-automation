@@ -37,6 +37,10 @@
 - **対象Cloud Run**: `carewell-file-collector`
 - **リージョン**: asia-northeast1（東京）
 - **認証方式**: OIDC (Service Account)
+- **タイムアウト設定**:
+  - **Cloud Scheduler `attemptDeadline`**: 540秒（9分）
+  - **Cloud Run `timeout`**: 540秒（9分）
+  - **更新日**: 2025年10月20日（commit 7692bc8以降の5秒待機追加によるタイムアウト対策）
 
 #### 申し込み状況取得システム（別システム）⚠️絶対削除禁止
 
@@ -723,9 +727,18 @@ gcloud logging tail "resource.type=cloud_run_revision AND \
 
 ---
 
-#### エラー3: HTTP 504 Gateway Timeout
+#### エラー3: HTTP 504 Gateway Timeout / DEADLINE_EXCEEDED
 
 **症状:**
+
+```json
+{
+  "status": "DEADLINE_EXCEEDED",
+  "debugInfo": "URL_TIMEOUT-TIMEOUT_WEB. Original HTTP response code number = 504"
+}
+```
+
+または
 
 ```
 ERROR: HTTP request failed with status code 504
@@ -733,6 +746,7 @@ Message: Upstream request timeout
 ```
 
 **原因:**
+- **Cloud Schedulerの`attemptDeadline`が処理時間より短い** ← 2025年10月20日に発生
 - Cloud Run Functionの実行時間が540秒（9分）を超過
 - 大量のファイル処理
 
@@ -754,15 +768,32 @@ gcloud logging read "resource.type=cloud_run_revision AND \
   --format json | \
   jq -r '.[] | "\(.timestamp) Files: \(.jsonPayload.summary.processed_files)"'
 
-# 3. タイムアウト設定を増加（最大3600秒まで可能）
+# 3. Cloud Schedulerのタイムアウトを確認
+gcloud scheduler jobs describe [JOB_NAME] \
+  --location=asia-northeast1 \
+  --format="value(attemptDeadline)"
+
+# 4a. Cloud Schedulerのタイムアウトが短い場合は延長
+gcloud scheduler jobs update http [JOB_NAME] \
+  --location=asia-northeast1 \
+  --attempt-deadline=540s
+
+# 4b. Cloud Runのタイムアウト設定を増加（最大3600秒まで可能）
 gcloud run services update carewell-file-collector \
   --timeout=900s \
   --region=asia-northeast1
 ```
 
+**2025年10月20日の対応記録:**
+- **問題**: commit 7692bc8で5秒待機を追加後、処理時間が280秒（約4分40秒）に延長
+- **症状**: Cloud Schedulerの`attemptDeadline`が180秒（3分）のため、処理完了前にDEADLINE_EXCEEDEDエラー
+- **対応**: 全14個のファイル収集ジョブの`attemptDeadline`を540秒（9分）に延長
+- **コマンド**: `gcloud scheduler jobs update http [JOB_NAME] --location=asia-northeast1 --attempt-deadline=540s`
+
 **恒久的対策:**
 - バッチ処理の導入（一度に処理する件数を制限）
 - 非同期処理の導入
+- **Cloud SchedulerとCloud Runのタイムアウトを同じ値に設定する**（推奨）
 
 ---
 
