@@ -385,11 +385,15 @@ class PlaywrightAutomationEngine:
             while True:
                 logger.info(f"Processing page {current_page}")
 
-                # Wait for table to be fully rendered after frame reload
-                # (table rendering is delayed after "全て" tab click)
+                # Wait for table to be fully rendered after frame reload or page transition
                 if current_page == 1:
+                    # Frame reload after "全て" tab click
                     logger.info("Waiting for table to render after frame reload...")
                     time.sleep(5)
+                elif current_page > 1:
+                    # Page transition via ASP.NET __doPostBack
+                    logger.info("Waiting for table to render after page navigation...")
+                    time.sleep(3)
 
                 # Wait for data to load
                 logger.info("Waiting for submission table rows...")
@@ -500,9 +504,6 @@ class PlaywrightAutomationEngine:
 
                     # Select next page by value (page numbers are 1-indexed)
                     pagination_select.select_option(str(next_page))
-
-                    # Wait for page transition
-                    time.sleep(2)
 
                     current_page = next_page
 
