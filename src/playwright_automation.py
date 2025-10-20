@@ -385,8 +385,16 @@ class PlaywrightAutomationEngine:
             while True:
                 logger.info(f"Processing page {current_page}")
 
+                # Wait for table to be fully rendered after frame reload
+                # (table rendering is delayed after "全て" tab click)
+                if current_page == 1:
+                    logger.info("Waiting for table to render after frame reload...")
+                    time.sleep(5)
+
                 # Wait for data to load
-                list_frame.wait_for_selector("tr.standard_grid_item", timeout=10000)
+                logger.info("Waiting for submission table rows...")
+                list_frame.wait_for_selector("tr.standard_grid_item", timeout=30000)
+                logger.info("✓ Submission table rows found")
 
                 # First pass: Extract all basic submission info from current page
                 rows = list_frame.locator("tr.standard_grid_item").all()
