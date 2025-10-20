@@ -193,8 +193,10 @@ playwright install chromium
 
 | リソース | 名前 | リージョン | 用途 |
 |---------|------|-----------|------|
-| Cloud Run | carewell-file-collector | asia-northeast1 | Functions実行 |
-| Cloud Scheduler | carewell-class{01-05,08-09}-task{01-02} | asia-northeast1 | 自動実行（14ジョブ、30分間隔） |
+| Cloud Run | carewell-file-collector | asia-northeast1 | ファイル収集Functions実行 |
+| Cloud Run | carewell-automation | asia-northeast1 | 申し込み状況取得Functions実行 |
+| Cloud Scheduler | carewell-class{01-05,08-09}-task{01-02} | asia-northeast1 | ファイル収集自動実行（14ジョブ、30分間隔） |
+| Cloud Scheduler | carewell-automation-pattern{1-5,8-9} | asia-northeast1 | **申し込み状況取得自動実行（7ジョブ、30分間隔）⚠️絶対削除禁止** |
 | Artifact Registry | carewell-functions | asia-northeast1 | イメージ保存 |
 | Firestore | carewell-native | asia-northeast1 | 重複チェック用メタデータストア（NATIVE） |
 | Firestore | (default) | asia-northeast1 | 未使用（DATASTORE_MODE、削除不可） |
@@ -234,7 +236,9 @@ playwright install chromium
 - ✅ Googleスプレッドシート統合（自動記録・リンク生成）
 - ✅ 一時ファイル自動クリーンアップ
 - ✅ 総件数照合機能（データ完全性チェック）
-- ✅ Cloud Scheduler自動実行基盤（14ジョブ作成済み、段階的ロールアウト中）
+- ✅ Cloud Scheduler自動実行基盤
+  - ファイル収集: 14ジョブ（7クラス × 2課題）
+  - 申し込み状況取得: 7ジョブ（7クラス）⚠️別システム・絶対削除禁止
 
 ### 未実装機能（今後のタスク）
 
@@ -250,7 +254,11 @@ playwright install chromium
 
 ### 現在の構成
 
-システムは14個のCloud Schedulerジョブで自動実行されています：
+**合計21ジョブ**が稼働中：
+- **ファイル収集用（本システム）**: 14ジョブ（7クラス × 2課題）
+- **申し込み状況取得用**: 7ジョブ（7クラス）⚠️別システム・絶対削除禁止
+
+#### ファイル収集ジョブ（carewell-class系、14ジョブ）
 
 | ジョブ名 | 対象クラス | 対象課題 | 実行間隔 | 状態 |
 |---------|-----------|---------|---------|------|
@@ -268,6 +276,22 @@ playwright install chromium
 | carewell-class08-task02 | №08 | 課題② | 30分毎 | ⏸️ PAUSED |
 | carewell-class09-task01 | №09 | 課題① | 30分毎 | ⏸️ PAUSED |
 | carewell-class09-task02 | №09 | 課題② | 30分毎 | ⏸️ PAUSED |
+
+#### 申し込み状況取得ジョブ（carewell-automation-pattern系、7ジョブ）⚠️絶対削除禁止
+
+| ジョブ名 | 対象クラス | スプレッドシートシート名 | 実行間隔 | 状態 |
+|---------|-----------|---------------------|---------|------|
+| carewell-automation-pattern1 | №01 | Team1 | 30分毎 | ✅ ENABLED |
+| carewell-automation-pattern2 | №02 | Team2 | 30分毎 | ✅ ENABLED |
+| carewell-automation-pattern3 | №03 | Team3 | 30分毎 | ✅ ENABLED |
+| carewell-automation-pattern4 | №04 | Team4 | 30分毎 | ✅ ENABLED |
+| carewell-automation-pattern5 | №05 | Team5 | 30分毎 | ✅ ENABLED |
+| carewell-automation-pattern8 | №08 | Team8 | 30分毎 | ✅ ENABLED |
+| carewell-automation-pattern9 | №09 | Team9 | 30分毎 | ✅ ENABLED |
+
+**重要**: これらのジョブは別システム（`carewell-automation`）が使用しており、申し込み状況の自動取得を行っています。**絶対に削除・停止しないでください。**
+
+**スプレッドシートID**: `1ZhSDpgxsC0NRkZy2cCmTBqYnKsZ90KRDc8UrKuodQMQ`
 
 ### 段階的ロールアウト戦略
 
