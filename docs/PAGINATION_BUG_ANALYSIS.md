@@ -360,6 +360,97 @@ try:
 
 ---
 
+## 📋 第2回修正後の検証結果とタイムアウト問題
+
+### 2025-11-03 19:03 JST - 第2回修正後の検証結果
+
+#### デプロイ状況
+- **コミット**: 5587052
+- **デプロイ時刻**: 2025-11-03 18:40 JST
+- **リビジョン**: carewell-file-collector-00128-gr4
+
+#### 検証結果（carewell-class01-task01、149件）
+
+**実行時刻**: 2025-11-03 10:03:00 UTC (19:03:00 JST)
+
+| 項目 | 結果 |
+|------|------|
+| ページネーション処理 | ✅ **成功** |
+| 1ページ目データ取得 | ✅ 100件取得 |
+| 2ページ目データ取得 | ✅ 49件取得 |
+| "Total pages available: 2" | ✅ 出力確認 |
+| "Processing page 2" | ✅ 出力確認 |
+| "Extracted basic info for 49 submissions on page 2" | ✅ 出力確認 |
+| ファイルアップロード | ❌ **0件** |
+| 処理完了 | ❌ **タイムアウト** |
+
+**エラー内容**:
+```
+2025-11-03T10:12:00 - ERROR
+HTTP Status: 504 (Gateway Timeout)
+Latency: 540.000433943s
+Request: POST / (Cloud Scheduler)
+```
+
+#### 判明した新たな問題
+
+**ページネーション処理は完全に修正されたが、タイムアウト（540秒）により処理が完了しない**
+
+**処理フロー詳細**:
+```
+10:03:00 - 処理開始（class01-task01、149件）
+10:03:28 - Processing page 1
+10:03:42 - Extracted basic info for 100 submissions on page 1
+10:03:42～10:11:00 - download link取得（1ページ目、約7分18秒）
+10:11:00 - ✓ Frame reference refreshed for pagination check
+10:11:00 - Total pages available: 2
+10:11:00 - Navigating to page 2/2
+10:11:00 - Processing page 2
+10:11:07 - Extracted basic info for 49 submissions on page 2
+10:11:07～10:12:00 - download link取得開始（2ページ目）
+10:12:00 - **DEADLINE_EXCEEDED** (540秒タイムアウト)
+           → ファイルダウンロード・アップロード処理に到達せず
+```
+
+**時間分析**:
+- データ取得（149件）: 約14秒
+- download link取得（100件）: 約438秒（7分18秒） = 約4.4秒/件
+- download link取得開始（2ページ目）: 約53秒経過時点でタイムアウト
+- **推定必要時間**: 約11-12分（149件 × 4.4秒 + ファイル処理時間）
+- **現在のタイムアウト**: 540秒（9分）
+
+**結論**:
+- ✅ ページネーション問題は**完全に解決**
+- ❌ タイムアウト設定が不足（540秒では149件を処理できない）
+
+#### 根本原因：タイムアウト不足
+
+**問題**:
+- Cloud Scheduler `attemptDeadline`: 540秒
+- Cloud Run Functions `timeout`: 540秒（デフォルト、確認必要）
+- 149件の処理には約11-15分必要
+
+**必要な対応**:
+タイムアウトの延長（540秒 → 900秒）
+
+### 次のステップ
+
+1. **Phase 1: タイムアウト延長**（推奨）
+   - Cloud Scheduler attemptDeadline: 540秒 → 900秒
+   - Cloud Run timeout: 540秒 → 900秒（必要に応じて）
+   - 対象: carewell-class01-task01のみ
+   - リスク: 低
+   - 効果: 即座に149件処理可能
+
+2. **Phase 2: パフォーマンス最適化**（将来の改善）
+   - download link取得処理の効率化
+   - 並列処理の導入
+   - 対象: 全ジョブ
+   - リスク: 中～高
+   - 効果: 処理時間短縮
+
+---
+
 **作成者**: Claude Code
 **レビュー**: 要レビュー
-**ステータス**: Updated - 第2回修正が必要
+**ステータス**: Timeout Issue Identified - Phase 1 Required

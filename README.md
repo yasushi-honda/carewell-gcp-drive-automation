@@ -207,7 +207,10 @@ playwright install chromium
 
 - **メモリ**: 2Gi
 - **CPU**: 1
-- **タイムアウト**: 540秒
+- **Cloud Run タイムアウト**: 900秒（2025-11-03延長: 540秒→900秒、理由: 149件処理対応）
+- **Cloud Scheduler attemptDeadline**:
+  - class01-task01: 900秒（2025-11-03延長、理由: 149件処理対応）
+  - その他: 540秒（デフォルト）
 - **認証**: サービスアカウント認証（github-actions-sa）
 
 ## セキュリティ
