@@ -262,6 +262,104 @@ def _get_download_link(self, detail_url: str, list_url: str) -> dict:
 
 ---
 
+## 📋 更新履歴
+
+### 2025-11-03 09:00 JST - 第1回修正後の検証結果
+
+#### デプロイ状況
+- **コミット**: b416e3b
+- **デプロイ時刻**: 2025-11-03 08:33:45 JST
+- **リビジョン**: carewell-file-collector-00127-gvd
+
+#### 検証結果
+
+**❌ ページネーション処理は依然として動作せず**
+
+検証ログ（2025-11-02 23:41:50 JST）:
+```
+⚠️ Count mismatch! Extracted 100 submissions but UI shows 140
+Successfully extracted 100 submissions from 1 page(s)
+WARNING - Pagination navigation failed: Frame was detached, assuming last page
+```
+
+#### 判明した真の問題
+
+**第1回修正では不十分：ページネーション判定時点でフレームが再度detachedになる**
+
+```
+処理フロー:
+1. [385-399行] ページループ先頭でフレーム更新 ✅ 動作OK
+2. [468-492行] download link取得（100回のページ遷移）
+   → この間にフレームがdetachedになる ❌
+3. [494-527行] ページネーション判定処理
+   → detachedフレームを使用 ❌
+   → Exception: "Frame was detached"
+   → except節で「最終ページ」と誤判定
+   → ループ終了（2ページ目に進めず）
+```
+
+#### 根本原因の詳細
+
+**download link取得処理による副作用：**
+
+`_get_download_link`メソッドは以下を実行：
+1. 詳細ページに遷移（`self.page.goto(detail_url)`）
+2. download link取得
+3. 一覧ページに戻る（`self.page.goto(list_url)`）
+
+これを100回繰り返すと：
+- 100回のページ遷移（詳細 → 一覧 → 詳細 → 一覧...）
+- フレーム参照が古くなる（ページ遷移のたびにフレームが再生成される）
+- ページループ先頭で取得したフレーム参照は、100回後には無効
+
+#### 必要な追加修正
+
+**ページネーション判定の直前にもフレーム参照を更新する**
+
+対象箇所: `src/playwright_automation.py` 494行目付近
+
+```python
+# 現在の実装（修正前）
+# Second pass: Get download links for each submission on current page
+for basic in submission_basics:
+    # ... download link処理 (100回のページ遷移)
+
+# Check for pagination and navigate to next page
+try:
+    pagination_select = list_frame.locator(...)  # ❌ detachedフレームを使用
+```
+
+```python
+# 必要な実装（修正後）
+# Second pass: Get download links for each submission on current page
+for basic in submission_basics:
+    # ... download link処理 (100回のページ遷移)
+
+# 🆕 ページネーション判定前にフレーム参照を再更新
+list_frame = None
+for frame in self.page.frames:
+    if frame.name == CarewellSelectors.FRAME_LIST:
+        list_frame = frame
+        break
+
+if not list_frame:
+    logger.warning("'list' frame not found for pagination check, using main page")
+    list_frame = self.page
+
+# Check for pagination and navigate to next page
+try:
+    pagination_select = list_frame.locator(...)  # ✅ 最新のフレームを使用
+```
+
+#### 次のステップ
+
+1. 追加修正の実装（ページネーション判定前のフレーム更新）
+2. ログレベルをDEBUGに変更してデバッグログを有効化（オプション）
+3. 再デプロイ
+4. 再検証（140件ケースで2ページ目処理を確認）
+
+---
+
 **作成者**: Claude Code
 **レビュー**: 要レビュー
-**ステータス**: Draft
+**ステータス**: Updated - 第2回修正が必要

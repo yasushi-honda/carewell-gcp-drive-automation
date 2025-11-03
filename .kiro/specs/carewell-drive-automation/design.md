@@ -2183,3 +2183,160 @@ while True:  # ページネーションループ
 - **実装者**: Claude Code
 - **レビュー**: 要レビュー
 
+
+---
+
+## 判断6: ページネーション判定前のフレーム参照更新（第2回修正）
+
+### 問題の背景
+
+**第1回修正後の検証結果** (2025-11-03 09:00 JST):
+- デプロイ: ✅ 完了（コミット b416e3b）
+- 動作: ❌ 不完全
+- 現象: 140件中100件のみ処理、2ページ目に進めず
+- エラー: "Pagination navigation failed: Frame was detached"
+
+**根本原因**:
+第1回修正（ページループ先頭でのフレーム更新）は正しく動作したが、その後100回のdownload link取得処理（詳細ページ↔一覧ページの往復）により、フレーム参照が再度detachedになり、ページネーション判定時点で使用不能になった。
+
+### 問題の詳細
+
+```
+処理フロー:
+1. [385-399行] ページループ先頭でフレーム更新 ✅ 第1回修正で動作
+2. [468-492行] download link取得ループ（100回のページ遷移）
+   ├─ 詳細ページに移動
+   ├─ download link取得
+   └─ 一覧ページに戻る
+   → この間にフレームがdetached ❌
+3. [494-527行] ページネーション判定処理
+   → detachedフレームを使用 ❌
+   → Exception発生
+   → except節で「最終ページ」と誤判定
+   → ループ終了
+```
+
+### 解決策
+
+**ページネーション判定の直前でフレーム参照を再更新**
+
+**実装位置**: `src/playwright_automation.py` 494-508行（新規追加）
+
+```python
+# Refresh frame reference before pagination check
+# (frame may be detached after 100 page navigations in download link loop)
+list_frame = None
+for frame in self.page.frames:
+    if frame.name == CarewellSelectors.FRAME_LIST:
+        list_frame = frame
+        break
+
+if not list_frame:
+    logger.warning(
+        "'list' frame not found for pagination check, using main page"
+    )
+    list_frame = self.page
+
+logger.info("✓ Frame reference refreshed for pagination check")
+```
+
+### 技術的判断
+
+**選択理由**:
+1. **確実性**: download link処理後、必ず最新のフレームを取得
+2. **明示性**: ログで更新タイミングを明確化（"✓ Frame reference refreshed for pagination check"）
+3. **一貫性**: ページループ先頭と同じパターンを使用
+4. **保守性**: コメントで更新理由を明記（100回のページ遷移後のdetached対策）
+
+**代替案と却下理由**:
+1. **download linkループ内でフレーム更新**: 100回の更新は不要、ページネーション判定前の1回で十分
+2. **try-except内でフレーム再取得**: エラー後の回復より事前の更新が望ましい
+3. **フレーム有効性チェック**: Playwrightは明示的なチェック機能を提供していない
+
+### 実装詳細
+
+**変更ファイル**: `src/playwright_automation.py`
+**変更メソッド**: `PlaywrightAutomationEngine.get_submission_list`
+**変更行**: 494-508行追加（download linkループと pagination checkの間）
+
+**修正前後の比較**:
+
+```python
+# 修正前
+for basic in submission_basics:
+    # download link処理...
+
+# Check for pagination and navigate to next page  # ← detachedフレーム使用
+try:
+    pagination_select = list_frame.locator(...)
+```
+
+```python
+# 修正後
+for basic in submission_basics:
+    # download link処理...
+
+# 🆕 フレーム参照を再更新
+list_frame = None
+for frame in self.page.frames:
+    if frame.name == CarewellSelectors.FRAME_LIST:
+        list_frame = frame
+        break
+
+if not list_frame:
+    logger.warning("'list' frame not found for pagination check, using main page")
+    list_frame = self.page
+
+logger.info("✓ Frame reference refreshed for pagination check")
+
+# Check for pagination and navigate to next page  # ← 最新フレーム使用
+try:
+    pagination_select = list_frame.locator(...)
+```
+
+### 期待される効果
+
+- ✅ "Frame was detached" エラーが発生しない
+- ✅ ページネーション判定が正常に実行される
+- ✅ 2ページ目への遷移が成功する
+- ✅ 140件全件の処理が完了する
+- ✅ "✓ Count verification passed: 140/140" が出力される
+
+### 検証計画
+
+**テストケース**: 140件クラス
+
+**期待ログ**:
+```
+Processing page 1
+Extracted basic info for 100 submissions on page 1
+Getting download link for: [学生1]
+...
+Getting download link for: [学生100]
+✓ Frame reference refreshed for pagination check  # ← 新規ログ
+Total pages available: 2
+Navigating to page 2/2
+Processing page 2
+Extracted basic info for 40 submissions on page 2
+Getting download link for: [学生101]
+...
+Getting download link for: [学生140]
+✓ Frame reference refreshed for pagination check  # ← 新規ログ
+Reached last page 2/2
+Successfully extracted 140 submissions from 2 page(s)
+✓ Count verification passed: 140/140
+```
+
+### 関連ドキュメント
+
+- [問題分析レポート（更新版）](../../../docs/PAGINATION_BUG_ANALYSIS.md#更新履歴)
+- [修正計画（第2回）](../../../docs/PAGINATION_FIX_PLAN.md#第2回修正計画)
+- [テスト計画](../../../docs/PAGINATION_TEST_PLAN.md)
+
+### 履歴
+
+- **2025-11-03 09:00 JST**: 第1回修正の検証で問題発見
+- **2025-11-03 09:30 JST**: 根本原因分析、第2回修正実装
+- **実装者**: Claude Code
+- **レビュー**: 要レビュー
+

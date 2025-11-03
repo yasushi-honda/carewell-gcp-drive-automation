@@ -378,6 +378,101 @@ def _get_download_link(self, detail_url: str, list_url: str) -> dict:
 
 ---
 
+## 📋 第1回修正の検証結果と追加修正
+
+### 第1回修正の結果
+
+**実装日**: 2025-11-03 08:30 JST
+**コミット**: b416e3b
+**ステータス**: ❌ 不完全 - 追加修正が必要
+
+**検証結果**:
+- フレーム参照更新コードは正しくデプロイされた
+- しかし、100回のdownload link取得後、ページネーション判定時点でフレームが再度detachedになる
+- エラー: "Pagination navigation failed: Frame was detached"
+- 結果: 140件中100件のみ処理、2ページ目に進めず
+
+### 第2回修正計画
+
+#### 修正内容: ページネーション判定前のフレーム参照更新
+
+**対象ファイル**: `src/playwright_automation.py`
+**対象行**: 493行目（download linkループの直後）
+
+**追加するコード**:
+```python
+# Refresh frame reference before pagination check
+# (frame may be detached after 100 page navigations in download link loop)
+list_frame = None
+for frame in self.page.frames:
+    if frame.name == CarewellSelectors.FRAME_LIST:
+        list_frame = frame
+        break
+
+if not list_frame:
+    logger.warning(
+        "'list' frame not found for pagination check, using main page"
+    )
+    list_frame = self.page
+
+logger.info("✓ Frame reference refreshed for pagination check")
+```
+
+**挿入位置**:
+- 現在の493行目（`# Check for pagination and navigate to next page`コメントの直前）
+- download linkループ（468-492行）の直後
+
+#### 修正の効果
+
+- ✅ download link取得による100回のページ遷移後も、最新のフレームを参照
+- ✅ ページネーション判定処理で "Frame was detached" エラーが発生しない
+- ✅ 2ページ目への遷移が正常に実行される
+- ✅ 140件全件の処理が完了
+
+#### 実装手順
+
+1. `src/playwright_automation.py` を編集
+2. 493行目の直前に、フレーム参照更新コードを追加（約14行）
+3. ローカルでコード確認
+4. git add, commit, push
+5. GitHub Actionsでデプロイ
+6. 本番環境で再検証
+
+#### テスト計画
+
+**テストケース**: 140件クラス（令和7年度 デジタル中核人材養成研修 №？、課題①）
+
+**期待ログ**:
+```
+Processing page 1
+Extracted basic info for 100 submissions on page 1
+Getting download link for: [学生1]
+...
+Getting download link for: [学生100]
+✓ Frame reference refreshed for pagination check
+Total pages available: 2
+Navigating to page 2/2
+Processing page 2
+Extracted basic info for 40 submissions on page 2
+Getting download link for: [学生101]
+...
+Getting download link for: [学生140]
+✓ Frame reference refreshed for pagination check
+Reached last page 2/2
+Successfully extracted 140 submissions from 2 page(s)
+✓ Count verification passed: 140/140
+```
+
+#### 成功基準
+
+- ✅ "Frame was detached" エラーが発生しない
+- ✅ "Total pages available: 2" ログが出力される
+- ✅ "Processing page 2" ログが出力される
+- ✅ 140件全件処理完了（"Successfully extracted 140 submissions"）
+- ✅ 件数検証成功（"✓ Count verification passed: 140/140"）
+
+---
+
 **作成者**: Claude Code
 **レビュー**: 要レビュー
-**ステータス**: Ready for Implementation
+**ステータス**: Ready for 2nd Implementation

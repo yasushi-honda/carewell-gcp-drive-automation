@@ -491,6 +491,22 @@ class PlaywrightAutomationEngine:
                             exc_info=True,
                         )
 
+                # Refresh frame reference before pagination check
+                # (frame may be detached after 100 page navigations in download link loop)
+                list_frame = None
+                for frame in self.page.frames:
+                    if frame.name == CarewellSelectors.FRAME_LIST:
+                        list_frame = frame
+                        break
+
+                if not list_frame:
+                    logger.warning(
+                        "'list' frame not found for pagination check, using main page"
+                    )
+                    list_frame = self.page
+
+                logger.info("✓ Frame reference refreshed for pagination check")
+
                 # Check for pagination and navigate to next page
                 try:
                     pagination_select = list_frame.locator(
