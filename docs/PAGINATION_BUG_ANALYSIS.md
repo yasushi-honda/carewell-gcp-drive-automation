@@ -596,6 +596,59 @@ Request: POST / (Cloud Scheduler)
 
 ---
 
+## 📋 修正Phase 3: ページ遷移待機時間延長（2025-11-04実施）
+
+### 問題の発見
+
+**2025-11-04 02:26 JST実行時** - 早期重複チェック実装後の初回テスト:
+- ✅ 早期重複チェック成功: 100件のdownload linkスキップ達成
+- ✅ 1ページ目: 正常処理（100件、86件重複検出）
+- ❌ 2ページ目: テーブルセレクタ待機で30秒タイムアウト
+
+**エラー内容**:
+```
+Error extracting submissions: Timeout 30000ms exceeded.
+  at wait_for_selector("tr.standard_grid_item", timeout=30000)
+```
+
+**根本原因**:
+- 2ページ目のページ遷移後の待機時間: 3秒
+- 早期重複チェック（Firestoreクエリ）により処理順序が変化
+- テーブル要素の待機とFirestoreクエリのタイミング競合
+
+### 実施した修正
+
+**変更内容**: ページ遷移後の待機時間延長
+```python
+# Before
+elif current_page > 1:
+    logger.info("Waiting for table to render after page navigation...")
+    time.sleep(3)  # 3秒
+
+# After
+elif current_page > 1:
+    logger.info("Waiting for table to render after page navigation (5 seconds)...")
+    time.sleep(5)  # 5秒（1ページ目と統一）
+```
+
+**修正ファイル**:
+- `src/playwright_automation.py` (lines 416-421)
+
+**変更日時**: 2025-11-04
+
+**影響範囲**:
+- 2ページ以上のケースでのみ影響
+- class01-task01（2ページ）: +2秒の追加待機
+- 全体処理時間への影響: 微小（早期チェックで4分以上短縮済み）
+
+### 期待される効果
+
+1. ✅ 2ページ目のタイムアウトエラー解消
+2. ✅ 149件全件の正常処理
+3. ✅ 早期重複チェックとの併用で最適化された処理フロー
+
+---
+
 **作成者**: Claude Code
 **レビュー**: 要レビュー
-**ステータス**: Duplicate Check Timing Issue Identified - Optimization Required
+**ステータス**: Optimization Complete - Testing Required
