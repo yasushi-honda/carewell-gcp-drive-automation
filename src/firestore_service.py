@@ -97,6 +97,58 @@ class FirestoreService:
             # Continue processing (fail-open strategy for high availability)
             return False
 
+    def check_already_uploaded_by_student_date(
+        self,
+        class_name: str,
+        task_id: str,
+        student_id: str,
+        submit_date: str,
+    ) -> Optional[dict]:
+        """
+        Check if student has already uploaded a file on the given date
+        (early duplicate check without filename)
+
+        Args:
+            class_name: Class name
+            task_id: Task ID (e.g., "課題①")
+            student_id: Student ID (e.g., N9902913)
+            submit_date: Submission date/time
+
+        Returns:
+            Upload record dict if exists, None otherwise
+        """
+        try:
+            # Collection path: {class_name}/{task_id}/documents
+            collection_ref = (
+                self.db.collection(class_name)
+                .document(task_id)
+                .collection("documents")
+            )
+
+            # Query by student_id and submit_date fields
+            docs = (
+                collection_ref.where("student_id", "==", student_id)
+                .where("submit_date", "==", submit_date)
+                .limit(1)
+                .stream()
+            )
+
+            for doc in docs:
+                logger.info(
+                    f"File already uploaded (early check): student_id={student_id}, submit_date={submit_date}"
+                )
+                return doc.to_dict()
+
+            return None
+
+        except Exception as e:
+            logger.error(
+                f"Error in early duplicate check for student_id={student_id}, submit_date={submit_date}: {e}",
+                exc_info=True,
+            )
+            # Return None to allow processing on error (fail-open for availability)
+            return None
+
     def check_already_uploaded(
         self,
         class_name: str,

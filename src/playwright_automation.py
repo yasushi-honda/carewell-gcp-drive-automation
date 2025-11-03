@@ -326,9 +326,19 @@ class PlaywrightAutomationEngine:
         logger.info("Successfully navigated to task page")
         return self.page
 
-    def get_submission_list(self) -> dict:
+    def get_submission_list(
+        self,
+        class_name: Optional[str] = None,
+        task_id: Optional[str] = None,
+        firestore_service=None,
+    ) -> dict:
         """
         Extract submission file information from all pages
+
+        Args:
+            class_name: Class name for early duplicate check (optional)
+            task_id: Task ID for early duplicate check (optional)
+            firestore_service: FirestoreService instance for early duplicate check (optional)
 
         Returns:
             Dictionary containing:
@@ -464,8 +474,64 @@ class PlaywrightAutomationEngine:
                     f"Extracted basic info for {len(submission_basics)} submissions on page {current_page}"
                 )
 
-                # Second pass: Get download links for each submission on current page
+                # Early duplicate check: Mark duplicates before download link retrieval
+                if firestore_service and class_name and task_id:
+                    logger.info(
+                        f"Performing early duplicate check for {len(submission_basics)} submissions"
+                    )
+
+                    for basic in submission_basics:
+                        # Check if already uploaded (by student_id + submit_date)
+                        try:
+                            existing_upload = (
+                                firestore_service.check_already_uploaded_by_student_date(
+                                    class_name,
+                                    task_id,
+                                    basic.get("student_id", ""),
+                                    basic.get("submit_date", ""),
+                                )
+                            )
+
+                            if existing_upload:
+                                # Mark as duplicate
+                                basic["is_duplicate"] = True
+                                basic["skip_reason"] = "already_uploaded"
+                                logger.info(
+                                    f"Duplicate detected (early check): {basic['student_name']} (student_id={basic.get('student_id')}, submit_date={basic.get('submit_date')})"
+                                )
+                            else:
+                                basic["is_duplicate"] = False
+                        except Exception as e:
+                            logger.warning(
+                                f"Early duplicate check failed for {basic['student_name']}: {e}"
+                            )
+                            # Fail-open: if check fails, treat as non-duplicate
+                            basic["is_duplicate"] = False
+                else:
+                    # No Firestore service provided, mark all as non-duplicate
+                    logger.info(
+                        "No Firestore service provided, skipping early duplicate check"
+                    )
+                    for basic in submission_basics:
+                        basic["is_duplicate"] = False
+
+                # Second pass: Get download links for non-duplicate submissions only
                 for basic in submission_basics:
+                    # Skip download link retrieval for duplicates
+                    if basic.get("is_duplicate", False):
+                        # Add to submissions list with minimal info (no download link needed)
+                        submission = {
+                            **basic,
+                            "download_url": None,
+                            "filename": None,
+                        }
+                        all_submissions.append(submission)
+                        logger.info(
+                            f"Skipped download link retrieval (duplicate): {basic['student_name']}"
+                        )
+                        continue
+
+                    # Get download link for non-duplicates
                     try:
                         logger.info(
                             f"Getting download link for: {basic['student_name']}"

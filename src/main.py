@@ -103,8 +103,12 @@ def main(request):
 
             logger.info(f"Successfully navigated to task page: {page.url}")
 
-            # Get submission list
-            submission_data = engine.get_submission_list()
+            # Get submission list with early duplicate checking
+            submission_data = engine.get_submission_list(
+                class_name=class_name,
+                task_id=task_id,
+                firestore_service=firestore_service,
+            )
             submissions = submission_data["submissions"]
             total_count = submission_data.get("total_count")
             verified = submission_data.get("verified", False)
@@ -121,12 +125,21 @@ def main(request):
             for submission in submissions:
                 file_path = None
                 try:
+                    # Check early duplicate flag first (set during get_submission_list)
+                    if submission.get("is_duplicate", False):
+                        logger.info(
+                            f"Skipping already uploaded file (early check): student_id={submission.get('student_id')}, submit_date={submission.get('submit_date')}"
+                        )
+                        skipped_count += 1
+                        continue
+
                     if (
                         submission.get("download_url")
                         and submission.get("filename")
                         and submission.get("detail_url")
                     ):
-                        # Check if already uploaded
+                        # For non-early-duplicates, perform full check with filename
+                        # (defense-in-depth: catch any edge cases)
                         existing_upload = firestore_service.check_already_uploaded(
                             class_name,
                             task_id,
@@ -137,7 +150,7 @@ def main(request):
 
                         if existing_upload:
                             logger.info(
-                                f"Skipping already uploaded file: {submission['filename']} (Drive ID: {existing_upload.get('drive_file_id')})"
+                                f"Skipping already uploaded file (filename check): {submission['filename']} (Drive ID: {existing_upload.get('drive_file_id')})"
                             )
                             skipped_count += 1
                             continue
