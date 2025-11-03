@@ -2083,3 +2083,103 @@ graph TD
 | 10.13 | ログ追跡 | 実行IDフィルタリング |
 | 10.14 | スケール対応 | 最大40ジョブまで対応 |
 | 10.15 | コスト評価 | 24時間実行 $2.00/月 vs 16時間実行 $1.80/月（差額$0.20） |
+
+## 判断5: ページネーション処理でのフレーム参照更新
+
+**問題**: 2ページ目以降の処理時に、フレーム参照が古くなり処理が途中で中断される問題が発生しました。
+
+### 問題詳細
+
+- **発生日**: 2025-11-03
+- **影響範囲**: 提出件数が100件を超える（2ページ以上）ケース
+- **症状**: 
+  - 1ページ目の100件抽出後、download link取得ループが14/100で停止
+  - `TimeoutError: Timeout 30000ms exceeded` が発生
+  - 結果として0件と記録される
+
+### 根本原因
+
+`get_submission_list`メソッドにおいて、フレーム参照とlist_URLをページネーションループの外で1回のみ取得していたため：
+
+1. ページ遷移後もフレーム参照が更新されない
+2. `_get_download_link`内で`self.page.goto(list_url)`が実行されると、常に1ページ目に戻る
+3. 14回の遷移後、フレーム状態が不安定化し`wait_for_selector`でタイムアウト
+
+```python
+# 問題のあった実装（修正前）
+list_url = list_frame.url  # ループの外で1回のみ
+
+while True:  # ページネーションループ
+    # 古いlist_frame、古いlist_urlを使い続ける
+    for basic in submission_basics:
+        download_info = self._get_download_link(basic["detail_url"], list_url)
+```
+
+### 選択された解決策
+
+**フレーム参照とURLをページネーションループの先頭で毎回更新**
+
+```python
+# 修正後の実装
+while True:  # ページネーションループ
+    # フレーム参照を毎回更新
+    list_frame = None
+    for frame in self.page.frames:
+        if frame.name == CarewellSelectors.FRAME_LIST:
+            list_frame = frame
+            break
+    
+    if not list_frame:
+        logger.warning("'list' frame not found, using main page")
+        list_frame = self.page
+    
+    # 現在のページURLを保存（各ページで更新）
+    list_url = list_frame.url
+    logger.debug(f"Current list URL for page {current_page}: {list_url}")
+    
+    # 以降の処理...
+```
+
+### 技術的判断
+
+**選択理由**:
+1. **一貫性**: `_get_download_link`メソッドで既に同様のパターン（毎回フレーム取得）を使用
+2. **確実性**: ASP.NET __doPostBackによるページ遷移後も、最新のフレームオブジェクトを確実に参照
+3. **トレーサビリティ**: デバッグログで各ページのURLを記録
+4. **後方互換性**: 既存の単一ページケース（<100件）に影響なし
+
+**代替案と却下理由**:
+1. **グローバルなフレームキャッシュ**: 複雑度が高く、メリットが少ない
+2. **ページ遷移検出ロジック**: オーバーエンジニアリング、シンプルな更新で十分
+3. **フレーム取得のヘルパーメソッド化**: 将来の改善として検討可能だが、今回は必須ではない
+
+### 実装詳細
+
+**変更ファイル**: `src/playwright_automation.py`
+**変更メソッド**: `PlaywrightAutomationEngine.get_submission_list`
+**変更行**: 382行目削除、385-399行目追加
+
+**期待される効果**:
+- ✅ 2ページ目以降の処理が正常に動作
+- ✅ 145件全てのdownload link取得が完了
+- ✅ ページ遷移ログ（"Processing page 2"、"Navigating to page 2"）が出力
+- ✅ UI表示件数と処理件数が一致（`✓ Count verification passed: 145/145`）
+
+### 検証計画
+
+1. **単一ページ（<100件）**: 既存動作を壊さないことを確認
+2. **2ページ（100-200件）**: carewell-class01-task01（145件）で2ページ目処理を確認
+3. **エラーハンドリング**: フレーム取得失敗時のフォールバック動作を確認
+
+### 関連ドキュメント
+
+- [問題分析レポート](../../../docs/PAGINATION_BUG_ANALYSIS.md)
+- [修正計画](../../../docs/PAGINATION_FIX_PLAN.md)
+- [テスト計画](../../../docs/PAGINATION_TEST_PLAN.md)
+
+### 履歴
+
+- **2025-11-03**: 問題発見、分析、修正実装
+- **実装者**: Claude Code
+- **レビュー**: 要レビュー
+

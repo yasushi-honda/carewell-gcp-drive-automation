@@ -378,12 +378,25 @@ class PlaywrightAutomationEngine:
         current_page = 1
 
         try:
-            # Save list URL for navigation
-            list_url = list_frame.url
-
             # Loop through all pages
             while True:
                 logger.info(f"Processing page {current_page}")
+
+                # Refresh frame reference for each page to handle pagination
+                # This ensures we always have the latest frame object after page transitions
+                list_frame = None
+                for frame in self.page.frames:
+                    if frame.name == CarewellSelectors.FRAME_LIST:
+                        list_frame = frame
+                        break
+
+                if not list_frame:
+                    logger.warning("'list' frame not found, using main page")
+                    list_frame = self.page
+
+                # Save current page URL for navigation back from detail pages
+                list_url = list_frame.url
+                logger.debug(f"Current list URL for page {current_page}: {list_url}")
 
                 # Wait for table to be fully rendered after frame reload or page transition
                 if current_page == 1:
