@@ -281,6 +281,37 @@ git push origin main
 
 ---
 
+## 🔧 追加の問題と解決（2025-11-04）
+
+### 問題: テストでのFirestoreデータベース名の誤変更
+
+**発生した問題**:
+- テストコード修正時にFirestore Emulatorのデータベース名を`carewell-native`から`(default)`に誤って変更
+- コミット `5b7d950` で混入
+
+**原因**:
+- Firestore Emulatorのクリーンアップ処理実装時に、元々の設計ドキュメントを確認せずに変更
+- Emulator REST APIが`(default)`データベースを使うと誤解
+
+**解決策**:
+- コミット `4e5ec4e` でデータベース名を`carewell-native`に revert
+- 変更内容:
+  - `tests/conftest.py`: `emulator_client`フィクスチャのdatabase引数
+  - `tests/integration/test_file_upload.py`: setup内のclear URL
+- 両方のファイルで`(default)`を`carewell-native`に戻し
+- Emulator REST APIのクリアエンドポイントURLも`carewell-native`に対応
+
+**教訓**:
+- コードベース変更時は必ず元々の設計ドキュメントを確認する
+- 特にデータベース名のような重要な設定値は安易に変更しない
+- 参照: `docs/firestore-schema-improvement-implementation.md` Line 529
+
+**参照コミット**:
+- 誤変更: `5b7d950`
+- 修正: `4e5ec4e`
+
+---
+
 **作成者**: Claude Code
 **レビュー**: 要レビュー
-**ステータス**: Ready for Implementation
+**ステータス**: Implementation In Progress (Tests Fixed, Database Name Reverted)
