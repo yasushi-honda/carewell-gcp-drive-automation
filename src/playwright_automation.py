@@ -807,12 +807,59 @@ class PlaywrightAutomationEngine:
                 list_frame.goto(current_url, wait_until="load", timeout=30000)
                 self._wait_for_navigation()
 
+                # Phase 3: Refresh frame reference after navigation
+                # (frame may be detached after list_frame.goto())
+                list_frame = None
+                for frame in self.page.frames:
+                    if frame.name == CarewellSelectors.FRAME_LIST:
+                        list_frame = frame
+                        break
+
+                if not list_frame:
+                    logger.error("'list' frame not found after navigation back")
+                    return {"url": None, "filename": None}
+
+                # Phase 3: Wait for table rows to re-render after navigation
+                # This ensures the next student's detail link will be available
+                try:
+                    list_frame.wait_for_selector(
+                        "tr.standard_grid_item", timeout=10000, state="visible"
+                    )
+                    logger.debug("✓ Table rows re-rendered after navigation back")
+                except Exception as e:
+                    logger.warning(
+                        f"Table rows not immediately visible after navigation: {e}"
+                    )
+
                 return {"url": download_url, "filename": filename}
             else:
                 logger.warning(f"No download link found for {detail_url}")
                 # Navigate back to list within the frame (FIXED)
                 list_frame.goto(current_url, wait_until="load", timeout=30000)
                 self._wait_for_navigation()
+
+                # Phase 3: Refresh frame reference after navigation
+                # (frame may be detached after list_frame.goto())
+                list_frame = None
+                for frame in self.page.frames:
+                    if frame.name == CarewellSelectors.FRAME_LIST:
+                        list_frame = frame
+                        break
+
+                if not list_frame:
+                    logger.error("'list' frame not found after navigation back")
+                    return {"url": None, "filename": None}
+
+                # Phase 3: Wait for table rows to re-render after navigation
+                try:
+                    list_frame.wait_for_selector(
+                        "tr.standard_grid_item", timeout=10000, state="visible"
+                    )
+                    logger.debug("✓ Table rows re-rendered after navigation back")
+                except Exception as e:
+                    logger.warning(
+                        f"Table rows not immediately visible after navigation: {e}"
+                    )
 
                 return {"url": None, "filename": None}
 
@@ -825,6 +872,25 @@ class PlaywrightAutomationEngine:
                 if list_frame and current_url:
                     list_frame.goto(current_url, wait_until="load", timeout=30000)
                     self._wait_for_navigation()
+
+                    # Phase 3: Refresh frame reference after navigation (error recovery)
+                    list_frame = None
+                    for frame in self.page.frames:
+                        if frame.name == CarewellSelectors.FRAME_LIST:
+                            list_frame = frame
+                            break
+
+                    if list_frame:
+                        # Phase 3: Wait for table rows to re-render
+                        try:
+                            list_frame.wait_for_selector(
+                                "tr.standard_grid_item", timeout=10000, state="visible"
+                            )
+                            logger.debug(
+                                "✓ Table rows re-rendered after error recovery"
+                            )
+                        except:
+                            pass
             except:
                 pass
             return {"url": None, "filename": None}
