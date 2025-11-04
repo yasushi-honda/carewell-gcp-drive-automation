@@ -2,6 +2,28 @@
 
 Kiro-style Spec Driven Development implementation using claude code slash commands, hooks and agents.
 
+---
+
+## 🚨 CRITICAL: READ THIS FIRST 🚨
+
+### Before ANY bug fix or incident response:
+
+**MANDATORY CHECKLIST** (complete in this exact order):
+
+1. ✅ Read `CLAUDE.md` → "Incident Response Workflow" section
+2. ✅ Read `docs/CLASS01_TIMEOUT_ANALYSIS.md` (if pagination/timeout related)
+3. ✅ Read relevant memory files (`incident_response_lessons`, etc.)
+4. ✅ Check past commits for similar issues (`git log --grep="keyword"`)
+5. ✅ ONLY THEN start investigation/coding
+
+**NEVER skip steps 1-3. EVER.**
+
+If you start coding before completing steps 1-3, **STOP IMMEDIATELY** and read the documents.
+
+**Why this matters**: 同じ問題が既に解決されている可能性が高い。ドキュメントを読まずにコードを書くことは時間の無駄であり、同じ失敗を繰り返すことになる。
+
+---
+
 ## Project Context
 
 ### Paths
