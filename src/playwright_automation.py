@@ -447,10 +447,12 @@ class PlaywrightAutomationEngine:
                 # Wait for individual row links to become fully interactive
                 # After table rendering, JavaScript event handlers need additional time
                 # to attach to individual row links (especially for rows later in the table)
+                # Extended from 5s to 15s based on production testing results
+                # (Phase 1: Timeout resolution - Nov 2025)
                 logger.info(
-                    "Waiting for individual row links to become fully interactive (5 seconds)..."
+                    "Waiting for individual row links to become fully interactive (15 seconds)..."
                 )
-                time.sleep(5)
+                time.sleep(15)
                 logger.info("✓ Individual row links should now be interactive")
 
                 submission_basics = []
