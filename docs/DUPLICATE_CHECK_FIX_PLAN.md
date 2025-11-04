@@ -312,6 +312,68 @@ git push origin main
 
 ---
 
+## 🔧 追加の問題と解決2（2025-11-04）
+
+### 問題: task_patternパラメータがrecord_uploadに渡されていない
+
+**発生した問題**:
+- `main.py`でCloud Schedulerから`task_pattern`を受け取っているが、`record_upload`に渡していない
+- 結果として、Firestoreに保存される`task_pattern`が常に`task_id`にデフォルトされる
+- 例: 本来 "課題①業務分析　※～11/3〆切" → 実際 "課題①"
+
+**影響**:
+- 2ページ目以降も含め、全ての提出ファイルのメタデータで`task_pattern`が簡略化される
+- Dashboardで課題タイトルが正しく表示されない可能性
+
+**根本原因**:
+- `main.py` Line 183-193で`firestore_service.record_upload()`を呼び出す際に、`task_pattern`パラメータを省略
+- 設計仕様（`.kiro/specs/firestore-schema-improvement/design.md` Line 367）では`task_pattern`を渡すべき
+
+**解決策**:
+- `main.py`の`record_upload`呼び出しに`task_pattern=task_pattern`を追加
+- これにより、Cloud Schedulerから送信された正しい`task_pattern`がFirestoreに保存される
+
+**修正内容**:
+```python
+# Before
+firestore_service.record_upload(
+    class_name,
+    task_id,
+    submission["student_name"],
+    submission.get("student_id", ""),
+    submission["filename"],
+    drive_file_id,
+    drive_folder_id,
+    submission.get("submit_date", ""),
+    metadata=metadata,
+)
+
+# After
+firestore_service.record_upload(
+    class_name,
+    task_id,
+    submission["student_name"],
+    submission.get("student_id", ""),
+    submission["filename"],
+    drive_file_id,
+    drive_folder_id,
+    submission.get("submit_date", ""),
+    metadata=metadata,
+    task_pattern=task_pattern,  # ← 追加
+)
+```
+
+**検証**:
+- ✅ Unit tests全て成功（9 passed）
+- ✅ 既存の動作に影響なし（後方互換性維持）
+- ✅ 2ページ目以降も正しい`task_pattern`が保存される
+
+**参照**:
+- 設計仕様: `.kiro/specs/firestore-schema-improvement/design.md` Line 367-374
+- 要件: `.kiro/specs/firestore-schema-improvement/requirements.md` Line 98-102
+
+---
+
 **作成者**: Claude Code
 **レビュー**: 要レビュー
-**ステータス**: Implementation In Progress (Tests Fixed, Database Name Reverted)
+**ステータス**: Implementation In Progress (Tests Fixed, Database Name Reverted, task_pattern Fixed)

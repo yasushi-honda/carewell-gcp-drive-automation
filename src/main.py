@@ -190,6 +190,7 @@ def main(request):
                             drive_folder_id,
                             submission.get("submit_date", ""),
                             metadata=metadata,
+                            task_pattern=task_pattern,
                         )
 
                         # Record in Google Sheets
