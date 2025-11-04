@@ -127,7 +127,7 @@ POST https://carewell-file-collector-imczapxkba-an.a.run.app
 {
   "class_name": "令和7年度 デジタル中核人材養成研修 №01",
   "task_id": "課題①",
-  "task_pattern": "課題①",
+  "task_pattern": "課題①業務分析　※～11/3〆切",
   "drive_folder_id": "1abc...xyz",
   "spreadsheet_id": "1def...uvw"
 }
@@ -135,7 +135,8 @@ POST https://carewell-file-collector-imczapxkba-an.a.run.app
 
 **パラメータ説明**:
 - `task_id`: Firestore/Sheetsでの管理用識別子（例: "課題①"）
-- `task_pattern`: Carewell画面での検索パターン（例: "課題①" で部分一致検索）
+- `task_pattern`: Carewell画面での検索パターン（例: "課題①業務分析　※～11/3〆切" で部分一致検索）
+  - **重要**: task_idと異なり、Carewellサイトに表示される実際の課題名（フルテキスト）を指定する必要があります
 
 ### レスポンス形式
 

@@ -429,6 +429,202 @@ if not list_frame:
 
 ---
 
+---
+
+## 🔍 追加調査: 13:30実行の検証結果（2025-11-04 15:30）
+
+### 調査の動機
+
+デプロイ後の初回実行（13:30 JST）で修正が機能しているか検証
+
+### 判明した事実
+
+#### 1. 提出数の変化
+
+| 時刻 | 提出数 | ページ数 | 結果 |
+|------|--------|----------|------|
+| 12:25 | 158件 | 2ページ | ❌ DEADLINE_EXCEEDED |
+| 13:30 | < 100件 | 1ページ | ✅ 正常完了 |
+
+**観察**:
+- 提出数が100件未満に減少
+- ページ2処理が不要となったため、修正コードが実行されていない
+- エラーは発生していない
+
+**原因の仮説**:
+1. 締め切り到達（11/3）で提出が非表示化された
+2. 学生が複数の提出を取り消した
+3. 12:25時点の158件が誤りだった
+
+#### 2. **重大な問題を発見: Cloud Scheduler設定ミス**
+
+**問題**: 全てのCloud Schedulerジョブで `task_pattern` が `task_id` と同じ値になっている
+
+**ログの証拠**:
+```
+2025-11-04 04:30:05 - main - INFO - Starting file collection for
+  class=令和7年度 デジタル中核人材養成研修 №01,
+  task_id=課題①,
+  task_pattern=課題①  ← task_idと同じ！
+```
+
+**期待される値**:
+```
+task_id: "課題①"
+task_pattern: "課題①業務分析　※～11/3〆切"
+```
+
+**影響**:
+- Firestoreに保存されるtask_patternが簡略化される
+- Dashboardで課題タイトルが不完全に表示される
+- Carewell画面での検索パターンが正確に動作しない可能性
+
+**過去の記録**:
+この問題は [DUPLICATE_CHECK_FIX_PLAN.md Line 317-374](./DUPLICATE_CHECK_FIX_PLAN.md) で記録されていた。`main.py`でのパラメータ受け渡しは修正済みだが、**Cloud Scheduler自体の設定が間違っている**。
+
+### デプロイ済みコードの状態
+
+- ✅ リビジョン: 00142-5vp（100%トラフィック）
+- ✅ 修正内容: ページ2待機時間延長 + フレーム再取得
+- ⚠️ 検証状況: 1ページのみで実行されたため、ページ2処理は未検証
+
+### 次のアクション
+
+#### 優先度1: Cloud Scheduler設定の修正（最重要）
+
+**対象**: 全14ジョブ（class01-task01, class01-task02, ... class05-task02）
+
+**修正内容**:
+- `task_pattern` を `task_id` と同じ値から、正しい完全な課題名に更新
+- 例: "課題①" → "課題①業務分析　※～11/3〆切"
+
+**修正方法**:
+```bash
+gcloud scheduler jobs update http carewell-class01-task01 \
+  --location=asia-northeast1 \
+  --message-body='{
+    "class_name": "令和7年度 デジタル中核人材養成研修 №01",
+    "task_id": "課題①",
+    "task_pattern": "課題①業務分析　※～11/3〆切",  ← 修正
+    "drive_folder_id": "...",
+    "spreadsheet_id": "..."
+  }'
+```
+
+**参考資料**:
+- Carewell画面で実際の課題名を確認
+- 既存のスプレッドシートに記録されている課題名を参照
+
+#### 優先度2: ページ2処理の検証
+
+**検証方法**:
+1. 提出数が100件を超える課題を特定（class02, class03など）
+2. 次回実行のログでページ2処理を確認
+3. ログで以下を確認:
+   - "Waiting for table to render after page navigation (10 seconds)..."
+   - "Refreshing frame reference after page transition..."
+   - "✓ Frame reference refreshed for page 2"
+
+#### 優先度3: 継続監視
+
+**監視項目**:
+- 次回実行（16:00 JST）のログ
+- 提出数が再度100件を超えた場合の動作
+- task_pattern修正後のFirestoreデータ
+
+### 教訓: 同じ間違いを繰り返さないために
+
+**今回の反省点**:
+
+1. **実際のリクエストパラメータを確認しなかった**
+   - コード修正だけで問題が解決すると仮定
+   - Cloud Schedulerの設定を確認せず
+
+2. **過去のドキュメントを十分に確認しなかった**
+   - DUPLICATE_CHECK_FIX_PLAN.mdにtask_pattern問題が記録されていた
+   - 「修正済み」と記載されていたが、実際にはCloud Scheduler設定が未修正
+
+3. **仮定に基づいて進めてしまった**
+   - 「158件から100件未満に減少した」という観察を深掘りしなかった
+   - 実際のログとFirestoreデータの確認が遅れた
+
+**今後の対策**:
+
+1. ✅ **常に実データを確認する**
+   - Cloud Scheduler設定
+   - 実際のリクエストログ
+   - Firestoreデータ
+
+2. ✅ **ドキュメントを徹底的に確認する**
+   - 過去の問題記録
+   - 未解決の課題
+   - 修正済みの内容の検証状況
+
+3. ✅ **仮定を明確にし、検証する**
+   - 「〜のはず」ではなく「〜であることを確認した」
+   - エビデンスベースでの判断
+
+---
+
+## 🔧 対応実施: task_pattern修正 (2025-11-04 16:03 JST)
+
+### 実施内容
+
+carewell-class01-task01のCloud Scheduler設定を修正しました。
+
+**修正前**:
+```json
+{
+  "class_name": "令和7年度 デジタル中核人材養成研修 №01",
+  "task_id": "課題①",
+  "task_pattern": "課題①",  # ← 誤り（task_idと同じ値）
+  "drive_folder_id": "1gxt-OVloMfJWi73Yjm4v5bjupKL25Pag",
+  "spreadsheet_id": "1R1bsr24uyFf67p7_0I0yUA47ap5uIrJE7n89A9NbRYI"
+}
+```
+
+**修正後**:
+```json
+{
+  "class_name": "令和7年度 デジタル中核人材養成研修 №01",
+  "task_id": "課題①",
+  "task_pattern": "課題①業務分析　※～11/3〆切",  # ← 正しい値
+  "drive_folder_id": "1gxt-OVloMfJWi73Yjm4v5bjupKL25Pag",
+  "spreadsheet_id": "1R1bsr24uyFf67p7_0I0yUA47ap5uIrJE7n89A9NbRYI"
+}
+```
+
+**実行コマンド**:
+```bash
+gcloud scheduler jobs update http carewell-class01-task01 \
+  --location=asia-northeast1 \
+  --message-body='{"class_name":"令和7年度 デジタル中核人材養成研修 №01","task_id":"課題①","task_pattern":"課題①業務分析　※～11/3〆切","drive_folder_id":"1gxt-OVloMfJWi73Yjm4v5bjupKL25Pag","spreadsheet_id":"1R1bsr24uyFf67p7_0I0yUA47ap5uIrJE7n89A9NbRYI"}'
+```
+
+### 検証結果
+
+✅ Cloud Scheduler設定の更新完了
+✅ Base64デコードで正しいtask_patternを確認
+⏳ 次回の定期実行（16:30 JST）で動作確認予定
+
+### 発見した構造的な問題
+
+**スクリプトのバグ**: `scripts/create-scheduler-jobs.sh` Line 84
+```bash
+"task_pattern": "${task_name}",  # ← task_idと同じ値を設定していた
+```
+
+**影響範囲**: 全14ジョブが同じ誤りで作成されている
+
+**今後の対応**:
+1. ✅ class01-task01 修正完了
+2. ⏳ 残り13ジョブの正しいtask_pattern値を特定
+3. ⏳ 全14ジョブの一括更新スクリプト作成
+4. ⏳ create-scheduler-jobs.shスクリプト修正
+5. ⏳ ドキュメント（README.md、運用ガイド）修正
+
+---
+
 **作成者**: Claude Code
 **レビュー**: 要レビュー
-**ステータス**: Code Implementation Complete - Ready for Deployment
+**ステータス**: Cloud Scheduler Configuration Fixed for class01-task01 - Pending Verification at 16:30 JST

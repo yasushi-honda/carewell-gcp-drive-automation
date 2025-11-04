@@ -50,10 +50,11 @@ SKIPPED_JOBS=0
 create_job() {
     local class_num=$1
     local task_num=$2
-    local task_name=$3
-    local cron_schedule=$4
-    local drive_folder_id=$5
-    local spreadsheet_id=$6
+    local task_id=$3
+    local task_pattern=$4
+    local cron_schedule=$5
+    local drive_folder_id=$6
+    local spreadsheet_id=$7
 
     local job_name="carewell-class${class_num}-task${task_num}"
     local class_name="令和7年度 デジタル中核人材養成研修 №${class_num}"
@@ -64,7 +65,8 @@ create_job() {
     echo -e "${BLUE}[${TOTAL_JOBS}/14] ${job_name}${NC}"
     echo -e "${BLUE}----------------------------------------${NC}"
     echo "クラス: ${class_name}"
-    echo "課題: ${task_name}"
+    echo "課題ID: ${task_id}"
+    echo "課題パターン: ${task_pattern}"
     echo "Cronスケジュール: ${cron_schedule}"
     echo ""
 
@@ -80,8 +82,8 @@ create_job() {
     local request_body=$(cat <<EOF
 {
   "class_name": "${class_name}",
-  "task_id": "${task_name}",
-  "task_pattern": "${task_name}",
+  "task_id": "${task_id}",
+  "task_pattern": "${task_pattern}",
   "drive_folder_id": "${drive_folder_id}",
   "spreadsheet_id": "${spreadsheet_id}"
 }
@@ -127,27 +129,33 @@ EOF
     echo ""
 }
 
-# 全14ジョブのパラメータ定義（順番: class_num task_num task_name cron_schedule drive_folder_id spreadsheet_id）
-create_job "01" "01" "課題①" "0,30 * * * *" "1gxt-OVloMfJWi73Yjm4v5bjupKL25Pag" "1R1bsr24uyFf67p7_0I0yUA47ap5uIrJE7n89A9NbRYI"
-create_job "01" "02" "課題②" "5,35 * * * *" "1gxt-OVloMfJWi73Yjm4v5bjupKL25Pag" "1R1bsr24uyFf67p7_0I0yUA47ap5uIrJE7n89A9NbRYI"
+# 全14ジョブのパラメータ定義
+# 順番: class_num task_num task_id task_pattern cron_schedule drive_folder_id spreadsheet_id
+#
+# ⚠️ 重要: task_patternは現在暫定値（task_idと同じ）です
+# TODO: Carewell実際の課題名に更新する必要があります
+#   例: "課題①" → "課題①業務分析　※～11/3〆切"
+#
+create_job "01" "01" "課題①" "課題①" "0,30 * * * *" "1gxt-OVloMfJWi73Yjm4v5bjupKL25Pag" "1R1bsr24uyFf67p7_0I0yUA47ap5uIrJE7n89A9NbRYI"
+create_job "01" "02" "課題②" "課題②" "5,35 * * * *" "1gxt-OVloMfJWi73Yjm4v5bjupKL25Pag" "1R1bsr24uyFf67p7_0I0yUA47ap5uIrJE7n89A9NbRYI"
 
-create_job "02" "01" "課題①" "10,40 * * * *" "1yJ60hEUHCHGOZNdMbACteoM5C2-pPVmC" "1qmczJQo2f3rSsZxhRWF3XfjCVc5Y3yW7K4wrk7bAcnc"
-create_job "02" "02" "課題②" "15,45 * * * *" "1yJ60hEUHCHGOZNdMbACteoM5C2-pPVmC" "1qmczJQo2f3rSsZxhRWF3XfjCVc5Y3yW7K4wrk7bAcnc"
+create_job "02" "01" "課題①" "課題①" "10,40 * * * *" "1yJ60hEUHCHGOZNdMbACteoM5C2-pPVmC" "1qmczJQo2f3rSsZxhRWF3XfjCVc5Y3yW7K4wrk7bAcnc"
+create_job "02" "02" "課題②" "課題②" "15,45 * * * *" "1yJ60hEUHCHGOZNdMbACteoM5C2-pPVmC" "1qmczJQo2f3rSsZxhRWF3XfjCVc5Y3yW7K4wrk7bAcnc"
 
-create_job "03" "01" "課題①" "20,50 * * * *" "1IR81q87NIN9PkUAUDZpW9c2XZdkWTM7p" "1kzDATIoQ1hOM9KYuYloCPsbmGn-tSDHSwYxK9pYQkwA"
-create_job "03" "02" "課題②" "25,55 * * * *" "1IR81q87NIN9PkUAUDZpW9c2XZdkWTM7p" "1kzDATIoQ1hOM9KYuYloCPsbmGn-tSDHSwYxK9pYQkwA"
+create_job "03" "01" "課題①" "課題①" "20,50 * * * *" "1IR81q87NIN9PkUAUDZpW9c2XZdkWTM7p" "1kzDATIoQ1hOM9KYuYloCPsbmGn-tSDHSwYxK9pYQkwA"
+create_job "03" "02" "課題②" "課題②" "25,55 * * * *" "1IR81q87NIN9PkUAUDZpW9c2XZdkWTM7p" "1kzDATIoQ1hOM9KYuYloCPsbmGn-tSDHSwYxK9pYQkwA"
 
-create_job "04" "01" "課題①" "0,30 * * * *" "1OuJk_u1Ig9CfIVXu3n5wQu0Ft6lfr3jQ" "12Xg8Edrtloct-jk_IBVApnqLVz6fPeQFTxxQDPXxi_Q"
-create_job "04" "02" "課題②" "5,35 * * * *" "1OuJk_u1Ig9CfIVXu3n5wQu0Ft6lfr3jQ" "12Xg8Edrtloct-jk_IBVApnqLVz6fPeQFTxxQDPXxi_Q"
+create_job "04" "01" "課題①" "課題①" "0,30 * * * *" "1OuJk_u1Ig9CfIVXu3n5wQu0Ft6lfr3jQ" "12Xg8Edrtloct-jk_IBVApnqLVz6fPeQFTxxQDPXxi_Q"
+create_job "04" "02" "課題②" "課題②" "5,35 * * * *" "1OuJk_u1Ig9CfIVXu3n5wQu0Ft6lfr3jQ" "12Xg8Edrtloct-jk_IBVApnqLVz6fPeQFTxxQDPXxi_Q"
 
-create_job "05" "01" "課題①" "10,40 * * * *" "1rNnmEJ92smjkcKFOd1L_u1n8SO1LDAC4" "1CPVDaX4E3AX3xl5I_sm-DjRVr7SfYKz4DjoBSS-h74o"
-create_job "05" "02" "課題②" "15,45 * * * *" "1rNnmEJ92smjkcKFOd1L_u1n8SO1LDAC4" "1CPVDaX4E3AX3xl5I_sm-DjRVr7SfYKz4DjoBSS-h74o"
+create_job "05" "01" "課題①" "課題①" "10,40 * * * *" "1rNnmEJ92smjkcKFOd1L_u1n8SO1LDAC4" "1CPVDaX4E3AX3xl5I_sm-DjRVr7SfYKz4DjoBSS-h74o"
+create_job "05" "02" "課題②" "課題②" "15,45 * * * *" "1rNnmEJ92smjkcKFOd1L_u1n8SO1LDAC4" "1CPVDaX4E3AX3xl5I_sm-DjRVr7SfYKz4DjoBSS-h74o"
 
-create_job "08" "01" "課題①" "20,50 * * * *" "1kdKwI7nQ8N6j8gD6agZap5FWL-uDTbwg" "1Zm2ePE2gbKm8Yw_4B6vuO8HP3kfN2wZpFCQaNFHfcsk"
-create_job "08" "02" "課題②" "25,55 * * * *" "1kdKwI7nQ8N6j8gD6agZap5FWL-uDTbwg" "1Zm2ePE2gbKm8Yw_4B6vuO8HP3kfN2wZpFCQaNFHfcsk"
+create_job "08" "01" "課題①" "課題①" "20,50 * * * *" "1kdKwI7nQ8N6j8gD6agZap5FWL-uDTbwg" "1Zm2ePE2gbKm8Yw_4B6vuO8HP3kfN2wZpFCQaNFHfcsk"
+create_job "08" "02" "課題②" "課題②" "25,55 * * * *" "1kdKwI7nQ8N6j8gD6agZap5FWL-uDTbwg" "1Zm2ePE2gbKm8Yw_4B6vuO8HP3kfN2wZpFCQaNFHfcsk"
 
-create_job "09" "01" "課題①" "0,30 * * * *" "1nllFEyyDEV7jiTSEgyBnnNeXhC_4Ttu6" "1O8S3w3F8RvLJp0LrS-eZtX0sZW5HcjOgMhyWJ_e8YPA"
-create_job "09" "02" "課題②" "5,35 * * * *" "1nllFEyyDEV7jiTSEgyBnnNeXhC_4Ttu6" "1O8S3w3F8RvLJp0LrS-eZtX0sZW5HcjOgMhyWJ_e8YPA"
+create_job "09" "01" "課題①" "課題①" "0,30 * * * *" "1nllFEyyDEV7jiTSEgyBnnNeXhC_4Ttu6" "1O8S3w3F8RvLJp0LrS-eZtX0sZW5HcjOgMhyWJ_e8YPA"
+create_job "09" "02" "課題②" "課題②" "5,35 * * * *" "1nllFEyyDEV7jiTSEgyBnnNeXhC_4Ttu6" "1O8S3w3F8RvLJp0LrS-eZtX0sZW5HcjOgMhyWJ_e8YPA"
 
 # サマリー
 echo -e "${BLUE}================================================${NC}"
