@@ -64,7 +64,12 @@ class FirestoreService:
             created_at is only set on first creation.
         """
         try:
-            task_ref = self.db.collection(class_name).document(task_id)
+            task_ref = (
+                self.db.collection("submissions")
+                .document(class_name)
+                .collection("tasks")
+                .document(task_id)
+            )
 
             # Check if document exists to determine if created_at should be set
             doc = task_ref.get()
@@ -118,11 +123,13 @@ class FirestoreService:
             Upload record dict if exists, None otherwise
         """
         try:
-            # Collection path: {class_name}/{task_id}/documents
+            # Collection path: submissions/{class_name}/tasks/{task_id}/files
             collection_ref = (
-                self.db.collection(class_name)
+                self.db.collection("submissions")
+                .document(class_name)
+                .collection("tasks")
                 .document(task_id)
-                .collection("documents")
+                .collection("files")
             )
 
             # Query by student_id and submit_date fields
@@ -175,11 +182,13 @@ class FirestoreService:
                 student_id, filename, submit_date
             )
 
-            # Collection path: {class_name}/{task_id}/documents
+            # Collection path: submissions/{class_name}/tasks/{task_id}/files
             doc_ref = (
-                self.db.collection(class_name)
+                self.db.collection("submissions")
+                .document(class_name)
+                .collection("tasks")
                 .document(task_id)
-                .collection("documents")
+                .collection("files")
                 .document(composite_key)
             )
             doc = doc_ref.get()
@@ -257,11 +266,13 @@ class FirestoreService:
                 "metadata": metadata or {},
             }
 
-            # Collection path: {class_name}/{task_id}/documents
+            # Collection path: submissions/{class_name}/tasks/{task_id}/files
             doc_ref = (
-                self.db.collection(class_name)
+                self.db.collection("submissions")
+                .document(class_name)
+                .collection("tasks")
                 .document(task_id)
-                .collection("documents")
+                .collection("files")
                 .document(composite_key)
             )
             doc_ref.set(record)
