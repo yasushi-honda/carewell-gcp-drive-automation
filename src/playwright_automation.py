@@ -431,6 +431,15 @@ class PlaywrightAutomationEngine:
                 list_frame.wait_for_selector("tr.standard_grid_item", timeout=30000)
                 logger.info("✓ Submission table rows found")
 
+                # Wait for table links to become fully interactive
+                # After ASP.NET __doPostBack page transition, JavaScript event handlers
+                # need time to initialize before links become clickable
+                logger.info(
+                    "Waiting for table links to become fully interactive (10 seconds)..."
+                )
+                time.sleep(10)
+                logger.info("✓ Table links should now be interactive")
+
                 # First pass: Extract all basic submission info from current page
                 rows = list_frame.locator("tr.standard_grid_item").all()
                 logger.info(f"Found {len(rows)} submission rows on page {current_page}")
