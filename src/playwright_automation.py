@@ -152,7 +152,9 @@ class PlaywrightAutomationEngine:
                 continue
         return None
 
-    def _click_in_any_frame(self, selector: str, description: str = None) -> bool:
+    def _click_in_any_frame(
+        self, selector: str, description: str | None = None
+    ) -> bool:
         """
         Click element in any frame that contains it
 
@@ -594,7 +596,7 @@ class PlaywrightAutomationEngine:
                                 last_error = "Empty download info returned"
 
                             except Exception as retry_error:
-                                last_error = retry_error
+                                last_error = str(retry_error)
                                 logger.warning(
                                     f"Attempt {retry_attempt + 1}/{max_retries} failed for {basic['student_name']}: {retry_error}"
                                 )
