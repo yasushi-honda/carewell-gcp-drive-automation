@@ -22,6 +22,57 @@ def firestore_client():
 
 
 @pytest.fixture
+def emulator_client():
+    """
+    Create a Firestore client for integration testing with emulator.
+
+    This fixture:
+    1. Creates a client pointing to the emulator
+    2. Yields the client for test use
+    3. Cleans up all test data after each test
+
+    The cleanup ensures tests run in isolation without data contamination.
+    """
+    project_id = os.getenv("GCP_PROJECT", "demo-test")
+    db = firestore.Client(project=project_id, database="carewell-native")
+
+    yield db
+
+    # Cleanup: Delete all documents created during the test
+    # We clean the submissions collection which is used in integration tests
+    try:
+        submissions_ref = db.collection("submissions")
+        delete_collection(submissions_ref, batch_size=100)
+    except Exception as e:
+        print(f"Warning: Failed to cleanup Firestore data: {e}")
+
+
+def delete_collection(coll_ref, batch_size):
+    """
+    Delete all documents in a collection recursively.
+
+    Args:
+        coll_ref: Collection reference to delete
+        batch_size: Number of documents to delete per batch
+    """
+    docs = coll_ref.limit(batch_size).stream()
+    deleted = 0
+
+    for doc in docs:
+        # Delete subcollections recursively
+        for subcoll in doc.reference.collections():
+            delete_collection(subcoll, batch_size)
+
+        # Delete the document
+        doc.reference.delete()
+        deleted += 1
+
+    if deleted >= batch_size:
+        # Recursively delete remaining documents
+        return delete_collection(coll_ref, batch_size)
+
+
+@pytest.fixture
 def sample_class_name():
     """Sample class name for testing."""
     return "テストクラス"
