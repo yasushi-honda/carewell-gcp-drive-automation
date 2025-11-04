@@ -17,8 +17,23 @@ class TestFileUploadIntegration:
 
     @pytest.fixture(autouse=True)
     def setup(self, emulator_client):
-        """Set up test fixtures."""
+        """Set up test fixtures and ensure clean state."""
+        import os
+
+        import requests
+
         from firestore_service import FirestoreService
+
+        # Clear emulator data before EACH test
+        project_id = os.getenv("GCP_PROJECT", "demo-test")
+        emulator_host = os.getenv("FIRESTORE_EMULATOR_HOST", "localhost:8080")
+        try:
+            clear_url = f"http://{emulator_host}/emulator/v1/projects/{project_id}/databases/(default)/documents"
+            response = requests.delete(clear_url)
+            if response.status_code == 200:
+                print(f"\n✓ Test setup: Firestore emulator cleared")
+        except Exception as e:
+            print(f"\nWarning: Could not clear emulator in test setup: {e}")
 
         self.db = emulator_client
         # Create FirestoreService and override its db with emulator client
