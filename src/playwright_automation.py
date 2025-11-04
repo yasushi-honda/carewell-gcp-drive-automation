@@ -428,6 +428,21 @@ class PlaywrightAutomationEngine:
                     )
                     time.sleep(15)
 
+                # Phase 3.5: Refresh frame reference after sleep
+                # Frame may become detached/stale during long sleep periods
+                temp_list_frame = None
+                for frame in self.page.frames:
+                    if frame.name == CarewellSelectors.FRAME_LIST:
+                        temp_list_frame = frame
+                        break
+
+                if not temp_list_frame:
+                    logger.warning("'list' frame not found after sleep, using main page")
+                    list_frame = self.page
+                else:
+                    list_frame = temp_list_frame
+                    logger.debug(f"✓ Frame refreshed after sleep (page {current_page})")
+
                 # Wait for data to load
                 logger.info("Waiting for submission table rows...")
                 list_frame.wait_for_selector("tr.standard_grid_item", timeout=30000)
