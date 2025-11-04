@@ -667,8 +667,20 @@ class PlaywrightAutomationEngine:
             current_url = list_frame.url
             logger.debug(f"Current list URL: {current_url}")
 
+            # Check if detail link exists before clicking (10 second timeout)
+            detail_link_selector = f'a[href="{detail_url}"]'
+            try:
+                list_frame.wait_for_selector(
+                    detail_link_selector, timeout=10000, state="visible"
+                )
+            except Exception as e:
+                logger.warning(
+                    f"Detail link not found or not clickable: {detail_url} - {e}"
+                )
+                return {"url": None, "filename": None}
+
             # Click the detail link
-            list_frame.click(f'a[href="{detail_url}"]')
+            list_frame.click(detail_link_selector)
             self._wait_for_navigation(3000)  # Wait longer for detail page
 
             # Find download link (download.aspx?id=XXX)
@@ -679,15 +691,15 @@ class PlaywrightAutomationEngine:
                 filename = download_link.text_content().strip()
                 logger.info(f"Found download link: {filename}")
 
-                # Navigate back to list using goto
-                self.page.goto(current_url, wait_until="networkidle")
+                # Navigate back to list within the frame (FIXED)
+                list_frame.goto(current_url, wait_until="load", timeout=30000)
                 self._wait_for_navigation()
 
                 return {"url": download_url, "filename": filename}
             else:
                 logger.warning(f"No download link found for {detail_url}")
-                # Navigate back to list
-                self.page.goto(current_url, wait_until="networkidle")
+                # Navigate back to list within the frame (FIXED)
+                list_frame.goto(current_url, wait_until="load", timeout=30000)
                 self._wait_for_navigation()
 
                 return {"url": None, "filename": None}
@@ -696,10 +708,10 @@ class PlaywrightAutomationEngine:
             logger.error(
                 f"Error getting download link from {detail_url}: {e}", exc_info=True
             )
-            # Try to go back to list URL
+            # Try to go back to list URL within the frame (FIXED)
             try:
                 if list_frame and current_url:
-                    self.page.goto(current_url, wait_until="networkidle")
+                    list_frame.goto(current_url, wait_until="load", timeout=30000)
                     self._wait_for_navigation()
             except:
                 pass
