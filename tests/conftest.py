@@ -27,49 +27,36 @@ def emulator_client():
     Create a Firestore client for integration testing with emulator.
 
     This fixture:
-    1. Creates a client pointing to the emulator
-    2. Yields the client for test use
-    3. Cleans up all test data after each test
+    1. Cleans all emulator data before test (ensures clean state)
+    2. Creates a client pointing to the emulator
+    3. Yields the client for test use
 
     The cleanup ensures tests run in isolation without data contamination.
     """
+    import requests
+
     project_id = os.getenv("GCP_PROJECT", "demo-test")
+
+    # Clear emulator data BEFORE test using official REST API
+    emulator_host = os.getenv("FIRESTORE_EMULATOR_HOST", "localhost:8080")
+    try:
+        # Use Firestore Emulator's clear endpoint
+        # This is more reliable than manual deletion
+        clear_url = f"http://{emulator_host}/emulator/v1/projects/{project_id}/databases/(default)/documents"
+        response = requests.delete(clear_url)
+        if response.status_code == 200:
+            print(f"✓ Firestore emulator cleared for project: {project_id}")
+        else:
+            print(f"Warning: Failed to clear emulator (status {response.status_code})")
+    except Exception as e:
+        print(f"Warning: Could not clear Firestore emulator: {e}")
+
+    # Create client
     db = firestore.Client(project=project_id, database="carewell-native")
 
     yield db
 
-    # Cleanup: Delete all documents created during the test
-    # We clean the submissions collection which is used in integration tests
-    try:
-        submissions_ref = db.collection("submissions")
-        delete_collection(submissions_ref, batch_size=100)
-    except Exception as e:
-        print(f"Warning: Failed to cleanup Firestore data: {e}")
-
-
-def delete_collection(coll_ref, batch_size):
-    """
-    Delete all documents in a collection recursively.
-
-    Args:
-        coll_ref: Collection reference to delete
-        batch_size: Number of documents to delete per batch
-    """
-    docs = coll_ref.limit(batch_size).stream()
-    deleted = 0
-
-    for doc in docs:
-        # Delete subcollections recursively
-        for subcoll in doc.reference.collections():
-            delete_collection(subcoll, batch_size)
-
-        # Delete the document
-        doc.reference.delete()
-        deleted += 1
-
-    if deleted >= batch_size:
-        # Recursively delete remaining documents
-        return delete_collection(coll_ref, batch_size)
+    # No cleanup needed here - next test will clear before starting
 
 
 @pytest.fixture
