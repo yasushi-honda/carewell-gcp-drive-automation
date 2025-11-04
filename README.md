@@ -225,6 +225,27 @@ playwright install chromium
 
 このプロジェクトは内部利用を目的としています。
 
+## 最近の更新
+
+### 2025-11-04: フレーム構造破壊問題の修正 ✅
+
+**問題**: Page 2以降で2件目からdownload link取得が180秒タイムアウト → Cloud Run 900秒でタイムアウト
+
+**原因**: `self.page.goto(frame_url)`がフレーム構造を破壊
+
+**修正内容**:
+- `self.page.goto()` → `list_frame.goto()` に変更（3箇所）
+- detail link存在確認追加（10秒タイムアウト）
+- `wait_until="networkidle"` → `wait_until="load"` に変更
+
+**効果**:
+- Page 2処理時間: 9,900秒（推定） → **73秒（実測）** - **99.3%短縮**
+- detail link未検出時: 180秒 → **10秒** - **94.4%短縮**
+- 全体処理時間: タイムアウト → **799秒で完了**
+- Cloud Run 900秒タイムアウト: ❌ 超過 → ✅ **回避成功**
+
+詳細: [docs/TEST_RESULTS.md](docs/TEST_RESULTS.md)、[docs/FRAME_GOTO_FIX_PLAN.md](docs/FRAME_GOTO_FIX_PLAN.md)
+
 ## 開発ステータス
 
 ### 実装済み機能
