@@ -411,10 +411,12 @@ class PlaywrightAutomationEngine:
                 # Wait for table to be fully rendered after frame reload or page transition
                 if current_page == 1:
                     # Frame reload after "全て" tab click
+                    # Extended wait time to 10 seconds to ensure table rendering
+                    # completes after frame reload (increased from 5s due to timeout issues)
                     logger.info(
-                        "Waiting for table to render after frame reload (5 seconds)..."
+                        "Waiting for table to render after frame reload (10 seconds)..."
                     )
-                    time.sleep(5)
+                    time.sleep(10)
                 elif current_page > 1:
                     # Page transition via ASP.NET __doPostBack
                     # Extended wait time to 10 seconds to ensure table rendering
