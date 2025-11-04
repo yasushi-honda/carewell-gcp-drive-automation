@@ -334,10 +334,54 @@ for basic in basics:
 ### 5.1 実装ステップ
 
 1. ✅ **Phase 1-4**: 根本原因の特定と解決策の提案（完了）
-2. ⏳ **Phase 5**: コード修正
-3. ⏳ **Phase 6**: ローカルテスト（単体テスト実行）
-4. ⏳ **Phase 7**: デプロイ
-5. ⏳ **Phase 8**: 本番検証（次回定期実行）
+2. ✅ **Phase 5**: コード修正（完了 - 2025-11-04 20:11 JST）
+3. ✅ **Phase 6**: ローカルテスト（完了 - 単体テスト21件全成功）
+4. ⏳ **Phase 7**: デプロイ（GitHub Actions実行中）
+5. ⏳ **Phase 8**: 本番検証（次回定期実行 19:00 JST）
+
+#### Phase 5 実装詳細（2025-11-04 20:11 JST）
+
+**実装内容**:
+- **ファイル**: `src/playwright_automation.py`
+- **場所**: Lines 547-563（18行追加）
+- **パターン**: 既存のpagination用フレーム更新（Lines 564-578）と同一パターンを適用
+
+**コード修正**:
+```python
+# Refresh frame reference after download link retrieval
+# (frame becomes stale after list_frame.goto() in _get_download_link)
+temp_list_frame = None
+for frame in self.page.frames:
+    if frame.name == CarewellSelectors.FRAME_LIST:
+        temp_list_frame = frame
+        break
+
+if not temp_list_frame:
+    logger.warning(
+        "'list' frame not found after download link retrieval"
+    )
+else:
+    list_frame = temp_list_frame
+    logger.debug(
+        f"✓ Frame refreshed after {basic['student_name']}"
+    )
+```
+
+**Phase 6 検証結果**:
+- ✅ 単体テスト: 21/21 passed (0.06s)
+- ✅ リグレッションなし
+- ✅ Firestore関連テスト全成功
+
+**Git Commit**:
+- **Hash**: `3048611`
+- **Message**: "fix: ダウンロードリンク取得後のフレーム参照更新を追加"
+- **Pushed**: 2025-11-04 20:11 JST
+
+**デプロイ状況**:
+- GitHub Actions起動: 2025-11-04 11:11:38 UTC (20:11 JST)
+- Workflows実行中:
+  - Run Tests (ID: 19066731222)
+  - Deploy to Cloud Run Functions (ID: 19066731215)
 
 ### 5.2 検証計画
 
