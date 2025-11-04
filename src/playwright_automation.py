@@ -417,12 +417,12 @@ class PlaywrightAutomationEngine:
                     time.sleep(5)
                 elif current_page > 1:
                     # Page transition via ASP.NET __doPostBack
-                    # Extended wait time to 5 seconds (same as page 1) to ensure table rendering
-                    # completes before early duplicate check begins
+                    # Extended wait time to 10 seconds to ensure table rendering
+                    # completes after page transition (increased from 5s due to timeout issues)
                     logger.info(
-                        "Waiting for table to render after page navigation (5 seconds)..."
+                        "Waiting for table to render after page navigation (10 seconds)..."
                     )
-                    time.sleep(5)
+                    time.sleep(10)
 
                 # Wait for data to load
                 logger.info("Waiting for submission table rows...")
@@ -603,6 +603,27 @@ class PlaywrightAutomationEngine:
 
                     # Select next page by value (page numbers are 1-indexed)
                     pagination_select.select_option(str(next_page))
+
+                    # Wait for page transition to complete (ASP.NET __doPostBack)
+                    logger.info("Waiting for page transition to complete (3 seconds)...")
+                    time.sleep(3)
+
+                    # Refresh frame reference after page transition
+                    # (frame may become stale after ASP.NET postback)
+                    logger.info("Refreshing frame reference after page transition...")
+                    list_frame = None
+                    for frame in self.page.frames:
+                        if frame.name == CarewellSelectors.FRAME_LIST:
+                            list_frame = frame
+                            break
+
+                    if not list_frame:
+                        logger.error(
+                            "'list' frame not found after pagination, breaking loop"
+                        )
+                        break
+
+                    logger.info(f"✓ Frame reference refreshed for page {next_page}")
 
                     current_page = next_page
 
