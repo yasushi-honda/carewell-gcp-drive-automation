@@ -78,6 +78,53 @@ Note: Optional for new features or small additions. You can proceed directly to 
 6. **Keep steering current**: Run `/kiro:steering` after significant changes
 7. **Check spec compliance**: Use `/kiro:spec-status` to verify alignment
 
+## Incident Response Workflow
+
+### 🚨 When Production Issues Occur
+
+**Follow this checklist BEFORE starting investigation:**
+
+1. **Read Documentation First** (Priority: 🔴 CRITICAL)
+   ```bash
+   # Step 1: Check this file's Critical Configuration section
+   # Step 2: Review past incidents in "Common Mistakes to Avoid"
+   # Step 3: Read memory files
+   ```
+
+2. **Understand Environment Constraints**
+   - ⚠️ Local Firestore access may fail (DNS resolution issues)
+   - ✅ Use Cloud Run logs for verification: `gcloud logging read "resource.type=cloud_run_revision..."`
+   - ✅ Use Dashboard for visual verification: https://carewell-automation.web.app/
+   - ✅ Production environment is the source of truth
+
+3. **Plan Before Executing**
+   - 🎯 Identify root cause in code/configuration
+   - 🔧 Fix the root cause first (don't apply band-aids)
+   - 📝 Create automation scripts for bulk operations
+   - ✅ Document the solution and lessons learned
+
+4. **Avoid Common Pitfalls**
+   - ❌ DON'T retry operations known to fail in local environment
+   - ❌ DON'T manually fix items one-by-one (create bulk scripts instead)
+   - ❌ DON'T skip documentation review
+   - ❌ DON'T leave hanging background processes
+   - ✅ DO clean up test artifacts and processes
+   - ✅ DO commit and document your findings
+
+### 📊 Recommended Investigation Tools
+
+```bash
+# Cloud Run Logs (PREFERRED for verification)
+gcloud logging read "resource.type=cloud_run_revision AND
+  resource.labels.service_name=carewell-file-collector" --limit 50
+
+# Cloud Scheduler Status
+gcloud scheduler jobs describe JOB_NAME --location=asia-northeast1
+
+# Dashboard (Visual Verification)
+# https://carewell-automation.web.app/
+```
+
 ## Critical Configuration & Design Document Reference
 
 ### ⚠️ MUST READ BEFORE ANY CODE CHANGES
@@ -165,6 +212,21 @@ Based on past incidents:
    - ❌ Forgot to pass `task_pattern` to `record_upload()`
    - ✅ Always pass `task_pattern` from Cloud Scheduler request
    - Impact: Incorrect metadata in Firestore (defaults to `task_id`)
+
+   **Root Cause**: `scripts/create-scheduler-jobs.sh` had bug on Line 84
+   ```bash
+   # ❌ Wrong (Line 84)
+   "task_pattern": "${task_name}"  # Same value as task_id
+
+   # ✅ Correct
+   "task_pattern": "${task_pattern}"  # Separate parameter
+   ```
+
+   **Optimal Solution**:
+   - Create bulk update script for all 14 Cloud Scheduler jobs
+   - Fix root cause in creation script first
+   - Use `gcloud scheduler jobs update` with proper JSON body
+   - Avoid manual one-by-one fixes
 
 3. **Collection Path Mistake**
    - ❌ Used old path: `{class_name}/{task_id}/documents/{composite_key}`
