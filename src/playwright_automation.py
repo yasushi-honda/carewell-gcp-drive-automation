@@ -567,9 +567,48 @@ class PlaywrightAutomationEngine:
                         # and prevent rate limiting
                         time.sleep(2)
 
-                        download_info = self._get_download_link(
-                            basic["detail_url"], list_url
-                        )
+                        # Phase 2: Retry logic for detail page access
+                        # (Individual file detail page timeouts require multiple retry attempts)
+                        max_retries = 3
+                        download_info = None
+                        last_error = None
+
+                        for retry_attempt in range(max_retries):
+                            try:
+                                if retry_attempt > 0:
+                                    logger.info(
+                                        f"Retry {retry_attempt}/{max_retries-1} for {basic['student_name']}"
+                                    )
+                                    # Wait 5 seconds between retries to reduce server load
+                                    time.sleep(5)
+
+                                download_info = self._get_download_link(
+                                    basic["detail_url"], list_url
+                                )
+
+                                # If successful (got download_info with non-None values), break
+                                if download_info and download_info.get("url"):
+                                    break
+
+                                # If got None/empty result, treat as temporary failure
+                                last_error = "Empty download info returned"
+
+                            except Exception as retry_error:
+                                last_error = retry_error
+                                logger.warning(
+                                    f"Attempt {retry_attempt + 1}/{max_retries} failed for {basic['student_name']}: {retry_error}"
+                                )
+                                # Don't break, continue to next retry
+
+                        # If all retries failed, log and use last result
+                        if not download_info or not download_info.get("url"):
+                            if last_error:
+                                logger.error(
+                                    f"Failed after {max_retries} retries for {basic['student_name']}: {last_error}"
+                                )
+                            # Ensure download_info is a dict (even if empty)
+                            if not download_info:
+                                download_info = {"url": None, "filename": None}
 
                         # Refresh frame reference after download link retrieval
                         # (frame becomes stale after list_frame.goto() in _get_download_link)
@@ -737,11 +776,12 @@ class PlaywrightAutomationEngine:
             current_url = list_frame.url
             logger.debug(f"Current list URL: {current_url}")
 
-            # Check if detail link exists before clicking (10 second timeout)
+            # Check if detail link exists before clicking (60 second timeout)
+            # Phase 2: Extended timeout from 10s to 60s to handle server delays
             detail_link_selector = f'a[href="{detail_url}"]'
             try:
                 list_frame.wait_for_selector(
-                    detail_link_selector, timeout=10000, state="visible"
+                    detail_link_selector, timeout=60000, state="visible"
                 )
             except Exception as e:
                 logger.warning(
