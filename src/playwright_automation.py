@@ -411,13 +411,17 @@ class PlaywrightAutomationEngine:
                 # Wait for table to be fully rendered after frame reload or page transition
                 if current_page == 1:
                     # Frame reload after "全て" tab click
-                    logger.info("Waiting for table to render after frame reload (5 seconds)...")
+                    logger.info(
+                        "Waiting for table to render after frame reload (5 seconds)..."
+                    )
                     time.sleep(5)
                 elif current_page > 1:
                     # Page transition via ASP.NET __doPostBack
                     # Extended wait time to 5 seconds (same as page 1) to ensure table rendering
                     # completes before early duplicate check begins
-                    logger.info("Waiting for table to render after page navigation (5 seconds)...")
+                    logger.info(
+                        "Waiting for table to render after page navigation (5 seconds)..."
+                    )
                     time.sleep(5)
 
                 # Wait for data to load
@@ -485,13 +489,11 @@ class PlaywrightAutomationEngine:
                     for basic in submission_basics:
                         # Check if already uploaded (by student_id + submit_date)
                         try:
-                            existing_upload = (
-                                firestore_service.check_already_uploaded_by_student_date(
-                                    class_name,
-                                    task_id,
-                                    basic.get("student_id", ""),
-                                    basic.get("submit_date", ""),
-                                )
+                            existing_upload = firestore_service.check_already_uploaded_by_student_date(
+                                class_name,
+                                task_id,
+                                basic.get("student_id", ""),
+                                basic.get("submit_date", ""),
                             )
 
                             if existing_upload:
