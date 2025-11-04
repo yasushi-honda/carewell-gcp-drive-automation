@@ -54,7 +54,13 @@ class TestFileUploadIntegration:
         assert result is not None, "record_upload should return file document data"
 
         # Verify parent document was created
-        parent_ref = self.db.collection(class_name).document(task_id)
+        # New path: submissions/{class_name}/tasks/{task_id}
+        parent_ref = (
+            self.db.collection("submissions")
+            .document(class_name)
+            .collection("tasks")
+            .document(task_id)
+        )
         parent_doc = parent_ref.get()
 
         assert parent_doc.exists, "Parent document should be created"
@@ -67,7 +73,7 @@ class TestFileUploadIntegration:
         assert "last_updated" in parent_data
 
         # Verify file document was created in subcollection
-        file_docs = list(parent_ref.collection("documents").stream())
+        file_docs = list(parent_ref.collection("files").stream())
         assert len(file_docs) == 1, "One file document should exist"
 
         file_data = file_docs[0].to_dict()
@@ -116,7 +122,13 @@ class TestFileUploadIntegration:
         )
 
         # Verify parent document file_count incremented
-        parent_ref = self.db.collection(class_name).document(task_id)
+        # New path: submissions/{class_name}/tasks/{task_id}
+        parent_ref = (
+            self.db.collection("submissions")
+            .document(class_name)
+            .collection("tasks")
+            .document(task_id)
+        )
         parent_doc = parent_ref.get()
 
         parent_data = parent_doc.to_dict()
@@ -125,7 +137,7 @@ class TestFileUploadIntegration:
         ), "file_count should be 2 after second upload"
 
         # Verify two file documents exist
-        file_docs = list(parent_ref.collection("documents").stream())
+        file_docs = list(parent_ref.collection("files").stream())
         assert len(file_docs) == 2, "Two file documents should exist"
 
     def test_multiple_uploads_maintain_accurate_count(self):
@@ -156,14 +168,20 @@ class TestFileUploadIntegration:
             )
 
         # Verify parent document file_count is accurate
-        parent_ref = self.db.collection(class_name).document(task_id)
+        # New path: submissions/{class_name}/tasks/{task_id}
+        parent_ref = (
+            self.db.collection("submissions")
+            .document(class_name)
+            .collection("tasks")
+            .document(task_id)
+        )
         parent_doc = parent_ref.get()
 
         parent_data = parent_doc.to_dict()
         assert parent_data["file_count"] == 5, "file_count should be 5 after 5 uploads"
 
         # Verify five file documents exist
-        file_docs = list(parent_ref.collection("documents").stream())
+        file_docs = list(parent_ref.collection("files").stream())
         assert len(file_docs) == 5, "Five file documents should exist"
 
     def test_task_pattern_defaults_to_task_id(self):
@@ -191,7 +209,13 @@ class TestFileUploadIntegration:
         )
 
         # Verify parent document task_pattern defaults to task_id
-        parent_ref = self.db.collection(class_name).document(task_id)
+        # New path: submissions/{class_name}/tasks/{task_id}
+        parent_ref = (
+            self.db.collection("submissions")
+            .document(class_name)
+            .collection("tasks")
+            .document(task_id)
+        )
         parent_doc = parent_ref.get()
 
         parent_data = parent_doc.to_dict()
@@ -243,7 +267,13 @@ class TestFileUploadIntegration:
         assert existing["filename"] == "test_file.pdf"
 
         # Verify parent document file_count remains 1
-        parent_ref = self.db.collection(class_name).document(task_id)
+        # New path: submissions/{class_name}/tasks/{task_id}
+        parent_ref = (
+            self.db.collection("submissions")
+            .document(class_name)
+            .collection("tasks")
+            .document(task_id)
+        )
         parent_doc = parent_ref.get()
 
         parent_data = parent_doc.to_dict()
@@ -252,7 +282,7 @@ class TestFileUploadIntegration:
         ), "file_count should remain 1 for duplicate"
 
         # Verify only one file document exists
-        file_docs = list(parent_ref.collection("documents").stream())
+        file_docs = list(parent_ref.collection("files").stream())
         assert len(file_docs) == 1, "Only one file document should exist"
 
     def test_concurrent_uploads_maintain_count_accuracy(self):
@@ -302,7 +332,13 @@ class TestFileUploadIntegration:
             # not enforced for emulator which may have different latency
 
         # Verify parent document file_count is accurate
-        parent_ref = self.db.collection(class_name).document(task_id)
+        # New path: submissions/{class_name}/tasks/{task_id}
+        parent_ref = (
+            self.db.collection("submissions")
+            .document(class_name)
+            .collection("tasks")
+            .document(task_id)
+        )
         parent_doc = parent_ref.get()
 
         parent_data = parent_doc.to_dict()
@@ -311,7 +347,7 @@ class TestFileUploadIntegration:
         ), "file_count should be 5 after concurrent uploads"
 
         # Verify five file documents exist
-        file_docs = list(parent_ref.collection("documents").stream())
+        file_docs = list(parent_ref.collection("files").stream())
         assert (
             len(file_docs) == 5
         ), "Five file documents should exist after concurrent uploads"
