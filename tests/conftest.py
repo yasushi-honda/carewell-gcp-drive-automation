@@ -51,8 +51,9 @@ def emulator_client():
     except Exception as e:
         print(f"Warning: Could not clear Firestore emulator: {e}")
 
-    # Create client
-    db = firestore.Client(project=project_id, database="carewell-native")
+    # Create client using (default) database for emulator compatibility
+    # Firestore Emulator only supports (default) database for clear operations
+    db = firestore.Client(project=project_id, database="(default)")
 
     yield db
 
