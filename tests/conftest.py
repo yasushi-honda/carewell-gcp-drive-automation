@@ -40,9 +40,8 @@ def emulator_client():
     # Clear emulator data BEFORE test using official REST API
     emulator_host = os.getenv("FIRESTORE_EMULATOR_HOST", "localhost:8080")
     try:
-        # Use Firestore Emulator's clear endpoint
-        # This is more reliable than manual deletion
-        clear_url = f"http://{emulator_host}/emulator/v1/projects/{project_id}/databases/(default)/documents"
+        # Use Firestore Emulator's clear endpoint for carewell-native database
+        clear_url = f"http://{emulator_host}/emulator/v1/projects/{project_id}/databases/carewell-native/documents"
         response = requests.delete(clear_url)
         if response.status_code == 200:
             print(f"✓ Firestore emulator cleared for project: {project_id}")
@@ -51,9 +50,8 @@ def emulator_client():
     except Exception as e:
         print(f"Warning: Could not clear Firestore emulator: {e}")
 
-    # Create client using (default) database for emulator compatibility
-    # Firestore Emulator only supports (default) database for clear operations
-    db = firestore.Client(project=project_id, database="(default)")
+    # Create client using carewell-native database (as per original design)
+    db = firestore.Client(project=project_id, database="carewell-native")
 
     yield db
 

@@ -28,7 +28,7 @@ class TestFileUploadIntegration:
         project_id = os.getenv("GCP_PROJECT", "demo-test")
         emulator_host = os.getenv("FIRESTORE_EMULATOR_HOST", "localhost:8080")
         try:
-            clear_url = f"http://{emulator_host}/emulator/v1/projects/{project_id}/databases/(default)/documents"
+            clear_url = f"http://{emulator_host}/emulator/v1/projects/{project_id}/databases/carewell-native/documents"
             response = requests.delete(clear_url)
             if response.status_code == 200:
                 print(f"\n✓ Test setup: Firestore emulator cleared")
