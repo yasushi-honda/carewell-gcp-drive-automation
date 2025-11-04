@@ -36,13 +36,19 @@ class TestFirestoreService:
     def test_update_task_metadata_creates_new_document(self):
         """Test that _update_task_metadata creates a new parent document."""
         with patch("firestore_service.firestore.Client") as mock_client:
-            # Setup
+            # Setup - New path: submissions/{class_name}/tasks/{task_id}
             mock_db = Mock()
             mock_client.return_value = mock_db
-            mock_collection = Mock()
-            mock_document = Mock()
-            mock_db.collection.return_value = mock_collection
-            mock_collection.document.return_value = mock_document
+
+            mock_submissions_collection = Mock()
+            mock_class_doc = Mock()
+            mock_tasks_collection = Mock()
+            mock_task_doc = Mock()
+
+            mock_db.collection.return_value = mock_submissions_collection
+            mock_submissions_collection.document.return_value = mock_class_doc
+            mock_class_doc.collection.return_value = mock_tasks_collection
+            mock_tasks_collection.document.return_value = mock_task_doc
 
             service = self.FirestoreService()
 
@@ -55,12 +61,14 @@ class TestFirestoreService:
 
             # Assert
             assert result is True
-            mock_db.collection.assert_called_once_with(class_name)
-            mock_collection.document.assert_called_once_with(task_id)
+            mock_db.collection.assert_called_once_with("submissions")
+            mock_submissions_collection.document.assert_called_once_with(class_name)
+            mock_class_doc.collection.assert_called_once_with("tasks")
+            mock_tasks_collection.document.assert_called_once_with(task_id)
 
             # Verify set() was called with correct parameters
-            mock_document.set.assert_called_once()
-            call_args = mock_document.set.call_args
+            mock_task_doc.set.assert_called_once()
+            call_args = mock_task_doc.set.call_args
 
             # Check the data dictionary
             data = call_args[0][0]
@@ -76,13 +84,19 @@ class TestFirestoreService:
     def test_update_task_metadata_increments_file_count(self):
         """Test that _update_task_metadata uses Increment(1) for file_count."""
         with patch("firestore_service.firestore.Client") as mock_client:
-            # Setup
+            # Setup - New path: submissions/{class_name}/tasks/{task_id}
             mock_db = Mock()
             mock_client.return_value = mock_db
-            mock_collection = Mock()
-            mock_document = Mock()
-            mock_db.collection.return_value = mock_collection
-            mock_collection.document.return_value = mock_document
+
+            mock_submissions_collection = Mock()
+            mock_class_doc = Mock()
+            mock_tasks_collection = Mock()
+            mock_task_doc = Mock()
+
+            mock_db.collection.return_value = mock_submissions_collection
+            mock_submissions_collection.document.return_value = mock_class_doc
+            mock_class_doc.collection.return_value = mock_tasks_collection
+            mock_tasks_collection.document.return_value = mock_task_doc
 
             service = self.FirestoreService()
 
@@ -95,7 +109,7 @@ class TestFirestoreService:
             assert result is True
 
             # Verify Increment(1) was used for file_count
-            call_args = mock_document.set.call_args
+            call_args = mock_task_doc.set.call_args
             data = call_args[0][0]
 
             assert isinstance(data["file_count"], firestore_module.Increment)
@@ -105,16 +119,22 @@ class TestFirestoreService:
     def test_update_task_metadata_fails_gracefully(self):
         """Test fail-open behavior: returns False on error without raising exception."""
         with patch("firestore_service.firestore.Client") as mock_client:
-            # Setup
+            # Setup - New path: submissions/{class_name}/tasks/{task_id}
             mock_db = Mock()
             mock_client.return_value = mock_db
-            mock_collection = Mock()
-            mock_document = Mock()
-            mock_db.collection.return_value = mock_collection
-            mock_collection.document.return_value = mock_document
+
+            mock_submissions_collection = Mock()
+            mock_class_doc = Mock()
+            mock_tasks_collection = Mock()
+            mock_task_doc = Mock()
+
+            mock_db.collection.return_value = mock_submissions_collection
+            mock_submissions_collection.document.return_value = mock_class_doc
+            mock_class_doc.collection.return_value = mock_tasks_collection
+            mock_tasks_collection.document.return_value = mock_task_doc
 
             # Simulate Firestore error
-            mock_document.set.side_effect = Exception("Firestore connection error")
+            mock_task_doc.set.side_effect = Exception("Firestore connection error")
 
             service = self.FirestoreService()
 
@@ -140,12 +160,20 @@ class TestFirestoreService:
                 service, "_update_task_metadata", return_value=True
             ) as mock_update:
                 # Setup mock for file document creation
+                # New path: submissions/{class_name}/tasks/{task_id}/files/{composite_key}
+                mock_submissions_collection = Mock()
+                mock_class_doc = Mock()
+                mock_tasks_collection = Mock()
                 mock_task_doc = Mock()
-                mock_subcoll = Mock()
+                mock_files_collection = Mock()
                 mock_file_doc = Mock()
-                mock_db.collection.return_value.document.return_value = mock_task_doc
-                mock_task_doc.collection.return_value = mock_subcoll
-                mock_subcoll.document.return_value = mock_file_doc
+
+                mock_db.collection.return_value = mock_submissions_collection
+                mock_submissions_collection.document.return_value = mock_class_doc
+                mock_class_doc.collection.return_value = mock_tasks_collection
+                mock_tasks_collection.document.return_value = mock_task_doc
+                mock_task_doc.collection.return_value = mock_files_collection
+                mock_files_collection.document.return_value = mock_file_doc
 
                 # Execute
                 result = service.record_upload(
@@ -172,24 +200,23 @@ class TestFirestoreService:
     def test_record_upload_with_default_task_pattern(self):
         """Test that if task_pattern is None, task_id is used as default."""
         with patch("firestore_service.firestore.Client") as mock_client:
-            # Setup
+            # Setup - New path: submissions/{class_name}/tasks/{task_id}/files/{composite_key}
             mock_db = Mock()
             mock_client.return_value = mock_db
-            mock_collection = Mock()
+
+            mock_submissions_collection = Mock()
+            mock_class_doc = Mock()
+            mock_tasks_collection = Mock()
             mock_task_doc = Mock()
+            mock_files_collection = Mock()
             mock_file_doc = Mock()
-            mock_db.collection.return_value = mock_collection
 
-            def mock_document_side_effect(doc_id):
-                if doc_id == "課題①":
-                    return mock_task_doc
-                else:
-                    mock_subcoll = Mock()
-                    mock_task_doc.collection.return_value = mock_subcoll
-                    mock_subcoll.document.return_value = mock_file_doc
-                    return mock_task_doc
-
-            mock_collection.document.side_effect = mock_document_side_effect
+            mock_db.collection.return_value = mock_submissions_collection
+            mock_submissions_collection.document.return_value = mock_class_doc
+            mock_class_doc.collection.return_value = mock_tasks_collection
+            mock_tasks_collection.document.return_value = mock_task_doc
+            mock_task_doc.collection.return_value = mock_files_collection
+            mock_files_collection.document.return_value = mock_file_doc
 
             service = self.FirestoreService()
 
@@ -208,6 +235,7 @@ class TestFirestoreService:
             # Assert
             assert result is True
             # Verify task_id was used as task_pattern
+            # The task doc's set() is called by _update_task_metadata
             call_args = mock_task_doc.set.call_args_list[0]
             data = call_args[0][0]
             assert data["task_pattern"] == "課題①"
@@ -225,12 +253,20 @@ class TestFirestoreService:
                 service, "_update_task_metadata", return_value=False
             ) as mock_update:
                 # Setup mock for file document creation
+                # New path: submissions/{class_name}/tasks/{task_id}/files/{composite_key}
+                mock_submissions_collection = Mock()
+                mock_class_doc = Mock()
+                mock_tasks_collection = Mock()
                 mock_task_doc = Mock()
-                mock_subcoll = Mock()
+                mock_files_collection = Mock()
                 mock_file_doc = Mock()
-                mock_db.collection.return_value.document.return_value = mock_task_doc
-                mock_task_doc.collection.return_value = mock_subcoll
-                mock_subcoll.document.return_value = mock_file_doc
+
+                mock_db.collection.return_value = mock_submissions_collection
+                mock_submissions_collection.document.return_value = mock_class_doc
+                mock_class_doc.collection.return_value = mock_tasks_collection
+                mock_tasks_collection.document.return_value = mock_task_doc
+                mock_task_doc.collection.return_value = mock_files_collection
+                mock_files_collection.document.return_value = mock_file_doc
 
                 # Execute
                 result = service.record_upload(
@@ -255,19 +291,24 @@ class TestFirestoreService:
     def test_check_already_uploaded_unchanged(self):
         """Test that check_already_uploaded logic is unchanged and doesn't touch parent documents."""
         with patch("firestore_service.firestore.Client") as mock_client:
-            # Setup
+            # Setup - New path: submissions/{class_name}/tasks/{task_id}/files/{composite_key}
             mock_db = Mock()
             mock_client.return_value = mock_db
-            mock_collection = Mock()
+
+            mock_submissions_collection = Mock()
+            mock_class_doc = Mock()
+            mock_tasks_collection = Mock()
             mock_task_doc = Mock()
-            mock_subcoll = Mock()
+            mock_files_collection = Mock()
             mock_file_doc = Mock()
             mock_file_snapshot = Mock()
 
-            mock_db.collection.return_value = mock_collection
-            mock_collection.document.return_value = mock_task_doc
-            mock_task_doc.collection.return_value = mock_subcoll
-            mock_subcoll.document.return_value = mock_file_doc
+            mock_db.collection.return_value = mock_submissions_collection
+            mock_submissions_collection.document.return_value = mock_class_doc
+            mock_class_doc.collection.return_value = mock_tasks_collection
+            mock_tasks_collection.document.return_value = mock_task_doc
+            mock_task_doc.collection.return_value = mock_files_collection
+            mock_files_collection.document.return_value = mock_file_doc
             mock_file_doc.get.return_value = mock_file_snapshot
 
             # Simulate file exists
@@ -288,8 +329,8 @@ class TestFirestoreService:
             # Assert
             assert result is not None
             assert result["filename"] == "test.pdf"
-            # Verify only subcollection was accessed, not parent document
-            mock_task_doc.collection.assert_called_once_with("documents")
+            # Verify only files subcollection was accessed, not parent document
+            mock_task_doc.collection.assert_called_once_with("files")
             # Parent document should not be updated
             mock_task_doc.set.assert_not_called()
             mock_task_doc.update.assert_not_called()
