@@ -605,8 +605,8 @@ class PlaywrightAutomationEngine:
                     pagination_select.select_option(str(next_page))
 
                     # Wait for page transition to complete (ASP.NET __doPostBack)
-                    logger.info("Waiting for page transition to complete (3 seconds)...")
-                    time.sleep(3)
+                    logger.info("Waiting for page transition to complete (5 seconds)...")
+                    time.sleep(5)
 
                     # Refresh frame reference after page transition
                     # (frame may become stale after ASP.NET postback)
