@@ -544,6 +544,24 @@ class PlaywrightAutomationEngine:
                             basic["detail_url"], list_url
                         )
 
+                        # Refresh frame reference after download link retrieval
+                        # (frame becomes stale after list_frame.goto() in _get_download_link)
+                        temp_list_frame = None
+                        for frame in self.page.frames:
+                            if frame.name == CarewellSelectors.FRAME_LIST:
+                                temp_list_frame = frame
+                                break
+
+                        if not temp_list_frame:
+                            logger.warning(
+                                "'list' frame not found after download link retrieval"
+                            )
+                        else:
+                            list_frame = temp_list_frame
+                            logger.debug(
+                                f"✓ Frame refreshed after {basic['student_name']}"
+                            )
+
                         submission = {
                             **basic,  # Includes detail_url from basic info
                             "download_url": download_info.get("url"),
