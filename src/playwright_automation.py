@@ -444,6 +444,15 @@ class PlaywrightAutomationEngine:
                 rows = list_frame.locator("tr.standard_grid_item").all()
                 logger.info(f"Found {len(rows)} submission rows on page {current_page}")
 
+                # Wait for individual row links to become fully interactive
+                # After table rendering, JavaScript event handlers need additional time
+                # to attach to individual row links (especially for rows later in the table)
+                logger.info(
+                    "Waiting for individual row links to become fully interactive (5 seconds)..."
+                )
+                time.sleep(5)
+                logger.info("✓ Individual row links should now be interactive")
+
                 submission_basics = []
                 for i, row in enumerate(rows):
                     try:
@@ -551,6 +560,11 @@ class PlaywrightAutomationEngine:
                         logger.info(
                             f"Getting download link for: {basic['student_name']}"
                         )
+
+                        # Wait before each detail link click to reduce server load
+                        # and prevent rate limiting
+                        time.sleep(2)
+
                         download_info = self._get_download_link(
                             basic["detail_url"], list_url
                         )
