@@ -625,6 +625,67 @@ gcloud scheduler jobs update http carewell-class01-task01 \
 
 ---
 
+## 🧪 検証試行: 手動実行テスト (2025-11-04 16:30 JST)
+
+### 試行内容
+
+Cloud Scheduler設定の修正後、動作検証のため手動実行テストを実施しました。
+
+**実行コマンド**:
+```bash
+gcloud scheduler jobs run carewell-class01-task01 --location=asia-northeast1
+```
+
+### 検証結果
+
+**Cloud Scheduler設定確認** (16:30 JST):
+```json
+{
+  "name": "carewell-class01-task01",
+  "state": "ENABLED",
+  "schedule": "0,30 * * * *",
+  "lastAttemptTime": null,
+  "statusCode": null,
+  "attemptDeadline": "900s",
+  "httpTarget": {
+    "body": {
+      "task_pattern": "課題①業務分析　※～11/3〆切"  // ✅ 修正確認
+    }
+  }
+}
+```
+
+**判明した事実**:
+- ✅ Cloud Schedulerの設定は正しく修正されている
+- ❌ `lastAttemptTime: null` - 手動実行リクエスト送信後も、まだ一度も実行されていない
+- ❌ Cloud Run実行ログに class01-task01 の処理記録なし
+- ⚠️ ローカル環境からFirestoreへのDNS解決失敗（環境の問題）
+
+### 考察
+
+**手動実行が処理されない理由**:
+1. Cloud Schedulerが手動実行リクエストをキューに保持しているが、未処理
+2. class01-task01の課題①提出が現在0件のため、早期終了した可能性
+3. Cloud Schedulerのジョブ実行に遅延が発生している
+
+**推奨アクション**:
+1. 次回の自動実行（スケジュール: 毎時0分・30分）での検証を推奨
+2. 提出数が100件を超えるクラスでの検証も必要
+3. Cloud Runログから実際の task_pattern 使用状況を確認
+
+### 環境の制約
+
+**検証環境の問題**:
+- ローカル環境からFirestoreへの直接アクセスがDNS解決エラーで失敗
+- Cloud Runログからの情報取得のみ可能
+- Firestoreデータの直接確認は不可
+
+**影響**:
+- Firestoreに保存された task_pattern の直接確認ができない
+- 実行後のデータ検証は Cloud Runログとダッシュボードからのみ可能
+
+---
+
 **作成者**: Claude Code
 **レビュー**: 要レビュー
-**ステータス**: Cloud Scheduler Configuration Fixed for class01-task01 - Pending Verification at 16:30 JST
+**ステータス**: Cloud Scheduler Configuration Verified - Manual Execution Pending - Recommend Verification on Next Scheduled Run
