@@ -441,7 +441,7 @@ class PlaywrightAutomationEngine:
                     list_frame = self.page
                 else:
                     list_frame = temp_list_frame
-                    logger.debug(f"✓ Frame refreshed after sleep (page {current_page})")
+                    logger.info(f"✓ Frame refreshed after sleep (page {current_page})")
 
                 # Wait for data to load
                 logger.info("Waiting for submission table rows...")
