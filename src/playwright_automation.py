@@ -369,15 +369,21 @@ class PlaywrightAutomationEngine:
                         list_frame = frame
                         break
                     except Exception:
-                        logger.debug(f"Frame found but detached, retry {retry + 1}/{max_frame_retries}")
+                        logger.debug(
+                            f"Frame found but detached, retry {retry + 1}/{max_frame_retries}"
+                        )
                         continue
 
             if list_frame:
-                logger.info(f"✓ Frame '{CarewellSelectors.FRAME_LIST}' found for total count extraction")
+                logger.info(
+                    f"✓ Frame '{CarewellSelectors.FRAME_LIST}' found for total count extraction"
+                )
                 break
 
             if retry < max_frame_retries - 1:
-                logger.warning(f"'list' frame not found, retrying ({retry + 1}/{max_frame_retries})...")
+                logger.warning(
+                    f"'list' frame not found, retrying ({retry + 1}/{max_frame_retries})..."
+                )
                 time.sleep(2)  # Wait 2 seconds before retry
 
         if not list_frame:
@@ -432,19 +438,27 @@ class PlaywrightAutomationEngine:
                                 list_frame = frame
                                 break
                             except Exception:
-                                logger.debug(f"Frame found but detached, retry {retry + 1}/{max_frame_retries}")
+                                logger.debug(
+                                    f"Frame found but detached, retry {retry + 1}/{max_frame_retries}"
+                                )
                                 continue
 
                     if list_frame:
-                        logger.info(f"✓ Frame '{CarewellSelectors.FRAME_LIST}' found (page {current_page})")
+                        logger.info(
+                            f"✓ Frame '{CarewellSelectors.FRAME_LIST}' found (page {current_page})"
+                        )
                         break
 
                     if retry < max_frame_retries - 1:
-                        logger.warning(f"'list' frame not found, retrying ({retry + 1}/{max_frame_retries})...")
+                        logger.warning(
+                            f"'list' frame not found, retrying ({retry + 1}/{max_frame_retries})..."
+                        )
                         time.sleep(2)  # Wait 2 seconds before retry
 
                 if not list_frame:
-                    logger.warning("'list' frame not found after retries, using main page")
+                    logger.warning(
+                        "'list' frame not found after retries, using main page"
+                    )
                     list_frame = self.page
 
                 # Save current page URL for navigation back from detail pages
@@ -888,7 +902,9 @@ class PlaywrightAutomationEngine:
 
                 # Normalize detail_url for comparison (remove &filter= parameter if present)
                 # The "全て" tab click adds &filter=all to URLs, which may not be in the extracted detail_url
-                detail_url_normalized = detail_url.split('&filter=')[0].split('?filter=')[0]
+                detail_url_normalized = detail_url.split("&filter=")[0].split(
+                    "?filter="
+                )[0]
 
                 # Search for the specific detail link by comparing href attributes
                 # This handles HTML entity encoding differences (&amp; vs &)
@@ -896,9 +912,13 @@ class PlaywrightAutomationEngine:
                     link_href = link.get_attribute("href")
                     if link_href:
                         # Normalize link_href for comparison
-                        link_href_normalized = link_href.split('&filter=')[0].split('?filter=')[0]
+                        link_href_normalized = link_href.split("&filter=")[0].split(
+                            "?filter="
+                        )[0]
                         link_href_decoded = link_href.replace("&amp;", "&")
-                        link_href_decoded_normalized = link_href_decoded.split('&filter=')[0].split('?filter=')[0]
+                        link_href_decoded_normalized = link_href_decoded.split(
+                            "&filter="
+                        )[0].split("?filter=")[0]
 
                         # Compare URLs with multiple strategies:
                         # 1. Exact match (original URLs)
