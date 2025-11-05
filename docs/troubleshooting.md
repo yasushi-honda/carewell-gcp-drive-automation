@@ -503,6 +503,121 @@ gcloud run services update carewell-file-collector \
 
 ---
 
+### 7. フレーム取得タイミング問題でタイムアウト（大規模データセット）
+
+**症状**:
+- Cloud Run timeout を十分に延長したのにタイムアウト
+- 「全て」タブクリック後、60秒タイムアウトが繰り返し発生
+- エラー: `playwright._impl._errors.TimeoutError: Timeout 60000ms exceeded`
+- Firestore にデータが一切保存されない（またはごく少数）
+
+**診断手順**:
+
+```bash
+# 1. Playwrightタイムアウトエラーの確認
+gcloud logging read 'resource.type=cloud_run_revision AND
+  resource.labels.service_name=carewell-file-collector AND
+  timestamp>="2025-11-05T16:00:00Z" AND
+  severity>=ERROR' \
+  --limit 50 --format json | \
+  python3 -c "
+import json, sys
+data = json.load(sys.stdin)
+for entry in sorted(data, key=lambda x: x['timestamp']):
+    if 'textPayload' in entry:
+        text = entry['textPayload']
+        if 'TimeoutError' in text or 'wait_for_selector' in text:
+            print(f\"{entry['timestamp']} - {text[:200]}\")
+"
+
+# 2. 「全て」タブクリック成功の確認
+gcloud logging read 'resource.type=cloud_run_revision AND
+  resource.labels.service_name=carewell-file-collector AND
+  textPayload=~"全て" AND
+  timestamp>="2025-11-05T16:00:00Z"' \
+  --limit 20 --format json
+```
+
+**よくある原因**:
+
+#### A. フレーム待機時間が不足（2025-11-06 インシデント）
+
+**問題**: 大規模データセット（180+件）の場合、「全て」タブクリック後のサーバー応答に時間がかかる
+
+```
+「全て」タブクリック成功 ✅
+  ↓
+FRAME_LOAD_WAIT: 3秒待機（不足！）
+  ↓
+フレーム取得試行 → 失敗（フレームまだリロード中）
+  ↓
+wait_for_selector → 60秒タイムアウト ❌
+  ↓
+繰り返し...（25分間ループ）
+```
+
+**診断ポイント**:
+
+```bash
+# ログで確認すべきパターン
+# 1. 「全て」タブクリック成功
+16:01:36 - Clicked '全て tab' ✅
+
+# 2. その直後にタイムアウト
+16:01:50 - Could not extract total count: Timeout 10000ms ❌
+16:03:05 - TimeoutError: Timeout 60000ms exceeded ❌
+
+# 3. 繰り返しタイムアウト（約5分ごと）
+16:08:01 - TimeoutError: Timeout 60000ms exceeded
+16:17:54 - TimeoutError: Timeout 60000ms exceeded
+```
+
+**解決方法**:
+
+```python
+# src/playwright_automation.py
+
+# 1. フレーム待機時間を延長（Line 70付近）
+FRAME_LOAD_WAIT = 15000  # 15秒（従来の3秒から5倍）
+
+# 2. フレーム取得にリトライロジック追加（Line 358-385, 402-430付近）
+max_frame_retries = 5 if current_page == 1 else 3
+
+for retry in range(max_frame_retries):
+    for frame in self.page.frames:
+        if frame.name == "list":
+            try:
+                _ = frame.url  # フレームがdetachedでないことを確認
+                list_frame = frame
+                break
+            except Exception:
+                continue  # 次のフレームを試行
+
+    if list_frame:
+        break
+
+    time.sleep(2)  # 2秒待機して再試行
+```
+
+**重要な教訓**:
+- ❌ **Cloud Run timeout だけ延長しても根本的解決にならない**
+- ✅ **Playwright のタイムアウト箇所を特定して修正**
+- ✅ **過去のトラブルシューティングドキュメント（CLASS01_TIMEOUT_ANALYSIS.md）を参照**
+- ✅ **大規模データセット対応: 待機時間を長めに設定**
+
+**チェックリスト**（フレーム関連問題の修正時）:
+1. [ ] `FRAME_LOAD_WAIT` が十分な値か確認（大規模データセット: 15秒推奨）
+2. [ ] フレーム取得にリトライロジックがあるか
+3. [ ] フレームがdetachedでないことを確認しているか
+4. [ ] ログで「全て」タブクリック成功を確認
+5. [ ] ログでフレーム取得成功/失敗を確認
+
+**参照**:
+- `docs/incident-2025-11-06-cloud-run-timeout.md` (Section: 第3の問題発見 - フレーム取得タイミング問題)
+- `docs/CLASS01_TIMEOUT_ANALYSIS.md` (過去の同様の問題記録)
+
+---
+
 ## 診断コマンド集
 
 ### Cloud Run ログ確認（最優先）

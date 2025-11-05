@@ -425,6 +425,81 @@ Based on past incidents:
 
    **Reference**: `docs/incident-2025-11-06-cloud-run-timeout.md` (Section: GitHub Actions ワークフローによる設定上書き問題)
 
+   **🔴 CRITICAL Follow-up #2** (same day, 01:00-01:37 JST):
+
+   **Third Root Cause**: Frame retrieval timing issue (large datasets)
+
+   Even after fixing Cloud Run timeout to 1500s, **01:00 JST execution still timed out** at 1499 seconds.
+
+   **Symptoms**:
+   - 「全て」tab click: SUCCESS ✅
+   - Frame retrieval: FAILED ❌
+   - Repeated `TimeoutError: Timeout 60000ms exceeded` every ~5 minutes
+   - Looped for 25 minutes until Cloud Run timeout
+
+   **Root Cause**: `FRAME_LOAD_WAIT = 3000ms` (3 seconds) was insufficient for №01's 180+ submissions
+
+   ```text
+   「全て」tab clicked successfully (16:01:36) ✅
+     ↓
+   Wait 3 seconds (FRAME_LOAD_WAIT)
+     ↓
+   Try to get frame → FAILED (frame still reloading)
+     ↓
+   wait_for_selector → 60s timeout ❌
+     ↓
+   Retry... (repeated for 25 minutes)
+   ```
+
+   **User's Diagnosis**:
+   > "ドキュメントのトラブルシューティングをみて、多分またフレームがちゃんと探せてないだけだと思うから"
+
+   → **100% CORRECT**. Similar issue was documented in `CLASS01_TIMEOUT_ANALYSIS.md`.
+
+   **Solution** (commit `17d63d8`):
+
+   1. Increase frame wait time (Line 70):
+
+      ```python
+      FRAME_LOAD_WAIT = 15000  # 15s (was 3s)
+      ```
+
+   2. Add frame retrieval retry logic (Lines 358-385, 402-430):
+
+      ```python
+      max_frame_retries = 5 if current_page == 1 else 3
+
+      for retry in range(max_frame_retries):
+          for frame in self.page.frames:
+              if frame.name == "list":
+                  try:
+                      _ = frame.url  # Verify frame not detached
+                      list_frame = frame
+                      break
+                  except Exception:
+                      continue
+
+          if list_frame:
+              break
+
+          time.sleep(2)  # Wait before retry
+      ```
+
+   **Critical Lessons**:
+   - ❌ **Extending Cloud Run timeout alone doesn't fix Playwright timeouts**
+   - ✅ **Must identify and fix the actual timeout location in code**
+   - ✅ **Refer to past troubleshooting docs** (`CLASS01_TIMEOUT_ANALYSIS.md`)
+   - ✅ **Large datasets (180+ items) require longer wait times**
+
+   **Frame Issue Checklist**:
+   - [ ] `FRAME_LOAD_WAIT` sufficient? (15s recommended for large datasets)
+   - [ ] Frame retrieval has retry logic?
+   - [ ] Verify frame not detached before use?
+   - [ ] Log shows 「全て」tab click success?
+   - [ ] Log shows frame retrieval success/failure?
+
+   **Reference**: `docs/incident-2025-11-06-cloud-run-timeout.md` (Section: 第3の問題発見 - フレーム取得タイミング問題)
+
 ## Steering Configuration
 
 ### Current Steering Files
