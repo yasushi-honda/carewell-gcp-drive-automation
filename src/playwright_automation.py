@@ -67,7 +67,7 @@ class CarewellConfig:
     # Timeouts (in milliseconds)
     PAGE_TIMEOUT = 180000  # 3 minutes for slow network
     NAVIGATION_WAIT = 2000  # Wait after navigation actions
-    FRAME_LOAD_WAIT = 3000  # Wait for frames to load
+    FRAME_LOAD_WAIT = 15000  # Wait for frames to load (increased from 3000ms for large datasets like №01 with 180+ submissions)
     DATA_LOAD_WAIT = 10000  # Wait for data-heavy pages (increased from 5000ms to handle concurrent job load)
 
     # Retry settings
@@ -356,14 +356,32 @@ class PlaywrightAutomationEngine:
         logger.info("Extracting submission list from all pages")
 
         # Find the list frame
+        # Frame may still be reloading after "全て" tab click, so retry
         list_frame = None
-        for frame in self.page.frames:
-            if frame.name == CarewellSelectors.FRAME_LIST:
-                list_frame = frame
+        max_frame_retries = 5
+
+        for retry in range(max_frame_retries):
+            for frame in self.page.frames:
+                if frame.name == CarewellSelectors.FRAME_LIST:
+                    # Verify frame is not detached
+                    try:
+                        _ = frame.url  # This will raise if frame is detached
+                        list_frame = frame
+                        break
+                    except Exception:
+                        logger.debug(f"Frame found but detached, retry {retry + 1}/{max_frame_retries}")
+                        continue
+
+            if list_frame:
+                logger.info(f"✓ Frame '{CarewellSelectors.FRAME_LIST}' found for total count extraction")
                 break
 
+            if retry < max_frame_retries - 1:
+                logger.warning(f"'list' frame not found, retrying ({retry + 1}/{max_frame_retries})...")
+                time.sleep(2)  # Wait 2 seconds before retry
+
         if not list_frame:
-            logger.warning("'list' frame not found, using main page")
+            logger.warning("'list' frame not found after retries, using main page")
             list_frame = self.page
 
         # Extract total count from UI (must be in list frame after "全て" is selected)
@@ -401,14 +419,32 @@ class PlaywrightAutomationEngine:
 
                 # Refresh frame reference for each page to handle pagination
                 # This ensures we always have the latest frame object after page transitions
+                # For page 1, frame may still be reloading after "全て" tab click, so retry
                 list_frame = None
-                for frame in self.page.frames:
-                    if frame.name == CarewellSelectors.FRAME_LIST:
-                        list_frame = frame
+                max_frame_retries = 5 if current_page == 1 else 3
+
+                for retry in range(max_frame_retries):
+                    for frame in self.page.frames:
+                        if frame.name == CarewellSelectors.FRAME_LIST:
+                            # Verify frame is not detached
+                            try:
+                                _ = frame.url  # This will raise if frame is detached
+                                list_frame = frame
+                                break
+                            except Exception:
+                                logger.debug(f"Frame found but detached, retry {retry + 1}/{max_frame_retries}")
+                                continue
+
+                    if list_frame:
+                        logger.info(f"✓ Frame '{CarewellSelectors.FRAME_LIST}' found (page {current_page})")
                         break
 
+                    if retry < max_frame_retries - 1:
+                        logger.warning(f"'list' frame not found, retrying ({retry + 1}/{max_frame_retries})...")
+                        time.sleep(2)  # Wait 2 seconds before retry
+
                 if not list_frame:
-                    logger.warning("'list' frame not found, using main page")
+                    logger.warning("'list' frame not found after retries, using main page")
                     list_frame = self.page
 
                 # Save current page URL for navigation back from detail pages
