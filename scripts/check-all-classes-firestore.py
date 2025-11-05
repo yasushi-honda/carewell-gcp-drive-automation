@@ -33,7 +33,7 @@ def check_class_task_data(db, class_name, task_id):
         "class_name": class_name,
         "task_id": task_id,
         "new_schema": {"parent_exists": False, "file_count": 0},
-        "old_schema": {"parent_exists": False, "file_count": 0}
+        "old_schema": {"parent_exists": False, "file_count": 0},
     }
 
     # 新スキーマ確認
@@ -125,7 +125,9 @@ def main():
     print("=" * 80)
     print()
 
-    print(f"✅ 新スキーマにデータあり（Dashboard で表示される）: {len(new_schema_ok)}件")
+    print(
+        f"✅ 新スキーマにデータあり（Dashboard で表示される）: {len(new_schema_ok)}件"
+    )
     if new_schema_ok:
         for class_short, task_id, count in new_schema_ok:
             print(f"   - №{class_short} / {task_id}: {count}件")

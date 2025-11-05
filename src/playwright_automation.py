@@ -442,7 +442,9 @@ class PlaywrightAutomationEngine:
                         break
 
                 if not temp_list_frame:
-                    logger.warning("'list' frame not found after sleep, using main page")
+                    logger.warning(
+                        "'list' frame not found after sleep, using main page"
+                    )
                     list_frame = self.page
                 else:
                     list_frame = temp_list_frame
@@ -451,27 +453,42 @@ class PlaywrightAutomationEngine:
                 # Phase 4: Step-by-step waiting strategy to identify exact failure point
                 # Wait for data to load with detailed logging at each step
                 logger.info("Waiting for submission table (step-by-step)...")
-                
+
                 try:
                     # Step 1: Wait for table element itself
-                    logger.info("Step 1: Waiting for table element (#ctl00_masterMain_gvwMain)...")
-                    list_frame.wait_for_selector("#ctl00_masterMain_gvwMain", timeout=60000)
+                    logger.info(
+                        "Step 1: Waiting for table element (#ctl00_masterMain_gvwMain)..."
+                    )
+                    list_frame.wait_for_selector(
+                        "#ctl00_masterMain_gvwMain", timeout=60000
+                    )
                     logger.info("✓ Step 1 complete: Table element found")
 
                     # Step 2: Wait for tbody within table
                     logger.info("Step 2: Waiting for tbody element...")
-                    list_frame.wait_for_selector("#ctl00_masterMain_gvwMain tbody", timeout=60000)
+                    list_frame.wait_for_selector(
+                        "#ctl00_masterMain_gvwMain tbody", timeout=60000
+                    )
                     logger.info("✓ Step 2 complete: Table tbody found")
 
                     # Step 3: Wait for table rows
-                    logger.info("Step 3: Waiting for table rows (tr.standard_grid_item)...")
-                    list_frame.wait_for_selector("#ctl00_masterMain_gvwMain tbody tr.standard_grid_item", timeout=60000)
+                    logger.info(
+                        "Step 3: Waiting for table rows (tr.standard_grid_item)..."
+                    )
+                    list_frame.wait_for_selector(
+                        "#ctl00_masterMain_gvwMain tbody tr.standard_grid_item",
+                        timeout=60000,
+                    )
                     logger.info("✓ Step 3 complete: Table rows found")
 
                 except Exception as wait_error:
                     logger.error(f"Table wait failed at one of the steps: {wait_error}")
-                    logger.error(f"Frame URL: {list_frame.url if list_frame else 'N/A'}")
-                    logger.error(f"Frame name: {list_frame.name if list_frame else 'N/A'}")
+                    logger.error(
+                        f"Frame URL: {list_frame.url if list_frame else 'N/A'}"
+                    )
+                    logger.error(
+                        f"Frame name: {list_frame.name if list_frame else 'N/A'}"
+                    )
                     raise
 
                 # Wait for table links to become fully interactive
@@ -484,7 +501,9 @@ class PlaywrightAutomationEngine:
                 logger.info("✓ Table links should now be interactive")
 
                 # First pass: Extract all basic submission info from current page
-                rows = list_frame.locator("#ctl00_masterMain_gvwMain tbody tr.standard_grid_item").all()
+                rows = list_frame.locator(
+                    "#ctl00_masterMain_gvwMain tbody tr.standard_grid_item"
+                ).all()
                 logger.info(f"Found {len(rows)} submission rows on page {current_page}")
 
                 # Wait for individual row links to become fully interactive
@@ -838,9 +857,13 @@ class PlaywrightAutomationEngine:
                     if link_href:
                         # Compare URLs directly and also with entity decoding
                         # HTML encodes & as &amp;, so we handle both cases
-                        if (link_href == detail_url or
-                            link_href.replace("&amp;", "&") == detail_url):
-                            logger.debug(f"✓ Found detail link dynamically: {detail_url}")
+                        if (
+                            link_href == detail_url
+                            or link_href.replace("&amp;", "&") == detail_url
+                        ):
+                            logger.debug(
+                                f"✓ Found detail link dynamically: {detail_url}"
+                            )
                             # Playwright's auto-waiting handles visibility checks before click
                             link.click()
                             detail_link_found = True
@@ -849,7 +872,9 @@ class PlaywrightAutomationEngine:
                 if not detail_link_found:
                     logger.warning(f"Detail link not found dynamically: {detail_url}")
                     # Log debug info about found links for troubleshooting
-                    found_links = [link.get_attribute("href") for link in report_links[:3]]
+                    found_links = [
+                        link.get_attribute("href") for link in report_links[:3]
+                    ]
                     logger.debug(f"Sample found links: {found_links}")
                     return {"url": None, "filename": None}
 
