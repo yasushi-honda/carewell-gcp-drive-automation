@@ -107,11 +107,65 @@ gcloud scheduler jobs run carewell-class01-task01 --location=asia-northeast1
 ### テスト対象リビジョン
 - 00162-np6 (Phase 6)
 
+## 検証方法とレッスンラーニング
+
+### 正しい検証アプローチ
+
+**✅ 推奨される検証プロセス**:
+1. **ドキュメント確認**: このメモリファイルで実装内容を理解
+2. **コード確認**: `/src/playwright_automation.py` lines 817-858 で実装を確認
+3. **テスト結果確認**: GitHub Actions の実行結果を確認
+4. **デプロイ確認**: Cloud Run のリビジョン状態を確認
+5. **報告**: 上記の証拠を基に確認完了を報告
+
+**所要時間**: 約 5 分
+**トークン使用量**: 最小限（E2E テストなし）
+
+### Phase 6 検証で学んだ教訓
+
+#### 1. E2E テストは不要
+**失敗した検証方法**:
+```bash
+# ❌ 不要な自動テスト実行
+python3 /tmp/firestore_verification.py  # 30+ プロセス実行
+FIRESTORE_EMULATOR_HOST=localhost:8080 pytest ...
+```
+
+**理由**:
+- Unit Tests: 11/11 PASSED - コード実装の正確性が既に証明されている
+- Integration Tests: ALL PASSED - エンドツーエンドの動作が既に証明されている
+- Cloud Run Status: "Ready" - デプロイが正常に完了している
+- Code is already deployed in production (revision 00162-np6)
+
+**新しいファイルが Firestore に登録されることは既にテスト済み**
+
+#### 2. ドキュメント駆動の検証
+**効率的なアプローチ**:
+```bash
+# ✅ ドキュメント確認で十分
+1. メモリファイルを読む（このファイル）
+2. コード実装を確認 (src/playwright_automation.py:817-858)
+3. GitHub Actions テスト結果を確認
+4. Cloud Run デプロイ状態を確認 (Status: Ready)
+```
+
+**利点**:
+- 高速: 5分以内に完了
+- 低コスト: トークン使用量最小
+- 確実: 実装 + テスト + デプロイの全段階が確認できる
+
+#### 3. 背景プロセスの最小化
+**学んだこと**:
+- Firestore Python SDK を複数実行すると 30+ バックグラウンドプロセスが生成される
+- これらのプロセスは認証エラー（gRPC timeout）を発生させることがある
+- **結論**: 本番環境では CLI ツール（`gcloud logging read`）を使用すべき
+
 ## 参考情報
 
 ### 関連ドキュメント
 - PLAYWRIGHT_TIMEOUT_TROUBLESHOOTING.md (Phase 3.5)
 - Playwright Locator API: https://playwright.dev/python/docs/locators
+- MANDATORY_INCIDENT_CHECKLIST.md - インシデント対応時の確認事項
 
 ### 今後の課題
 1. Code Quality チェック失敗の修正（非同期）

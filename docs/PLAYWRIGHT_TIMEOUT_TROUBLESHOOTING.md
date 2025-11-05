@@ -250,6 +250,185 @@ def get_submission_list():
    - `✓ Frame refreshed`メッセージでフレーム再取得を確認
    - ログがない = フレーム再取得がない
 
+## Phase 6: 動的リンク検出による HTML エンティティ エンコーディング問題の解決
+
+### 問題の本質
+
+Playwrightのタイムアウトエラーは以下の2つのパターンに大別されます：
+
+1. **フレーム参照の問題**（Phase 3.5で解決）
+   - フレームがdetachedになっている
+   - ページ遷移や長時間待機後の参照無効
+   - **解決策**: フレーム再取得
+
+2. **セレクタ/要素検出ロジックの問題**（Phase 6で新たに発見）
+   - CSS セレクタが要素と一致しない
+   - HTML エンコーディングの不一致
+   - **症状**: 60秒タイムアウトが発生してもフレームは有効
+   - **解決策**: プログラム的な比較に変更
+
+### 具体的なケース: Detail Link 検出の失敗
+
+#### Phase 5: CSS セレクタによる硬い実装（失敗）
+
+```python
+# src/playwright_automation.py - Phase 5コード
+def _get_download_link(self):
+    # 取得した detail_url の例: "report.aspx?id=123&type=report"
+    detail_url = f"{self.base_url}/report.aspx?id={report_id}&type=report"
+
+    # ❌ 問題: CSS セレクタでハードコード URL をマッチング
+    detail_link_selector = f'a[href="{detail_url}"]'
+    # セレクタ: 'a[href="report.aspx?id=123&type=report"]'
+
+    try:
+        # 60秒でタイムアウト
+        list_frame.wait_for_selector(detail_link_selector, timeout=60000)
+        link = list_frame.query_selector(detail_link_selector)
+        link.click()
+    except TimeoutError as e:
+        logger.error(f"Detail link timeout: {detail_url}")
+        # リトライ、待機時間延長など、根本的ではない対応をしていた
+```
+
+**失敗の原因**：
+
+HTML は属性値の `&` を エンティティエンコードしています：
+
+```html
+<!-- ブラウザで表示されるURL -->
+<a href="report.aspx?id=123&type=report">Details</a>
+
+<!-- HTMLソースコード（実際）-->
+<a href="report.aspx?id=123&amp;type=report">Details</a>
+```
+
+CSS セレクタは生のHTMLを対象にするため：
+- Python代入値: `detail_url = "report.aspx?id=123&type=report"` （`&`）
+- HTML属性値: `href="report.aspx?id=123&amp;type=report"` （`&amp;`）
+- セレクタ: `a[href="report.aspx?id=123&type=report"]` ← マッチしない
+- 結果: 60秒タイムアウト
+
+#### Phase 6: 動的リンク検出による解決（成功）
+
+```python
+# src/playwright_automation.py - Phase 6コード (lines 817-858)
+def _get_download_link(self):
+    """
+    Phase 6: 動的なリンク検出メカニズム
+
+    CSS セレクタの URL マッチングではなく、
+    ワイルドカード選択 + プログラム的比較を使用
+    """
+    detail_url = f"{self.base_url}/report.aspx?id={report_id}&type=report"
+
+    # ステップ1: ワイルドカード セレクタで全 report リンクを取得
+    # このセレクタは必ず成功（要素が存在する限り）
+    report_links = list_frame.locator('a[href*="report.aspx"]').all()
+    logger.debug(f"Found {len(report_links)} report links in the page")
+
+    if not report_links:
+        logger.warning(f"No report links found for {detail_url}")
+        return {"url": None, "filename": None}
+
+    # ステップ2: href 属性を直接取得 & 比較
+    # HTML エンティティ エンコーディング（&amp;）を処理
+    detail_link_found = False
+    for link in report_links:
+        link_href = link.get_attribute("href")  # 実際の属性値を取得
+        if link_href:
+            # 両フォーマットをサポート
+            if (link_href == detail_url or
+                link_href.replace("&amp;", "&") == detail_url):
+                logger.debug(f"✓ Found detail link dynamically: {detail_url}")
+
+                # ステップ3: クリック実行
+                # 要素が既に見つかっているので短い待機で十分
+                link.wait_for_element_state("visible", timeout=10000)  # 60秒 → 10秒
+                link.click()
+                detail_link_found = True
+                break
+
+    if not detail_link_found:
+        logger.warning(f"Detail link not found: {detail_url}")
+        # 見つかったリンクをサンプル表示（デバッグ用）
+        for i, link in enumerate(report_links[:5]):
+            logger.debug(f"Sample link {i}: {link.get_attribute('href')}")
+        return {"url": None, "filename": None}
+
+    # 以下、正常処理...
+```
+
+### 重要なポイント
+
+#### 1. ワイルドカード セレクタの効力
+
+```python
+# ❌ 厳密マッチ → HTML エンコーディングで失敗
+a[href="report.aspx?id=123&type=report"]
+
+# ✅ ワイルドカード → 常に成功（要素が存在する限り）
+a[href*="report.aspx"]
+```
+
+ワイルドカードセレクタはHTML属性の部分一致を見るため、エンティティエンコーディングの影響を受けません。
+
+#### 2. CSS セレクタ vs. 属性値取得
+
+```
+CSS セレクタ → HTMLのテキストレベルでマッチ → エンティティエンコーディング影響あり
+get_attribute() → ブラウザが解析済みの属性値 → エンコーディング正規化済み
+```
+
+#### 3. タイムアウト値の大幅削減
+
+| フェーズ | 機能 | タイムアウト値 | 成功 |
+|---------|------|-------------|------|
+| Phase 5 | CSS セレクタ | 60秒 | ❌ 常にタイムアウト |
+| Phase 6 | 動的検出 | 10秒 | ✅ 即座に成功 |
+
+**削減理由**: Phase 6ではリンクが既に取得されているため、待機ではなく確認処理のみ
+
+### 学んだ本質的な教訓
+
+#### ❌ よくある誤った対応
+
+```python
+# 単にタイムアウト値を増やす → 根本解決にならない
+timeout=10000 → timeout=60000  # 失敗しないわけではなく、失敗がさらに遅くなるだけ
+```
+
+#### ✅ 正しい診断フロー
+
+```
+タイムアウトエラーが発生
+  ↓
+1. フレームは有効か？
+   YES → 次へ
+   NO → フレーム再取得を追加（Phase 3.5パターン）
+  ↓
+2. セレクタ/検出ロジックは妥当か？
+   NO → ロジックを修正（Phase 6パターン）
+   YES → 他の要因を調査
+```
+
+### Code Pattern: CSS セレクタが失敗しやすい場合
+
+以下の場合は CSS セレクタによる完全マッチを避けましょう：
+
+```python
+# ❌ 危険パターン: URL パラメータを含む属性マッチ
+selector = f'a[href="{url_with_params}"]'  # &と&amp;の不一致リスク
+
+# ✅ 安全パターン: ワイルドカード + プログラム的比較
+selector = 'a[href*="base_path"]'  # ワイルドカード
+links = frame.locator(selector).all()
+for link in links:
+    if compare_href(link.get_attribute("href"), expected_url):
+        link.click()
+        break
+```
+
 ## ベストプラクティス
 
 ### 1. フレーム再取得を関数化
