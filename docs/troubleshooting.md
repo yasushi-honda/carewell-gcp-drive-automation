@@ -333,6 +333,103 @@ ref = db.collection("submissions").document(class_name).collection("tasks").docu
 
 ---
 
+### 6. Cloud Run Timeout で処理が中断される
+
+**症状**:
+- Cloud Scheduler のログで `504 Gateway Timeout`
+- Firestore/Drive/Spreadsheet にデータが一切保存されない
+- Cloud Run ログで処理途中で終了
+
+**診断手順**:
+
+```bash
+# 1. HTTP レスポンスでタイムアウト確認
+gcloud logging read "resource.type=cloud_run_revision AND \
+  resource.labels.service_name=carewell-file-collector AND \
+  httpRequest.status>=500" \
+  --limit 20 --format json | \
+  jq -r '.[] | "\(.timestamp) - Status: \(.httpRequest.status) - Latency: \(.httpRequest.latency)"'
+
+# 2. タイムアウト設定確認（2箇所）
+# Cloud Scheduler
+gcloud scheduler jobs describe JOB_NAME \
+  --location=asia-northeast1 \
+  --format="value(attemptDeadline)"
+
+# Cloud Run
+gcloud run services describe carewell-file-collector \
+  --region=asia-northeast1 \
+  --format="value(spec.template.spec.timeoutSeconds)"
+```
+
+**よくある原因**:
+
+#### A. Cloud Run timeout が Cloud Scheduler deadline より短い（2025-11-06 インシデント）
+
+```
+Cloud Scheduler attemptDeadline: 1500秒 (25分) ✅
+Cloud Run timeoutSeconds:        900秒 (15分)  ❌ ← 先にタイムアウト
+```
+
+**なぜ発生したか**:
+- №01は180件（2ページ処理）で処理時間 > 15分
+- Cloud Run が15分で強制終了 → 504 Gateway Timeout
+- Firestore/Drive への保存処理に到達せず
+
+**調査ステップ**（実際のインシデントから）:
+
+```mermaid
+graph TD
+    A[症状: Firestoreに<br/>データなし] --> B[Cloud Scheduler<br/>ログ確認]
+    B --> C{504 Timeout?}
+    C -->|YES| D[HTTP latency確認<br/>900秒で終了]
+    C -->|NO| Z[別の問題]
+
+    D --> E[Cloud Scheduler<br/>deadline確認]
+    E --> F{十分な時間?}
+    F -->|YES 1500s| G[Cloud Run<br/>timeout確認]
+    F -->|NO| H[Scheduler延長]
+
+    G --> I{Cloud Runが短い?}
+    I -->|YES| J[根本原因発見!]
+    I -->|NO| Z
+
+    J --> K[Cloud Run timeout延長]
+
+    style J fill:#ff6b6b,color:#fff
+    style K fill:#6bcf7f,color:#fff
+```
+
+**重要ポイント**:
+1. タイムアウトは **2箇所** ある（両方を確認）
+2. **短い方** が先にタイムアウトする
+3. Cloud Run ログに `course_id` がない = タイムアウトで中断された可能性
+
+**解決方法**:
+
+```bash
+# Cloud Run timeout を延長（両方を一致させる）
+gcloud run services update carewell-file-collector \
+  --region=asia-northeast1 \
+  --timeout=1500 \
+  --project carewell-automation
+
+# 設定確認
+gcloud run services describe carewell-file-collector \
+  --region=asia-northeast1 \
+  --format="value(spec.template.spec.timeoutSeconds)"
+```
+
+**チェックリスト**（タイムアウト変更時）:
+- [ ] Cloud Scheduler `attemptDeadline` を確認
+- [ ] Cloud Run `timeoutSeconds` を確認
+- [ ] 両者が一致している（または Cloud Run ≥ Scheduler）
+- [ ] 処理時間の最大値を考慮（2ページ処理 = 20-25分）
+
+**参照**: `docs/incident-2025-11-06-cloud-run-timeout.md`
+
+---
+
 ## 診断コマンド集
 
 ### Cloud Run ログ確認（最優先）
@@ -461,6 +558,7 @@ EOF
 
 ### 過去のインシデント記録
 
+- **docs/incident-2025-11-06-cloud-run-timeout.md**: Cloud Run timeout 設定ミス（№01がデータ保存されない）
 - **docs/incident-2025-11-05-schema-migration-and-playwright-fix.md**: Dashboard スキーマ移行 + Playwright エラー
 - **docs/dashboard-firestore-schema-migration.md**: Dashboard 専用記録
 - **docs/CLASS01_TIMEOUT_ANALYSIS.md**: タイムアウト問題分析
@@ -479,6 +577,6 @@ EOF
 
 ---
 
-**最終更新**: 2025/11/05
-**バージョン**: 1.0
+**最終更新**: 2025/11/06
+**バージョン**: 1.1
 **メンテナー**: Claude Code

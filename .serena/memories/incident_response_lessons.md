@@ -43,6 +43,58 @@ gcloud scheduler jobs describe JOB_NAME --location=asia-northeast1
 
 ### 実践的な教訓（過去のインシデントから）
 
+#### 2025-11-06: Cloud Run Timeout 設定ミス
+
+**問題**: №01 課題① が Firestore/Drive/Spreadsheet に**一切データ保存されない**
+
+**根本原因**: タイムアウト設定が **2箇所** にあることを見落とし
+
+```
+Cloud Scheduler attemptDeadline: 1500秒 (25分) ✅ 延長済み（2025-11-04）
+Cloud Run timeoutSeconds:        900秒 (15分)  ❌ 未延長（見落とし）
+                                               ↑ ここで先にタイムアウト
+```
+
+**症状**:
+- Cloud Run ログで処理途中で終了
+- HTTP レスポンス: `504 Gateway Timeout`、latency: 900秒
+- Firestore/Drive にデータが一切なし
+
+**❌ 誤った仮定**:
+1. `docs/CLASS01_TIMEOUT_ANALYSIS.md` で「タイムアウト問題は解決済み」と思い込んだ
+2. Cloud Scheduler の設定だけ確認、Cloud Run を見落とし
+3. 「全て」タブクリックの問題と誤認（実際は成功していた）
+
+**✅ 正しい調査ステップ**:
+1. HTTP レスポンスログで latency 確認 → 900秒で終了
+2. **タイムアウト設定を2箇所とも確認**:
+   ```bash
+   # Cloud Scheduler
+   gcloud scheduler jobs describe JOB_NAME --format="value(attemptDeadline)"
+
+   # Cloud Run (見落としやすい！)
+   gcloud run services describe SERVICE_NAME --format="value(spec.template.spec.timeoutSeconds)"
+   ```
+3. 短い方（Cloud Run 900秒）が先にタイムアウトすることを特定
+
+**解決方法**:
+```bash
+gcloud run services update carewell-file-collector \
+  --region=asia-northeast1 \
+  --timeout=1500
+```
+
+**教訓**:
+- **タイムアウトチェックリスト**（変更時の必須確認）:
+  - [ ] Cloud Scheduler `attemptDeadline` 確認
+  - [ ] Cloud Run `timeoutSeconds` 確認
+  - [ ] 両者が一致している（または Cloud Run ≥ Scheduler）
+  - [ ] 最大処理時間を考慮（2ページ = 20-25分）
+- **「解決済み」を鵜呑みにしない**: 過去ドキュメントでも実データで検証
+- **504 Timeout の調査**: HTTP latency が timeout 値と一致 → そこでタイムアウト
+
+**参考**: `docs/incident-2025-11-06-cloud-run-timeout.md`
+
 #### 2025-11-04: Cloud Scheduler task_pattern 不一致
 
 **❌ 避けるべきアプローチ**:
@@ -165,6 +217,7 @@ done
 - [ ] 段階的実施（各フェーズで検証）
 - [ ] 全体影響を事前評価
 - [ ] Cloud Runログ/Dashboardで検証
+- [ ] **タイムアウト関連**: Cloud Scheduler AND Cloud Run の両方確認
 
 **完了後**:
 - [ ] 教訓をドキュメント化
@@ -176,9 +229,10 @@ done
 
 - **CLAUDE.md**: Lines 11-42 (CRITICAL: READ THIS FIRST)
 - **CLAUDE.md**: Lines 81-126 (Incident Response Workflow)
-- **CLAUDE.md**: Lines 224-306 (Common Mistakes to Avoid)
+- **CLAUDE.md**: Lines 224-398 (Common Mistakes to Avoid - 6 incidents)
 - **docs/CLASS01_TIMEOUT_ANALYSIS.md**: Lines 689-797 (対応の振り返りと最適解)
+- **docs/incident-2025-11-06-cloud-run-timeout.md**: Cloud Run timeout 設定ミス
 - **docs/incident-2025-11-05-schema-migration-and-playwright-fix.md**: 2025/11/05 包括的インシデント記録
+- **docs/troubleshooting.md**: トラブルシューティングガイド（診断フロー・調査ステップ）
 
-最終更新: 2025-11-05
-コミット: 4747166
+最終更新: 2025-11-06

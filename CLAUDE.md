@@ -349,6 +349,54 @@ Based on past incidents:
    - `docs/incident-2025-11-05-schema-migration-and-playwright-fix.md`
    - [Playwright Auto-waiting Documentation](https://playwright.dev/python/docs/actionability)
 
+6. **Cloud Run Timeout Misconfiguration** (2025-11-06 incident)
+   - ❌ Extended Cloud Scheduler deadline but forgot Cloud Run timeout
+   - ✅ **Both** timeouts must be configured (Scheduler AND Cloud Run)
+   - Impact: №01 課題① timed out at 15 minutes → 504 Gateway Timeout → No data saved
+
+   **Root Cause**: Timeout settings exist in **two separate places**
+
+   ```
+   Cloud Scheduler attemptDeadline: 1500秒 (25分) ✅ Extended
+   Cloud Run timeoutSeconds:        900秒 (15分)  ❌ Overlooked
+                                                   ↑ Timeout occurs here first
+   ```
+
+   **Why it happened**:
+   - №01 has 180 submissions (2-page processing) → takes > 15 minutes
+   - Cloud Run forced shutdown at 15 minutes
+   - Never reached Firestore/Drive/Spreadsheet save operations
+
+   **Investigation Steps** (critical for future incidents):
+   1. Check HTTP response latency in Cloud Run logs
+   2. If latency = 900s → Cloud Run timeout
+   3. **Always check BOTH timeout settings**:
+      ```bash
+      # Cloud Scheduler
+      gcloud scheduler jobs describe JOB_NAME --format="value(attemptDeadline)"
+
+      # Cloud Run (often overlooked!)
+      gcloud run services describe SERVICE_NAME --format="value(spec.template.spec.timeoutSeconds)"
+      ```
+
+   **Solution**:
+   ```bash
+   gcloud run services update carewell-file-collector \
+     --timeout=1500 \
+     --region=asia-northeast1
+   ```
+
+   **Lesson**:
+   - **Timeout checklist** (when modifying timeout settings):
+     - [ ] Cloud Scheduler `attemptDeadline` checked
+     - [ ] Cloud Run `timeoutSeconds` checked
+     - [ ] Both values match (or Cloud Run ≥ Scheduler)
+     - [ ] Maximum processing time considered (2-page = 20-25 min)
+   - Don't trust "timeout fixed" in past docs without verifying ALL timeout settings
+   - This was overlooked in `docs/CLASS01_TIMEOUT_ANALYSIS.md` which only extended Scheduler
+
+   **Reference**: `docs/incident-2025-11-06-cloud-run-timeout.md`
+
 ## Steering Configuration
 
 ### Current Steering Files

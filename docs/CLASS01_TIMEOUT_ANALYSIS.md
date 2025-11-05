@@ -792,6 +792,86 @@ done
 
 ---
 
+## 🚨 重要な追記: Cloud Run Timeout の見落とし (2025-11-06)
+
+### 問題の再発
+
+**発生日時**: 2025-11-05 23:00 JST
+**症状**: №01 課題① が Firestore/Drive/Spreadsheet に**一切データが保存されない**
+
+### 根本原因（見落とし）
+
+このドキュメントでは **Cloud Scheduler の `attemptDeadline` を延長**しましたが、**Cloud Run の `timeoutSeconds` を確認・延長しませんでした**。
+
+```
+Cloud Scheduler attemptDeadline: 1500秒 (25分) ✅ 延長済み
+Cloud Run timeoutSeconds:        900秒 (15分)  ❌ 未延長（見落とし）
+```
+
+### 実際に起こったこと
+
+```
+2025-11-05 23:00 JST - №01 実行開始（180件、2ページ処理）
+2025-11-05 23:15 JST - Cloud Run が 900秒で強制終了
+                       → 504 Gateway Timeout
+                       → Firestore/Drive への保存処理に到達せず
+```
+
+### なぜ見落としたか
+
+1. **タイムアウト設定が2箇所にあることを認識していなかった**
+   - Cloud Scheduler の設定だけ確認
+   - Cloud Run の設定を見落とし
+
+2. **このドキュメントで「タイムアウト問題は解決済み」と思い込んだ**
+   - Phase 5 で Scheduler deadline を延長
+   - 「これで解決」と誤認
+
+3. **2ページ処理が未検証だったリスクが現実化**
+   - Line 488: "⚠️ 検証状況: 1ページのみで実行されたため、ページ2処理は未検証"
+   - 180件（2ページ）は本番初実行 → タイムアウト発生
+
+### 修正内容 (2025-11-06 00:30 JST)
+
+```bash
+gcloud run services update carewell-file-collector \
+  --region=asia-northeast1 \
+  --timeout=1500 \
+  --project carewell-automation
+```
+
+**変更**:
+- Cloud Run timeout: 900秒 → **1500秒 (25分)**
+- 新リビジョン: `carewell-file-collector-00173-5b6`
+
+### 教訓（追加）
+
+**5. タイムアウト設定は必ず2箇所を確認**
+
+```
+Cloud Scheduler → Cloud Run → Backend Processing
+       ↓              ↓
+  attemptDeadline  timeoutSeconds
+```
+
+- **両方を一致させる**（または Cloud Run ≥ Scheduler）
+- タイムアウト変更時のチェックリスト:
+  - [ ] Cloud Scheduler `attemptDeadline` 確認
+  - [ ] Cloud Run `timeoutSeconds` 確認
+  - [ ] 両者が一致している
+  - [ ] 処理時間の最大値を考慮
+
+**6. ドキュメントの「解決済み」を鵜呑みにしない**
+
+- このドキュメントで「解決済み」でも、実際には不完全だった
+- **実データ（Cloud Run ログ、Firestore）で検証**する習慣が必要
+
+### 参照
+
+詳細なインシデント記録: `docs/incident-2025-11-06-cloud-run-timeout.md`
+
+---
+
 **作成者**: Claude Code
 **レビュー**: 要レビュー
-**ステータス**: Analysis Complete - Root Cause Fixed - Optimal Approach Documented
+**ステータス**: **INCOMPLETE** - Cloud Run timeout 設定が未対応だった（2025-11-06 修正済み）
