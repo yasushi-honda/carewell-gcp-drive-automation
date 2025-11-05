@@ -866,6 +866,37 @@ Cloud Scheduler → Cloud Run → Backend Processing
 - このドキュメントで「解決済み」でも、実際には不完全だった
 - **実データ（Cloud Run ログ、Firestore）で検証**する習慣が必要
 
+**7. GitHub Actions ワークフローも必ず更新**（2025-11-06 追加発見）
+
+**問題**: 手動で Cloud Run timeout を 1500秒に設定したが、GitHub Actions デプロイで **900秒に戻された**
+
+**経緯**:
+```text
+00:02 JST - 手動修正: timeout=1500（リビジョン 00173-5b6）✅
+00:21 JST - GitHub Actions デプロイ: timeout=900 で上書き（リビジョン 00174-dnf）❌
+00:30 JST - №01 実行: 再び 504 タイムアウト（180件中 7件のみ保存）
+```
+
+**根本原因**: `.github/workflows/deploy.yml` Line 107 に `--timeout 900` がハードコード
+
+**修正内容**:
+1. `.github/workflows/deploy.yml` を `--timeout 1500` に変更
+2. 手動で timeout=1500 に再設定（リビジョン 00175-6qz）
+
+**重要な教訓**:
+- ❌ **Cloud Run の手動設定変更だけでは不十分**
+- ✅ **CI/CD ワークフローファイルも必ず更新**
+- ✅ インフラ設定は IaC（Infrastructure as Code）で管理すべき
+- ✅ 設定変更後、次回デプロイで元に戻らないか検証必須
+
+**タイムアウト変更時の完全版チェックリスト**:
+- [ ] Cloud Scheduler `attemptDeadline` 確認
+- [ ] Cloud Run `timeoutSeconds` 確認
+- [ ] **`.github/workflows/deploy.yml` の `--timeout` も更新**
+- [ ] Git commit & push
+- [ ] GitHub Actions 成功確認
+- [ ] 新リビジョンの設定値確認
+
 ### 参照
 
 詳細なインシデント記録: `docs/incident-2025-11-06-cloud-run-timeout.md`

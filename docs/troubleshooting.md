@@ -425,8 +425,81 @@ gcloud run services describe carewell-file-collector \
 - [ ] Cloud Run `timeoutSeconds` を確認
 - [ ] 両者が一致している（または Cloud Run ≥ Scheduler）
 - [ ] 処理時間の最大値を考慮（2ページ処理 = 20-25分）
+- [ ] **`.github/workflows/deploy.yml` の `--timeout` も更新**（重要！）
 
 **参照**: `docs/incident-2025-11-06-cloud-run-timeout.md`
+
+#### B. GitHub Actions ワークフローによる設定上書き（2025-11-06 インシデント追加発見）
+
+**症状**:
+- 手動で Cloud Run timeout を延長したのに、次回実行時に再びタイムアウト
+- リビジョン履歴を見ると timeout が元の値に戻っている
+
+**原因**:
+`.github/workflows/deploy.yml` に古い timeout 値がハードコードされており、CI/CD デプロイ時に上書きされる。
+
+**実際の例**（2025-11-06）:
+```text
+00:02 JST - 手動修正: timeout=1500（リビジョン 00173-5b6）✅
+00:21 JST - GitHub Actions デプロイ: timeout=900 で上書き（リビジョン 00174-dnf）❌
+00:30 JST - №01 実行: 再び 504 タイムアウト（180件中 7件のみ保存）
+```
+
+**診断手順**:
+
+```bash
+# 1. Cloud Run リビジョン履歴を確認
+gcloud run revisions list \
+  --service=carewell-file-collector \
+  --region=asia-northeast1 \
+  --format="table(metadata.name,spec.timeoutSeconds,metadata.creationTimestamp)" \
+  --limit 10
+
+# 2. GitHub Actions ワークフローファイルを確認
+grep -n "timeout" .github/workflows/deploy.yml
+```
+
+**期待される確認結果**:
+```yaml
+# .github/workflows/deploy.yml Line 107付近
+--timeout 1500 \  # ← この値が現在の Cloud Run 設定と一致すべき
+```
+
+**解決方法**:
+
+```bash
+# 1. GitHub Actions ワークフローファイルを修正
+vim .github/workflows/deploy.yml
+# Line 107: --timeout 1500 に変更
+
+# 2. コミット＆プッシュ
+git add .github/workflows/deploy.yml
+git commit -m "fix: Update Cloud Run timeout to 1500s in CI/CD workflow"
+git push origin main
+
+# 3. 手動で即座に修正（次回デプロイまで待てない場合）
+gcloud run services update carewell-file-collector \
+  --region=asia-northeast1 \
+  --timeout=1500 \
+  --project carewell-automation
+```
+
+**重要な教訓**:
+- ❌ **Cloud Run の手動設定変更だけでは不十分**
+- ✅ **CI/CD ワークフローファイルも必ず更新**
+- ✅ インフラ設定は IaC（Infrastructure as Code）で管理
+- ✅ 設定変更後、次回デプロイで元に戻らないか検証必須
+
+**チェックリスト**（Cloud Run 設定変更時）:
+1. [ ] `gcloud run services update` で手動変更
+2. [ ] `.github/workflows/deploy.yml` の対応する設定を更新
+3. [ ] Git commit & push
+4. [ ] GitHub Actions 成功を確認
+5. [ ] 新リビジョンの設定値を確認
+
+**参照**:
+- `docs/incident-2025-11-06-cloud-run-timeout.md` (Section: GitHub Actions ワークフローによる設定上書き問題)
+- `CLAUDE.md` (Common Mistake #6 - CRITICAL Follow-up)
 
 ---
 
