@@ -521,13 +521,13 @@ class PlaywrightAutomationEngine:
                     )
                     logger.info("✓ Step 2 complete: Table tbody found")
 
-                    # Step 3: Wait for table rows
+                    # Step 3: Wait for table rows (extended timeout for heavy pages like &filter=all with 188+ items)
                     logger.info(
-                        "Step 3: Waiting for table rows (tr.standard_grid_item)..."
+                        "Step 3: Waiting for table rows (tr.standard_grid_item) with 120s timeout..."
                     )
                     list_frame.wait_for_selector(
                         "#ctl00_masterMain_gvwMain tbody tr.standard_grid_item",
-                        timeout=60000,
+                        timeout=120000,
                     )
                     logger.info("✓ Step 3 complete: Table rows found")
 
