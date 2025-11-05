@@ -58,7 +58,7 @@ export function useTaskList(className: string): UseTaskListReturn {
             // studentCount算出: サブコレクションからユニークなstudent_idをカウント
             let studentCount = 0;
             try {
-              const documents = await getDocuments(className, taskId, 'documents');
+              const documents = await getDocuments("submissions", className, "tasks", taskId, 'files');
               const uniqueStudents = new Set(
                 documents.map((doc: any) => doc.student_id).filter(Boolean)
               );

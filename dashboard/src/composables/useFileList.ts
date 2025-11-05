@@ -78,8 +78,8 @@ export function useFileList(className: string, taskId: string): UseFileListRetur
     error.value = null;
 
     try {
-      // documentsサブコレクションからファイル一覧を取得
-      const documents = await getDocuments<FileData>(className, taskId, 'documents');
+      // filesサブコレクションからファイル一覧を取得
+      const documents = await getDocuments<FileData>("submissions", className, "tasks", taskId, 'files');
 
       files.value = documents.map((doc) => ({
         composite_key: doc.composite_key,

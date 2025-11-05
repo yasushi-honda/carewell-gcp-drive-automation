@@ -126,7 +126,7 @@ export async function getTaskDocument(
 ): Promise<FirestoreTaskDocument | null> {
   try {
     const db = getDb();
-    const docRef = doc(db, className, taskId);
+    const docRef = doc(db, "submissions", className, "tasks", taskId);
     const docSnap: DocumentSnapshot<DocumentData> = await getDoc(docRef);
 
     if (docSnap.exists()) {
