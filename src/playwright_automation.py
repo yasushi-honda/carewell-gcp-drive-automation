@@ -450,17 +450,17 @@ class PlaywrightAutomationEngine:
                 try:
                     # Step 1: Wait for table element itself
                     logger.info("Step 1: Waiting for table element (#ctl00_masterMain_gvwMain)...")
-                    list_frame.wait_for_selector("#ctl00_masterMain_gvwMain", timeout=30000)
+                    list_frame.wait_for_selector("#ctl00_masterMain_gvwMain", timeout=60000)
                     logger.info("✓ Step 1 complete: Table element found")
 
                     # Step 2: Wait for tbody within table
                     logger.info("Step 2: Waiting for tbody element...")
-                    list_frame.wait_for_selector("#ctl00_masterMain_gvwMain tbody", timeout=30000)
+                    list_frame.wait_for_selector("#ctl00_masterMain_gvwMain tbody", timeout=60000)
                     logger.info("✓ Step 2 complete: Table tbody found")
 
                     # Step 3: Wait for table rows
                     logger.info("Step 3: Waiting for table rows (tr.standard_grid_item)...")
-                    list_frame.wait_for_selector("#ctl00_masterMain_gvwMain tbody tr.standard_grid_item", timeout=30000)
+                    list_frame.wait_for_selector("#ctl00_masterMain_gvwMain tbody tr.standard_grid_item", timeout=60000)
                     logger.info("✓ Step 3 complete: Table rows found")
 
                 except Exception as wait_error:
