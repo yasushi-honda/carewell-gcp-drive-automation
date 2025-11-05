@@ -4,6 +4,48 @@ Kiro-style Spec Driven Development implementation using claude code slash comman
 
 ---
 
+## 👋 新しいAIエージェントへ
+
+**このプロジェクトを初めて担当する場合、以下を順番に読んでください（所要時間: 10分）**
+
+### 📖 ステップ1: システムを理解する（5分）
+
+**必読ドキュメント**:
+1. **docs/QUICKSTART.md** - 5分でわかるシステム概要
+   - システムアーキテクチャ図（Mermaid）
+   - Firestoreスキーマ図（Mermaid）
+   - 重要な設定値
+
+2. **このファイルの次セクション** - 🚨 CRITICAL: READ THIS FIRST
+
+### 📖 ステップ2: トラブル対応を学ぶ（3分）
+
+**必読ドキュメント**:
+1. **docs/troubleshooting.md** - トラブルシューティングフローチャート
+2. **このファイルの Common Mistakes セクション** (Lines 224-308)
+   - 過去の5つの重大インシデント
+
+### 📖 ステップ3: 詳細を深掘りする（必要時）
+
+**参照ドキュメント**:
+1. **docs/architecture-overview.md** - 詳細アーキテクチャ
+2. **.serena/memories/incident_response_lessons.md** - 教訓とチェックリスト
+3. **.kiro/steering/** - 設計仕様（Steering Documents）
+
+### ✅ オンボーディング完了の確認
+
+以下の質問に答えられれば、オンボーディング完了です：
+
+- [ ] Firestore のデータベース名は？ → `carewell-native`
+- [ ] 正しいコレクションパスは？ → `submissions/{class}/tasks/{task}/files/`
+- [ ] 問題発生時に最初にやることは？ → CLAUDE.md CRITICAL を読む
+- [ ] Cloud Run ログの確認コマンドは？ → `gcloud logging read ...`
+- [ ] Dashboard の URL は？ → `https://carewell-automation.web.app/`
+
+**次のステップ**: 実際の作業を開始する前に、必ず下記の「🚨 CRITICAL」セクションを読んでください。
+
+---
+
 ## 🚨 CRITICAL: READ THIS FIRST 🚨
 
 ### Before ANY bug fix or incident response:
