@@ -104,7 +104,7 @@ jobs:
             --allow-unauthenticated \
             --memory 2Gi \
             --cpu 1 \
-            --timeout 900 \
+            --timeout 1500 \
             --service-account github-actions-sa@carewell-automation.iam.gserviceaccount.com \
             --set-env-vars "GCP_PROJECT=${PROJECT_ID}" \
             --set-secrets "CAREWELL_USER_ID=carewell-user-id:latest,CAREWELL_PASSWORD=carewell-password:latest"

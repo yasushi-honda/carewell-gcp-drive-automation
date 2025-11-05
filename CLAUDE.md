@@ -395,7 +395,35 @@ Based on past incidents:
    - Don't trust "timeout fixed" in past docs without verifying ALL timeout settings
    - This was overlooked in `docs/CLASS01_TIMEOUT_ANALYSIS.md` which only extended Scheduler
 
-   **Reference**: `docs/incident-2025-11-06-cloud-run-timeout.md`
+   **🔴 CRITICAL Follow-up** (same day, 00:50 JST):
+
+   **Second Root Cause**: GitHub Actions workflow hardcoded timeout=900
+
+   After manually fixing timeout to 1500s, **GitHub Actions overwrote it back to 900s** during the next deployment:
+
+   ```text
+   00:02 JST - Manual fix: timeout=1500 (revision 00173-5b6) ✅
+   00:21 JST - GitHub Actions deploy: timeout=900 (revision 00174-dnf) ❌ Overwrote!
+   00:30 JST - №01 execution: 504 timeout again (only 7/180 files saved)
+   ```
+
+   **Root Cause**: `.github/workflows/deploy.yml` Line 107
+   ```yaml
+   # ❌ Wrong
+   --timeout 900 \
+
+   # ✅ Correct
+   --timeout 1500 \
+   ```
+
+   **Critical Lesson**:
+   - ❌ Manual Cloud Run config changes are NOT permanent
+   - ✅ **ALWAYS update CI/CD workflow files** (`.github/workflows/deploy.yml`)
+   - ✅ Verify next deployment doesn't overwrite manual changes
+   - ✅ Infrastructure settings should be in version control (IaC)
+   - [ ] **Checklist addition**: When changing Cloud Run config, also update GitHub Actions workflow
+
+   **Reference**: `docs/incident-2025-11-06-cloud-run-timeout.md` (Section: GitHub Actions ワークフローによる設定上書き問題)
 
 ## Steering Configuration
 

@@ -365,9 +365,62 @@ fi
 2025-11-05 23:15 JST - Cloud Run timeout (900秒)、504 エラー
 2025-11-06 00:00 JST - ユーザーが問題報告
 2025-11-06 00:00-00:30 JST - 調査・根本原因特定
-2025-11-06 00:30 JST - Cloud Run timeout を 1500秒に延長
-2025-11-06 00:30 JST - 次回実行で検証予定
+2025-11-06 00:02 JST - 手動で Cloud Run timeout を 1500秒に延長（リビジョン 00173-5b6）
+2025-11-06 00:21 JST - GitHub Actions が自動デプロイ（timeout=900 で上書き、リビジョン 00174-dnf）
+2025-11-06 00:30 JST - №01 実行開始（再び 900秒でタイムアウト）
+2025-11-06 00:45 JST - 504 タイムアウト発生（Firestore に 7件のみ保存）
+2025-11-06 00:50 JST - ユーザーが「180件あるはずなのに7件しかない」と指摘
+2025-11-06 00:55 JST - GitHub Actions ワークフローに timeout=900 がハードコードされていることを発見
+2025-11-06 00:56 JST - 手動で timeout=1500 に再設定（リビジョン 00175-6qz）
+2025-11-06 00:57 JST - .github/workflows/deploy.yml を修正（timeout=1500）
 ```
+
+---
+
+## 🔴 重要な追加発見（2025-11-06 00:50 JST）
+
+### GitHub Actions ワークフローによる設定上書き問題
+
+**問題**:
+手動で Cloud Run timeout を 1500秒に設定しても、**GitHub Actions が自動デプロイ時に 900秒に戻してしまう**。
+
+**根本原因**:
+`.github/workflows/deploy.yml` Line 107 に timeout が **ハードコードされている**：
+
+```yaml
+# ❌ 修正前
+--timeout 900 \
+```
+
+**影響**:
+1. 00:02 JST: 手動で timeout=1500 に設定（リビジョン 00173-5b6）
+2. 00:21 JST: ドキュメント更新のコミットで GitHub Actions が起動
+3. GitHub Actions が timeout=900 で上書き（リビジョン 00174-dnf）
+4. 00:30 JST: №01 実行が再び 900秒でタイムアウト
+5. **結果**: 180件中 7件のみ保存（残り 173件はタイムアウト）
+
+### 恒久的な修正
+
+**実施内容**:
+
+1. **即座の修正**（リビジョン 00175-6qz）:
+   ```bash
+   gcloud run services update carewell-file-collector \
+     --region=asia-northeast1 \
+     --timeout=1500
+   ```
+
+2. **恒久的修正**（`.github/workflows/deploy.yml` Line 107）:
+   ```yaml
+   # ✅ 修正後
+   --timeout 1500 \
+   ```
+
+**教訓**:
+- ❌ Cloud Run の手動設定変更だけでは不十分
+- ✅ **CI/CD ワークフローファイルも必ず確認・修正**
+- ✅ インフラ設定は IaC（Infrastructure as Code）で管理すべき
+- ✅ 手動変更後、次回デプロイで設定が戻らないか検証必須
 
 ---
 

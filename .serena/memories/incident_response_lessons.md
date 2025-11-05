@@ -90,8 +90,31 @@ gcloud run services update carewell-file-collector \
   - [ ] Cloud Run `timeoutSeconds` 確認
   - [ ] 両者が一致している（または Cloud Run ≥ Scheduler）
   - [ ] 最大処理時間を考慮（2ページ = 20-25分）
+  - [ ] **GitHub Actions ワークフローファイル（`.github/workflows/deploy.yml`）も更新**
 - **「解決済み」を鵜呑みにしない**: 過去ドキュメントでも実データで検証
 - **504 Timeout の調査**: HTTP latency が timeout 値と一致 → そこでタイムアウト
+
+**🔴 重要な追加発見（同日 00:50 JST）**:
+
+**第2の根本原因**: GitHub Actions ワークフローが設定を上書き
+
+```
+00:02 JST - 手動修正: timeout=1500 (リビジョン 00173-5b6) ✅
+00:21 JST - GitHub Actions デプロイ: timeout=900 で上書き (00174-dnf) ❌
+00:30 JST - №01 実行: 再び 504 タイムアウト（180件中 7件のみ保存）
+```
+
+**原因**: `.github/workflows/deploy.yml` Line 107 に `--timeout 900` がハードコード
+
+**修正内容**:
+1. 即座の修正: `gcloud run services update --timeout=1500`（リビジョン 00175-6qz）
+2. 恒久的修正: `.github/workflows/deploy.yml` を `--timeout 1500` に変更
+
+**重要な教訓**:
+- ❌ **Cloud Run の手動設定変更だけでは不十分！**
+- ✅ **CI/CD ワークフローファイルも必ず更新**（`.github/workflows/deploy.yml`）
+- ✅ 手動変更後、次回デプロイで設定が戻らないか検証必須
+- ✅ インフラ設定は IaC（Infrastructure as Code）で管理すべき
 
 **参考**: `docs/incident-2025-11-06-cloud-run-timeout.md`
 
