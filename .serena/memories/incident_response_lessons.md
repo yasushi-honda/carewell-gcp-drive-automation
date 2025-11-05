@@ -41,21 +41,87 @@ gcloud scheduler jobs describe JOB_NAME --location=asia-northeast1
 # https://carewell-automation.web.app/
 ```
 
-### 実践的な教訓（2025-11-04 インシデントから）
+### 実践的な教訓（過去のインシデントから）
 
-#### ❌ 避けるべきアプローチ
+#### 2025-11-04: Cloud Scheduler task_pattern 不一致
+
+**❌ 避けるべきアプローチ**:
 1. ドキュメント確認をスキップして調査開始
 2. ローカル環境からFirestoreへの直接アクセスを試行
 3. 14個のジョブを1つずつ手動で修正
 4. 手動実行テストを複数回試行
 5. 失敗が予測される操作でバックグラウンドプロセスを多数起動
 
-#### ✅ 推奨されるアプローチ
+**✅ 推奨されるアプローチ**:
 1. CLAUDE.md と過去のインシデントを確認
 2. 根本原因をコード/設定から特定
 3. 一括更新スクリプトを作成（手動作業を避ける）
 4. Cloud Runログとダッシュボードで検証
 5. 自動実行スケジュールを待つ（手動実行は不安定）
+
+#### 2025-11-05: Dashboard Firestore スキーマ移行
+
+**ユーザーからの重要なフィードバック**:
+> "ちゃんとドキュメントをみてから行動してください。Firestoreのデータについて、重複チェックリストの設計、Hostingへの接続設計などどれも事前に確認してから対応すべき重要な仕様内容です。"
+
+**問題**: Dashboard が旧スキーマを使用、Steering Document と乖離
+
+**❌ 初期の誤ったアプローチ**:
+1. ドキュメント確認せずにFirestoreデータ削除を実施
+2. 新スキーマデータを削除したが、Dashboard は旧スキーマ使用で影響なし
+3. 破壊的操作を先に実施してしまった
+
+**✅ 最終的な正しいアプローチ**:
+1. Steering Document を確認して公式仕様を理解
+2. 現状記録スクリプトで全パターンのデータを保存
+3. 全クラス・全課題の影響を事前評価
+4. 10フェーズの段階的移行（各フェーズで検証）
+5. ユーザー確認を挟みながら慎重に進行
+6. 旧データ削除は**最後**に実施（検証完了後）
+
+**教訓**:
+- **Single Source of Truth**: Steering Document が設計の唯一の真実
+- **破壊前に記録**: 削除操作の前に必ず現状をスナップショット
+- **段階的実施**: 大きな変更は10フェーズのように細かく分割
+- **全体影響評価**: 1つだけでなく全体への影響を事前確認
+
+**参考**: `docs/incident-2025-11-05-schema-migration-and-playwright-fix.md`
+
+#### 2025-11-05: Playwright Invalid API エラー
+
+**問題**: 存在しないメソッド `wait_for_element_state()` 使用
+
+**エラーメッセージ**:
+```
+'Locator' object has no attribute 'wait_for_element_state'
+```
+
+**根本原因**:
+- Phase 6 (commit 941e94a) で誤ったAPIを導入
+- テストで検出されず（該当コードパスが実行されなかった）
+- 本番環境で初めて発覚
+
+**❌ 間違ったコード**:
+```python
+link.wait_for_element_state("visible", timeout=10000)  # 存在しないメソッド
+link.click()
+```
+
+**✅ 正しいコード**:
+```python
+# Playwright's Auto-waiting handles visibility checks before click
+link.click()  # Auto-waiting が自動で待機
+```
+
+**教訓**:
+- **Playwright の Auto-waiting**: click(), fill() 等は自動で要素が準備完了まで待機
+- **公式ドキュメント確認**: APIメソッドの存在を必ず確認
+- **テストカバレッジ向上**: エラーパスを含む実際のユースケースをテスト
+- **明示的待機は最小限**: 本当に必要な場合のみ `wait_for(state="visible")` を使用
+
+**参考**:
+- `docs/incident-2025-11-05-schema-migration-and-playwright-fix.md`
+- https://playwright.dev/python/docs/actionability
 
 ### 具体例：Cloud Scheduler一括更新
 
@@ -84,22 +150,35 @@ done
 
 ### チェックリスト：問題発生時
 
+**調査前の必須確認** (CRITICAL - スキップ禁止):
 - [ ] CLAUDE.md の Critical Configuration を確認
 - [ ] CLAUDE.md の Common Mistakes を確認
 - [ ] メモリファイル（suggested_commands等）を確認
-- [ ] 設計ドキュメントを確認
+- [ ] 設計ドキュメント（Steering Document）を確認
+- [ ] 過去の類似インシデント記録を検索
+
+**調査・対応時**:
 - [ ] 環境の制約を理解（ローカルFirestoreは不安定）
 - [ ] 根本原因をコードから特定
+- [ ] 破壊的操作の前に現状を記録（スナップショット）
 - [ ] 一括処理スクリプトを作成（繰り返し作業を避ける）
+- [ ] 段階的実施（各フェーズで検証）
+- [ ] 全体影響を事前評価
 - [ ] Cloud Runログ/Dashboardで検証
+
+**完了後**:
 - [ ] 教訓をドキュメント化
+- [ ] CLAUDE.md の Common Mistakes に追加
+- [ ] メモリファイル更新
 - [ ] バックグラウンドプロセスをクリーンアップ
 
 ### 参考ドキュメント
 
+- **CLAUDE.md**: Lines 11-42 (CRITICAL: READ THIS FIRST)
 - **CLAUDE.md**: Lines 81-126 (Incident Response Workflow)
-- **CLAUDE.md**: Lines 155-229 (Common Mistakes)
+- **CLAUDE.md**: Lines 224-306 (Common Mistakes to Avoid)
 - **docs/CLASS01_TIMEOUT_ANALYSIS.md**: Lines 689-797 (対応の振り返りと最適解)
+- **docs/incident-2025-11-05-schema-migration-and-playwright-fix.md**: 2025/11/05 包括的インシデント記録
 
-最終更新: 2025-11-04
-コミット: a20d9b7
+最終更新: 2025-11-05
+コミット: 4747166

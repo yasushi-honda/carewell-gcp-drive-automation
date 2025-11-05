@@ -251,3 +251,21 @@ Co-Authored-By: Claude <noreply@anthropic.com>
 - **フェーズ数**: 10フェーズ
 - **修正ファイル数**: 3ファイル
 - **削除データ数**: 105件（旧スキーマ）
+
+---
+
+## 関連インシデント
+
+### 同日発生: Playwright API エラー (21:27-21:40)
+
+Dashboard スキーマ移行完了後、21:27に別の問題が発覚：
+
+**問題**: №01 課題① でファイル取得失敗
+**原因**: `src/playwright_automation.py:840` に存在しないメソッド `wait_for_element_state()` を使用
+**影響**: №01 課題① の全学生でファイル取得失敗
+**解決**: Playwright Auto-waiting に修正（Line 840削除）
+
+詳細は包括的インシデント記録を参照：
+- `docs/incident-2025-11-05-schema-migration-and-playwright-fix.md`
+
+**教訓**: 複数の問題が同時期に発生する可能性がある。1つ解決しても、別の問題が潜んでいないか確認が必要。

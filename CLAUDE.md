@@ -255,6 +255,58 @@ Based on past incidents:
    - ✅ Use new path: `submissions/{class_name}/tasks/{task_id}/files/{composite_key}`
    - Impact: Duplicate check fails, files re-downloaded repeatedly
 
+4. **Dashboard Schema Mismatch** (2025-11-05 incident)
+   - ❌ Dashboard used old schema without checking Steering Document
+   - ✅ ALWAYS verify Dashboard reads from same schema as Backend
+   - Impact: Dashboard showed old data, new data invisible
+
+   **Root Cause**: Dashboard composables used legacy path
+
+   ```typescript
+   // ❌ Wrong (dashboard/src/composables/useFirestore.ts:129)
+   const docRef = doc(db, className, taskId);
+
+   // ✅ Correct
+   const docRef = doc(db, "submissions", className, "tasks", taskId);
+   ```
+
+   **Lesson**: "ちゃんとドキュメントをみてから行動してください。Firestoreのデータについて、重複チェックリストの設計、Hostingへの接続設計などどれも事前に確認してから対応すべき重要な仕様内容です。"
+
+   **Optimal Solution**:
+   - Read Steering Document BEFORE coding
+   - Create verification scripts for all classes/tasks
+   - Staged 10-phase migration with user confirmation
+   - Delete old data AFTER verifying new schema works
+
+   **Reference**: `docs/incident-2025-11-05-schema-migration-and-playwright-fix.md`
+
+5. **Playwright Invalid API Call** (2025-11-05 incident)
+   - ❌ Used non-existent method: `locator.wait_for_element_state("visible")`
+   - ✅ Use Playwright's Auto-waiting feature (no explicit wait needed)
+   - Impact: №01 課題① file download failed for all students
+
+   **Root Cause**: Line 840 in src/playwright_automation.py
+
+   ```python
+   # ❌ Wrong
+   link.wait_for_element_state("visible", timeout=10000)
+
+   # ✅ Correct - Auto-waiting handles this automatically
+   link.click()  # Waits for clickable state automatically
+   ```
+
+   **Why Missed in Tests**: Test code path didn't execute this line
+
+   **Lesson**:
+   - Playwright actions (click, fill, etc.) have built-in Auto-waiting
+   - Only use explicit `wait_for(state="visible")` when truly needed
+   - Verify API methods exist in official documentation
+   - Improve test coverage for error paths
+
+   **Reference**:
+   - `docs/incident-2025-11-05-schema-migration-and-playwright-fix.md`
+   - [Playwright Auto-waiting Documentation](https://playwright.dev/python/docs/actionability)
+
 ## Steering Configuration
 
 ### Current Steering Files
