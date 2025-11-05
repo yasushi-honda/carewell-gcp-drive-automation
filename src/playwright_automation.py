@@ -836,8 +836,7 @@ class PlaywrightAutomationEngine:
                         if (link_href == detail_url or
                             link_href.replace("&amp;", "&") == detail_url):
                             logger.debug(f"✓ Found detail link dynamically: {detail_url}")
-                            # Wait for the link to be visible and clickable
-                            link.wait_for_element_state("visible", timeout=10000)
+                            # Playwright's auto-waiting handles visibility checks before click
                             link.click()
                             detail_link_found = True
                             break
