@@ -814,22 +814,48 @@ class PlaywrightAutomationEngine:
             current_url = list_frame.url
             logger.debug(f"Current list URL: {current_url}")
 
-            # Check if detail link exists before clicking (60 second timeout)
-            # Phase 2: Extended timeout from 10s to 60s to handle server delays
-            detail_link_selector = f'a[href="{detail_url}"]'
+            # Phase 6: Dynamic link detection without hardcoding URL strings
+            # Find detail link dynamically by comparing href attributes
+            detail_link_found = False
             try:
-                list_frame.wait_for_selector(
-                    detail_link_selector, timeout=60000, state="visible"
-                )
+                # Find all report links dynamically (not using URL string in selector)
+                report_links = list_frame.locator('a[href*="report.aspx"]').all()
+                logger.debug(f"Found {len(report_links)} report links in the page")
+
+                if not report_links:
+                    logger.warning(f"No report links found for {detail_url}")
+                    return {"url": None, "filename": None}
+
+                # Search for the specific detail link by comparing href attributes
+                # This handles HTML entity encoding differences (&amp; vs &)
+                for link in report_links:
+                    link_href = link.get_attribute("href")
+                    if link_href:
+                        # Compare URLs directly and also with entity decoding
+                        # HTML encodes & as &amp;, so we handle both cases
+                        if (link_href == detail_url or
+                            link_href.replace("&amp;", "&") == detail_url):
+                            logger.debug(f"✓ Found detail link dynamically: {detail_url}")
+                            # Wait for the link to be visible and clickable
+                            link.wait_for_element_state("visible", timeout=10000)
+                            link.click()
+                            detail_link_found = True
+                            break
+
+                if not detail_link_found:
+                    logger.warning(f"Detail link not found dynamically: {detail_url}")
+                    # Log debug info about found links for troubleshooting
+                    found_links = [link.get_attribute("href") for link in report_links[:3]]
+                    logger.debug(f"Sample found links: {found_links}")
+                    return {"url": None, "filename": None}
+
+                self._wait_for_navigation(3000)  # Wait longer for detail page
+
             except Exception as e:
                 logger.warning(
-                    f"Detail link not found or not clickable: {detail_url} - {e}"
+                    f"Error finding detail link dynamically: {detail_url} - {e}"
                 )
                 return {"url": None, "filename": None}
-
-            # Click the detail link
-            list_frame.click(detail_link_selector)
-            self._wait_for_navigation(3000)  # Wait longer for detail page
 
             # Find download link (download.aspx?id=XXX)
             download_link = list_frame.locator('a[href^="download.aspx"]').first
