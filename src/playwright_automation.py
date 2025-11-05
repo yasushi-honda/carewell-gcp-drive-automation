@@ -68,7 +68,7 @@ class CarewellConfig:
     PAGE_TIMEOUT = 180000  # 3 minutes for slow network
     NAVIGATION_WAIT = 2000  # Wait after navigation actions
     FRAME_LOAD_WAIT = 3000  # Wait for frames to load
-    DATA_LOAD_WAIT = 5000  # Wait for data-heavy pages
+    DATA_LOAD_WAIT = 10000  # Wait for data-heavy pages (increased from 5000ms to handle concurrent job load)
 
     # Retry settings
     MAX_RETRIES = 3
@@ -142,18 +142,20 @@ class PlaywrightAutomationEngine:
         """
         for frame in self.page.frames:
             try:
-                if frame.locator(selector).count() > 0:
-                    logger.debug(
-                        f"Found selector '{selector}' in frame: {frame.name or frame.url}"
-                    )
-                    return frame
+                # Use wait_for_selector instead of immediate count check
+                # This allows dynamic content to load before checking
+                frame.wait_for_selector(selector, timeout=timeout_ms, state="attached")
+                logger.debug(
+                    f"Found selector '{selector}' in frame: {frame.name or frame.url}"
+                )
+                return frame
             except Exception as e:
-                logger.debug(f"Could not check frame {frame.name}: {e}")
+                logger.debug(f"Could not find selector in frame {frame.name}: {e}")
                 continue
         return None
 
     def _click_in_any_frame(
-        self, selector: str, description: str | None = None
+        self, selector: str, description: str | None = None, timeout_ms: int = 10000
     ) -> bool:
         """
         Click element in any frame that contains it
@@ -161,6 +163,7 @@ class PlaywrightAutomationEngine:
         Args:
             selector: CSS selector or text selector
             description: Human-readable description for logging
+            timeout_ms: Maximum time to wait for selector (default: 10 seconds)
 
         Returns:
             True if clicked successfully, False otherwise
@@ -168,7 +171,7 @@ class PlaywrightAutomationEngine:
         desc = description or selector
         logger.info(f"Clicking '{desc}'")
 
-        frame = self._find_frame_with_selector(selector)
+        frame = self._find_frame_with_selector(selector, timeout_ms=timeout_ms)
         if frame:
             frame.click(selector)
             logger.info(f"Clicked '{desc}' in frame: {frame.name or 'unnamed'}")
@@ -248,6 +251,8 @@ class PlaywrightAutomationEngine:
         """
         logger.info(f"Selecting class: {class_name}")
 
+        # Increase timeout to 10 seconds for class selection
+        # (concurrent jobs may cause slower page load)
         if not self._click_in_any_frame(
             f'text="{class_name}"', f'class "{class_name}"'
         ):
