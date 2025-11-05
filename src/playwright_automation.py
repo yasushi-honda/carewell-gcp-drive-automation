@@ -880,25 +880,41 @@ class PlaywrightAutomationEngine:
             try:
                 # Find all report links dynamically (not using URL string in selector)
                 report_links = list_frame.locator('a[href*="report.aspx"]').all()
-                logger.debug(f"Found {len(report_links)} report links in the page")
+                logger.info(f"Found {len(report_links)} report links in the page")
 
                 if not report_links:
                     logger.warning(f"No report links found for {detail_url}")
                     return {"url": None, "filename": None}
+
+                # Normalize detail_url for comparison (remove &filter= parameter if present)
+                # The "全て" tab click adds &filter=all to URLs, which may not be in the extracted detail_url
+                detail_url_normalized = detail_url.split('&filter=')[0].split('?filter=')[0]
 
                 # Search for the specific detail link by comparing href attributes
                 # This handles HTML entity encoding differences (&amp; vs &)
                 for link in report_links:
                     link_href = link.get_attribute("href")
                     if link_href:
-                        # Compare URLs directly and also with entity decoding
-                        # HTML encodes & as &amp;, so we handle both cases
+                        # Normalize link_href for comparison
+                        link_href_normalized = link_href.split('&filter=')[0].split('?filter=')[0]
+                        link_href_decoded = link_href.replace("&amp;", "&")
+                        link_href_decoded_normalized = link_href_decoded.split('&filter=')[0].split('?filter=')[0]
+
+                        # Compare URLs with multiple strategies:
+                        # 1. Exact match (original URLs)
+                        # 2. Exact match with entity decoding
+                        # 3. Match without filter parameter (normalized)
+                        # 4. detail_url contained in link_href
                         if (
                             link_href == detail_url
-                            or link_href.replace("&amp;", "&") == detail_url
+                            or link_href_decoded == detail_url
+                            or link_href_normalized == detail_url_normalized
+                            or link_href_decoded_normalized == detail_url_normalized
+                            or detail_url in link_href
+                            or detail_url.replace("&", "&amp;") in link_href
                         ):
-                            logger.debug(
-                                f"✓ Found detail link dynamically: {detail_url}"
+                            logger.info(
+                                f"✓ Found detail link dynamically: {detail_url} (matched with {link_href[:100]})"
                             )
                             # Playwright's auto-waiting handles visibility checks before click
                             link.click()
@@ -907,11 +923,12 @@ class PlaywrightAutomationEngine:
 
                 if not detail_link_found:
                     logger.warning(f"Detail link not found dynamically: {detail_url}")
-                    # Log debug info about found links for troubleshooting
+                    # Log detailed info about found links for troubleshooting
                     found_links = [
                         link.get_attribute("href") for link in report_links[:3]
                     ]
-                    logger.debug(f"Sample found links: {found_links}")
+                    logger.warning(f"Sample found links (first 3): {found_links}")
+                    logger.warning(f"detail_url_normalized: {detail_url_normalized}")
                     return {"url": None, "filename": None}
 
                 self._wait_for_navigation(3000)  # Wait longer for detail page
