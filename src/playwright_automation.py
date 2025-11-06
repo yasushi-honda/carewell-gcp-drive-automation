@@ -988,6 +988,56 @@ class PlaywrightAutomationEngine:
                     list_frame = temp_list_frame
                     self.logger.info("✓ Frame refreshed after page correction")
 
+            # Phase 5.5: Re-navigate to correct page if not page 1
+            # This ensures we're on the correct page before searching for detail links
+            if current_page > 1:
+                self.logger.info(
+                    f"Re-navigating to page {current_page} before searching for detail link"
+                )
+
+                pagination_select = list_frame.locator("#ctl00_masterMain_ddlPage")
+                if pagination_select.count() > 0:
+                    pagination_select.select_option(str(current_page))
+                    self.logger.info(
+                        f"Waiting for page transition to page {current_page} (15 seconds)..."
+                    )
+                    time.sleep(15)
+
+                    # Refresh frame reference after re-navigation
+                    max_retries = 3
+                    temp_list_frame = None
+                    for retry in range(max_retries):
+                        for frame in self.page.frames:
+                            if frame.name == CarewellSelectors.FRAME_LIST:
+                                try:
+                                    _ = frame.url  # Verify frame not detached
+                                    temp_list_frame = frame
+                                    break
+                                except Exception:
+                                    continue
+
+                        if temp_list_frame:
+                            break
+
+                        if retry < max_retries - 1:
+                            time.sleep(2)
+
+                    if temp_list_frame:
+                        list_frame = temp_list_frame
+                        self.logger.info(
+                            f"✓ Re-navigated to page {current_page} before detail link search"
+                        )
+                    else:
+                        self.logger.error(
+                            f"Failed to refresh frame reference after re-navigation to page {current_page}"
+                        )
+                        return {"url": None, "filename": None}
+                else:
+                    self.logger.warning(
+                        f"Pagination control not found, cannot re-navigate to page {current_page}"
+                    )
+                    return {"url": None, "filename": None}
+
             # Phase 6: Dynamic link detection without hardcoding URL strings
             # Find detail link dynamically by comparing href attributes
             detail_link_found = False
