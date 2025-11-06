@@ -952,15 +952,34 @@ class PlaywrightAutomationEngine:
             Dictionary with 'url' and 'filename'
         """
         try:
-            # Find list frame
+            # Find list frame with retry logic
             list_frame = None
-            for frame in self.page.frames:
-                if frame.name == CarewellSelectors.FRAME_LIST:
-                    list_frame = frame
+            max_retries = 3
+
+            for retry in range(max_retries):
+                for frame in self.page.frames:
+                    if frame.name == CarewellSelectors.FRAME_LIST:
+                        try:
+                            _ = frame.url  # Verify frame not detached
+                            list_frame = frame
+                            break
+                        except Exception:
+                            continue
+
+                if list_frame:
                     break
 
+                if retry < max_retries - 1:
+                    self.logger.debug(
+                        f"Frame not found, retrying ({retry + 1}/{max_retries})..."
+                    )
+                    time.sleep(2)
+
             if not list_frame:
-                list_frame = self.page
+                self.logger.error(
+                    "List frame not found at start of _get_download_link, cannot proceed"
+                )
+                return {"url": None, "filename": None}
 
             # STEP 1: Ensure we're on the correct page BEFORE searching for detail links
             # This is critical for Page 2+ students - without this, detail links won't be found
