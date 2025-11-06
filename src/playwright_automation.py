@@ -1079,6 +1079,9 @@ class PlaywrightAutomationEngine:
                 except Exception as e:
                     self.logger.warning(f"go_back timeout (expected): {e}")
 
+                # Wait for DOM to stabilize after go_back before frame acquisition
+                time.sleep(3)
+
                 # Re-navigate to target page if not page 1
                 if current_page > 1:
                     self.logger.info(
@@ -1182,6 +1185,9 @@ class PlaywrightAutomationEngine:
                     self._wait_for_navigation()
                 except Exception as e:
                     self.logger.warning(f"go_back timeout (expected): {e}")
+
+                # Wait for DOM to stabilize after go_back before frame acquisition
+                time.sleep(3)
 
                 # Re-navigate to target page if not page 1
                 if current_page > 1:
@@ -1289,6 +1295,9 @@ class PlaywrightAutomationEngine:
                     self._wait_for_navigation()
                 except Exception as e:
                     self.logger.warning(f"go_back timeout (expected): {e}")
+
+                # Wait for DOM to stabilize after go_back before frame acquisition
+                time.sleep(3)
 
                 # Re-navigate to target page if not page 1
                 if current_page > 1:
