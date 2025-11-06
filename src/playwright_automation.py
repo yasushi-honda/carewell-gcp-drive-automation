@@ -751,7 +751,7 @@ class PlaywrightAutomationEngine:
                                     time.sleep(5)
 
                                 download_info = self._get_download_link(
-                                    basic["detail_url"], list_url
+                                    basic["detail_url"], list_url, current_page
                                 )
 
                                 # If successful (got download_info with non-None values), break
@@ -936,13 +936,17 @@ class PlaywrightAutomationEngine:
             "verified": verified,
         }
 
-    def _get_download_link(self, detail_url: str, list_url: str) -> dict:
+    def _get_download_link(
+        self, detail_url: str, list_url: str, current_page: int = 1
+    ) -> dict:
         """
         Navigate to detail page and extract download link
 
         Args:
             detail_url: Relative URL to detail page (e.g., "report.aspx?log_id=XXX")
             list_url: URL of the list page to return to
+            current_page: Current pagination page number (default: 1)
+                         Used for re-navigation after go_back()
 
         Returns:
             Dictionary with 'url' and 'filename'
@@ -1068,9 +1072,78 @@ class PlaywrightAutomationEngine:
                 self.logger.info(f"Found download link: {filename}")
 
                 # Navigate back to list using browser history (page level)
-                # This preserves ASP.NET ViewState (page number, "全て" tab selection)
+                # Note: Always returns to page 1 due to ASP.NET ViewState behavior
                 self.page.go_back(wait_until="load", timeout=30000)
                 self._wait_for_navigation()
+
+                # Re-navigate to target page if not page 1
+                if current_page > 1:
+                    self.logger.info(
+                        f"Re-navigating to page {current_page} after go_back()"
+                    )
+
+                    # Get frame reference with retry logic (from Common Mistake #6 pattern)
+                    list_frame = None
+                    max_retries = 3
+
+                    for retry in range(max_retries):
+                        for frame in self.page.frames:
+                            if frame.name == CarewellSelectors.FRAME_LIST:
+                                try:
+                                    _ = frame.url  # Verify frame not detached
+                                    list_frame = frame
+                                    break
+                                except Exception:
+                                    continue
+
+                        if list_frame:
+                            break
+
+                        if retry < max_retries - 1:
+                            self.logger.debug(
+                                f"Frame not found, retrying ({retry + 1}/{max_retries})..."
+                            )
+                            time.sleep(2)
+
+                    if not list_frame:
+                        self.logger.error(
+                            "List frame not found after go_back, cannot re-navigate"
+                        )
+                        return {"url": None, "filename": None}
+
+                    # Navigate to target page
+                    pagination_select = list_frame.locator("#ctl00_masterMain_ddlPage")
+
+                    if pagination_select.count() > 0:
+                        pagination_select.select_option(str(current_page))
+                        self.logger.info(
+                            f"Waiting for page transition to page {current_page} (15 seconds)..."
+                        )
+                        time.sleep(15)  # Same as existing pagination wait time
+
+                        # Refresh frame reference after re-navigation
+                        list_frame = None
+                        for retry in range(max_retries):
+                            for frame in self.page.frames:
+                                if frame.name == CarewellSelectors.FRAME_LIST:
+                                    try:
+                                        _ = frame.url
+                                        list_frame = frame
+                                        break
+                                    except Exception:
+                                        continue
+
+                            if list_frame:
+                                break
+
+                            if retry < max_retries - 1:
+                                time.sleep(2)
+
+                        self.logger.info(f"✓ Re-navigated to page {current_page}")
+                    else:
+                        self.logger.warning(
+                            "Pagination control not found after go_back"
+                        )
 
                 # Phase 3: Refresh frame reference after navigation
                 # (frame may be detached after list_frame.goto())
@@ -1100,9 +1173,78 @@ class PlaywrightAutomationEngine:
             else:
                 self.logger.warning(f"No download link found for {detail_url}")
                 # Navigate back to list using browser history (page level)
-                # This preserves ASP.NET ViewState (page number, "全て" tab selection)
+                # Note: Always returns to page 1 due to ASP.NET ViewState behavior
                 self.page.go_back(wait_until="load", timeout=30000)
                 self._wait_for_navigation()
+
+                # Re-navigate to target page if not page 1
+                if current_page > 1:
+                    self.logger.info(
+                        f"Re-navigating to page {current_page} after go_back()"
+                    )
+
+                    # Get frame reference with retry logic (from Common Mistake #6 pattern)
+                    list_frame = None
+                    max_retries = 3
+
+                    for retry in range(max_retries):
+                        for frame in self.page.frames:
+                            if frame.name == CarewellSelectors.FRAME_LIST:
+                                try:
+                                    _ = frame.url  # Verify frame not detached
+                                    list_frame = frame
+                                    break
+                                except Exception:
+                                    continue
+
+                        if list_frame:
+                            break
+
+                        if retry < max_retries - 1:
+                            self.logger.debug(
+                                f"Frame not found, retrying ({retry + 1}/{max_retries})..."
+                            )
+                            time.sleep(2)
+
+                    if not list_frame:
+                        self.logger.error(
+                            "List frame not found after go_back, cannot re-navigate"
+                        )
+                        return {"url": None, "filename": None}
+
+                    # Navigate to target page
+                    pagination_select = list_frame.locator("#ctl00_masterMain_ddlPage")
+
+                    if pagination_select.count() > 0:
+                        pagination_select.select_option(str(current_page))
+                        self.logger.info(
+                            f"Waiting for page transition to page {current_page} (15 seconds)..."
+                        )
+                        time.sleep(15)  # Same as existing pagination wait time
+
+                        # Refresh frame reference after re-navigation
+                        list_frame = None
+                        for retry in range(max_retries):
+                            for frame in self.page.frames:
+                                if frame.name == CarewellSelectors.FRAME_LIST:
+                                    try:
+                                        _ = frame.url
+                                        list_frame = frame
+                                        break
+                                    except Exception:
+                                        continue
+
+                            if list_frame:
+                                break
+
+                            if retry < max_retries - 1:
+                                time.sleep(2)
+
+                        self.logger.info(f"✓ Re-navigated to page {current_page}")
+                    else:
+                        self.logger.warning(
+                            "Pagination control not found after go_back"
+                        )
 
                 # Phase 3: Refresh frame reference after navigation
                 # (frame may be detached after list_frame.goto())
@@ -1134,10 +1276,79 @@ class PlaywrightAutomationEngine:
                 f"Error getting download link from {detail_url}: {e}", exc_info=True
             )
             # Try to go back to list using browser history (page level, error recovery)
-            # This preserves ASP.NET ViewState (page number, "全て" tab selection)
+            # Note: Always returns to page 1 due to ASP.NET ViewState behavior
             try:
                 self.page.go_back(wait_until="load", timeout=30000)
                 self._wait_for_navigation()
+
+                # Re-navigate to target page if not page 1
+                if current_page > 1:
+                    self.logger.info(
+                        f"Re-navigating to page {current_page} after go_back()"
+                    )
+
+                    # Get frame reference with retry logic (from Common Mistake #6 pattern)
+                    list_frame = None
+                    max_retries = 3
+
+                    for retry in range(max_retries):
+                        for frame in self.page.frames:
+                            if frame.name == CarewellSelectors.FRAME_LIST:
+                                try:
+                                    _ = frame.url  # Verify frame not detached
+                                    list_frame = frame
+                                    break
+                                except Exception:
+                                    continue
+
+                        if list_frame:
+                            break
+
+                        if retry < max_retries - 1:
+                            self.logger.debug(
+                                f"Frame not found, retrying ({retry + 1}/{max_retries})..."
+                            )
+                            time.sleep(2)
+
+                    if not list_frame:
+                        self.logger.error(
+                            "List frame not found after go_back, cannot re-navigate"
+                        )
+                        return {"url": None, "filename": None}
+
+                    # Navigate to target page
+                    pagination_select = list_frame.locator("#ctl00_masterMain_ddlPage")
+
+                    if pagination_select.count() > 0:
+                        pagination_select.select_option(str(current_page))
+                        self.logger.info(
+                            f"Waiting for page transition to page {current_page} (15 seconds)..."
+                        )
+                        time.sleep(15)  # Same as existing pagination wait time
+
+                        # Refresh frame reference after re-navigation
+                        list_frame = None
+                        for retry in range(max_retries):
+                            for frame in self.page.frames:
+                                if frame.name == CarewellSelectors.FRAME_LIST:
+                                    try:
+                                        _ = frame.url
+                                        list_frame = frame
+                                        break
+                                    except Exception:
+                                        continue
+
+                            if list_frame:
+                                break
+
+                            if retry < max_retries - 1:
+                                time.sleep(2)
+
+                        self.logger.info(f"✓ Re-navigated to page {current_page}")
+                    else:
+                        self.logger.warning(
+                            "Pagination control not found after go_back"
+                        )
 
                 # Phase 3: Refresh frame reference after navigation (error recovery)
                 list_frame = None
