@@ -6,7 +6,7 @@ import logging
 import os
 import re
 import time
-from typing import Optional
+from typing import Dict, Optional
 
 from google.cloud import secretmanager
 from playwright.sync_api import Browser, Frame, Page, sync_playwright
