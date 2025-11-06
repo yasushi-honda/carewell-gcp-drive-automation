@@ -30,6 +30,7 @@ def _format_log_context(class_name: Optional[str], task_id: Optional[str]) -> st
 
     # Extract class number from class_name (e.g., "№01" from "令和7年度 デジタル中核人材養成研修 №01")
     import re
+
     class_match = re.search(r"№(\d+)", class_name)
     class_num = class_match.group(1) if class_match else "XX"
 
@@ -118,9 +119,7 @@ class PlaywrightAutomationEngine:
     Handles browser automation for Carewell web service
     """
 
-    def __init__(
-        self, class_name: Optional[str] = None, task_id: Optional[str] = None
-    ):
+    def __init__(self, class_name: Optional[str] = None, task_id: Optional[str] = None):
         self.playwright = None
         self.browser = None
         self.page = None
@@ -456,7 +455,9 @@ class PlaywrightAutomationEngine:
                     total_count = int(match.group(1))
                     self.logger.info(f"✓ Total submission count from UI: {total_count}")
                 else:
-                    self.logger.warning(f"Could not parse total count from: {count_text}")
+                    self.logger.warning(
+                        f"Could not parse total count from: {count_text}"
+                    )
 
         except Exception as e:
             self.logger.warning(f"Could not extract total count from UI: {e}")
@@ -510,7 +511,9 @@ class PlaywrightAutomationEngine:
 
                 # Save current page URL for navigation back from detail pages
                 list_url = list_frame.url
-                self.logger.debug(f"Current list URL for page {current_page}: {list_url}")
+                self.logger.debug(
+                    f"Current list URL for page {current_page}: {list_url}"
+                )
 
                 # Wait for table to be fully rendered after frame reload or page transition
                 if current_page == 1:
@@ -545,7 +548,9 @@ class PlaywrightAutomationEngine:
                     list_frame = self.page
                 else:
                     list_frame = temp_list_frame
-                    self.logger.info(f"✓ Frame refreshed after sleep (page {current_page})")
+                    self.logger.info(
+                        f"✓ Frame refreshed after sleep (page {current_page})"
+                    )
 
                 # Phase 4: Step-by-step waiting strategy to identify exact failure point
                 # Wait for data to load with detailed logging at each step
@@ -579,7 +584,9 @@ class PlaywrightAutomationEngine:
                     self.logger.info("✓ Step 3 complete: Table rows found")
 
                 except Exception as wait_error:
-                    self.logger.error(f"Table wait failed at one of the steps: {wait_error}")
+                    self.logger.error(
+                        f"Table wait failed at one of the steps: {wait_error}"
+                    )
                     self.logger.error(
                         f"Frame URL: {list_frame.url if list_frame else 'N/A'}"
                     )
@@ -601,7 +608,9 @@ class PlaywrightAutomationEngine:
                 rows = list_frame.locator(
                     "#ctl00_masterMain_gvwMain tbody tr.standard_grid_item"
                 ).all()
-                self.logger.info(f"Found {len(rows)} submission rows on page {current_page}")
+                self.logger.info(
+                    f"Found {len(rows)} submission rows on page {current_page}"
+                )
 
                 # Wait for individual row links to become fully interactive
                 # After table rendering, JavaScript event handlers need additional time
@@ -827,7 +836,9 @@ class PlaywrightAutomationEngine:
                     )
 
                     if pagination_select.count() == 0:
-                        self.logger.info("No pagination control found, assuming single page")
+                        self.logger.info(
+                            "No pagination control found, assuming single page"
+                        )
                         break
 
                     # Get all page options
@@ -837,7 +848,9 @@ class PlaywrightAutomationEngine:
 
                     # Check if there's a next page
                     if current_page >= total_pages:
-                        self.logger.info(f"Reached last page {current_page}/{total_pages}")
+                        self.logger.info(
+                            f"Reached last page {current_page}/{total_pages}"
+                        )
                         break
 
                     # Navigate to next page
@@ -855,7 +868,9 @@ class PlaywrightAutomationEngine:
 
                     # Refresh frame reference after page transition
                     # (frame may become stale after ASP.NET postback)
-                    self.logger.info("Refreshing frame reference after page transition...")
+                    self.logger.info(
+                        "Refreshing frame reference after page transition..."
+                    )
                     list_frame = None
                     for frame in self.page.frames:
                         if frame.name == CarewellSelectors.FRAME_LIST:
@@ -868,7 +883,9 @@ class PlaywrightAutomationEngine:
                         )
                         break
 
-                    self.logger.info(f"✓ Frame reference refreshed for page {next_page}")
+                    self.logger.info(
+                        f"✓ Frame reference refreshed for page {next_page}"
+                    )
 
                     current_page = next_page
 
@@ -900,7 +917,9 @@ class PlaywrightAutomationEngine:
                     f"⚠️ Count mismatch! Extracted {extracted_count} submissions but UI shows {total_count}"
                 )
         else:
-            self.logger.warning("Could not verify count: total_count not available from UI")
+            self.logger.warning(
+                "Could not verify count: total_count not available from UI"
+            )
 
         return {
             "submissions": all_submissions,
@@ -1011,13 +1030,17 @@ class PlaywrightAutomationEngine:
                             break
 
                 if not detail_link_found:
-                    self.logger.warning(f"Detail link not found dynamically: {detail_url}")
+                    self.logger.warning(
+                        f"Detail link not found dynamically: {detail_url}"
+                    )
                     # Log detailed info about found links for troubleshooting
                     found_links = [
                         link.get_attribute("href") for link in report_links[:3]
                     ]
                     self.logger.warning(f"Sample found links (first 3): {found_links}")
-                    self.logger.warning(f"detail_url_normalized: {detail_url_normalized}")
+                    self.logger.warning(
+                        f"detail_url_normalized: {detail_url_normalized}"
+                    )
                     return {"url": None, "filename": None}
 
                 self._wait_for_navigation(3000)  # Wait longer for detail page

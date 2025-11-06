@@ -78,9 +78,7 @@ def main(request):
         )
 
         # Initialize services with class/task context for better log identification
-        engine = PlaywrightAutomationEngine(
-            class_name=class_name, task_id=task_id
-        )
+        engine = PlaywrightAutomationEngine(class_name=class_name, task_id=task_id)
         drive_service = GoogleDriveService()
         firestore_service = FirestoreService()
         sheets_service = SheetsService()
