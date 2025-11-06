@@ -1073,8 +1073,11 @@ class PlaywrightAutomationEngine:
 
                 # Navigate back to list using browser history (page level)
                 # Note: Always returns to page 1 due to ASP.NET ViewState behavior
-                self.page.go_back(wait_until="load", timeout=30000)
-                self._wait_for_navigation()
+                try:
+                    self.page.go_back(wait_until="load", timeout=30000)
+                    self._wait_for_navigation()
+                except Exception as e:
+                    self.logger.warning(f"go_back timeout (expected): {e}")
 
                 # Re-navigate to target page if not page 1
                 if current_page > 1:
@@ -1174,8 +1177,11 @@ class PlaywrightAutomationEngine:
                 self.logger.warning(f"No download link found for {detail_url}")
                 # Navigate back to list using browser history (page level)
                 # Note: Always returns to page 1 due to ASP.NET ViewState behavior
-                self.page.go_back(wait_until="load", timeout=30000)
-                self._wait_for_navigation()
+                try:
+                    self.page.go_back(wait_until="load", timeout=30000)
+                    self._wait_for_navigation()
+                except Exception as e:
+                    self.logger.warning(f"go_back timeout (expected): {e}")
 
                 # Re-navigate to target page if not page 1
                 if current_page > 1:
@@ -1278,8 +1284,11 @@ class PlaywrightAutomationEngine:
             # Try to go back to list using browser history (page level, error recovery)
             # Note: Always returns to page 1 due to ASP.NET ViewState behavior
             try:
-                self.page.go_back(wait_until="load", timeout=30000)
-                self._wait_for_navigation()
+                try:
+                    self.page.go_back(wait_until="load", timeout=30000)
+                    self._wait_for_navigation()
+                except Exception as e:
+                    self.logger.warning(f"go_back timeout (expected): {e}")
 
                 # Re-navigate to target page if not page 1
                 if current_page > 1:
