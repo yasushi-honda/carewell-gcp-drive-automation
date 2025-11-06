@@ -1143,8 +1143,8 @@ class PlaywrightAutomationEngine:
                             f"go_back timeout expected (ASP.NET ViewState behavior): {e}"
                         )
 
-                    # Wait for DOM to stabilize after go_back
-                    time.sleep(3)
+                    # Wait for DOM to stabilize after go_back (same as pagination transition wait)
+                    time.sleep(15)
 
                     # STEP 2: Re-navigate to correct page if needed (after go_back always returns to Page 1)
                     if current_page > 1:
