@@ -293,11 +293,13 @@ def cleanup_firestore(request):
         # Initialize Firestore service
         firestore_service = FirestoreService()
 
-        # Get document count first
+        # Get document count first (NEW SCHEMA)
         collection_ref = (
-            firestore_service.db.collection(class_name)
+            firestore_service.db.collection("submissions")
+            .document(class_name)
+            .collection("tasks")
             .document(task_id)
-            .collection("documents")
+            .collection("files")
         )
         docs = list(collection_ref.stream())
         doc_count = len(docs)
