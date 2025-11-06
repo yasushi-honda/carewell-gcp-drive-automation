@@ -6,8 +6,9 @@ Dashboard デプロイ前に、全クラス・全課題のデータが
 新スキーマに存在するか確認します。
 """
 
-from google.cloud import firestore
 from collections import defaultdict
+
+from google.cloud import firestore
 
 # Firestore設定
 PROJECT_ID = "carewell-automation"
