@@ -890,8 +890,8 @@ class PlaywrightAutomationEngine:
                     # Update list_url after pagination to ensure correct page URL
                     # is passed to _get_download_link() for page 2+ students
                     list_url = list_frame.url
-                    self.logger.debug(
-                        f"Updated list URL for page {next_page}: {list_url}"
+                    self.logger.info(
+                        f"✓ Updated list URL for page {next_page}: {list_url}"
                     )
 
                     current_page = next_page
