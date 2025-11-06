@@ -257,7 +257,7 @@ self.logger.info(
 - [ ] 本番環境での動作確認（次回自動実行時）
 - [ ] Dashboard での全件収集確認
 - [x] インシデントレポート作成
-- [ ] CLAUDE.md への教訓追加
+- [x] CLAUDE.md への教訓追加
 
 ---
 
