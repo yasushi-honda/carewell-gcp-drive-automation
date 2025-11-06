@@ -889,7 +889,29 @@ class PlaywrightAutomationEngine:
 
                     # Update list_url after pagination to ensure correct page URL
                     # is passed to _get_download_link() for page 2+ students
-                    list_url = list_frame.url
+                    # Wait for frame URL to actually change (ASP.NET __doPostBack may be delayed)
+                    old_url = list_url
+                    url_updated = False
+                    for retry in range(10):
+                        current_frame_url = list_frame.url
+                        if current_frame_url != old_url:
+                            list_url = current_frame_url
+                            url_updated = True
+                            self.logger.info(
+                                f"✓ URL changed after {retry * 2}s: {list_url}"
+                            )
+                            break
+                        time.sleep(2)
+                        self.logger.debug(
+                            f"Waiting for URL change (retry {retry + 1}/10)..."
+                        )
+
+                    if not url_updated:
+                        self.logger.warning(
+                            f"URL did not change after 20s, using current frame URL: {list_frame.url}"
+                        )
+                        list_url = list_frame.url
+
                     self.logger.info(
                         f"✓ Updated list URL for page {next_page}: {list_url}"
                     )
