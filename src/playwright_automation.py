@@ -1067,9 +1067,9 @@ class PlaywrightAutomationEngine:
                 filename = download_link.text_content().strip()
                 self.logger.info(f"Found download link: {filename}")
 
-                # Navigate back to list within the frame using browser history
+                # Navigate back to list using browser history (page level)
                 # This preserves ASP.NET ViewState (page number, "全て" tab selection)
-                list_frame.go_back(wait_until="load", timeout=30000)
+                self.page.go_back(wait_until="load", timeout=30000)
                 self._wait_for_navigation()
 
                 # Phase 3: Refresh frame reference after navigation
@@ -1099,9 +1099,9 @@ class PlaywrightAutomationEngine:
                 return {"url": download_url, "filename": filename}
             else:
                 self.logger.warning(f"No download link found for {detail_url}")
-                # Navigate back to list within the frame using browser history
+                # Navigate back to list using browser history (page level)
                 # This preserves ASP.NET ViewState (page number, "全て" tab selection)
-                list_frame.go_back(wait_until="load", timeout=30000)
+                self.page.go_back(wait_until="load", timeout=30000)
                 self._wait_for_navigation()
 
                 # Phase 3: Refresh frame reference after navigation
@@ -1133,31 +1133,30 @@ class PlaywrightAutomationEngine:
             self.logger.error(
                 f"Error getting download link from {detail_url}: {e}", exc_info=True
             )
-            # Try to go back to list using browser history (error recovery)
+            # Try to go back to list using browser history (page level, error recovery)
             # This preserves ASP.NET ViewState (page number, "全て" tab selection)
             try:
+                self.page.go_back(wait_until="load", timeout=30000)
+                self._wait_for_navigation()
+
+                # Phase 3: Refresh frame reference after navigation (error recovery)
+                list_frame = None
+                for frame in self.page.frames:
+                    if frame.name == CarewellSelectors.FRAME_LIST:
+                        list_frame = frame
+                        break
+
                 if list_frame:
-                    list_frame.go_back(wait_until="load", timeout=30000)
-                    self._wait_for_navigation()
-
-                    # Phase 3: Refresh frame reference after navigation (error recovery)
-                    list_frame = None
-                    for frame in self.page.frames:
-                        if frame.name == CarewellSelectors.FRAME_LIST:
-                            list_frame = frame
-                            break
-
-                    if list_frame:
-                        # Phase 3: Wait for table rows to re-render
-                        try:
-                            list_frame.wait_for_selector(
-                                "tr.standard_grid_item", timeout=10000, state="visible"
-                            )
-                            self.logger.debug(
-                                "✓ Table rows re-rendered after error recovery"
-                            )
-                        except:
-                            pass
+                    # Phase 3: Wait for table rows to re-render
+                    try:
+                        list_frame.wait_for_selector(
+                            "tr.standard_grid_item", timeout=10000, state="visible"
+                        )
+                        self.logger.debug(
+                            "✓ Table rows re-rendered after error recovery"
+                        )
+                    except:
+                        pass
             except:
                 pass
             return {"url": None, "filename": None}
