@@ -884,9 +884,31 @@ class PlaywrightAutomationEngine:
             if not list_frame:
                 list_frame = self.page
 
-            # Save current URL
-            current_url = list_frame.url
-            logger.debug(f"Current list URL: {current_url}")
+            # Use the provided list_url parameter instead of reading from frame
+            # This ensures we return to the correct page after detail page navigation
+            # (especially important for multi-page processing - e.g., page 2 students)
+            current_url = list_url
+            logger.debug(f"Target list URL (from parameter): {current_url}")
+
+            # Ensure we're on the correct page before searching for links
+            # This is critical for multi-page scenarios (e.g., page 2 students)
+            # where frame might have navigated away from the target page
+            if list_frame.url != current_url:
+                logger.info(
+                    f"Frame URL mismatch detected. Navigating to correct page: {current_url}"
+                )
+                list_frame.goto(current_url, wait_until="load", timeout=30000)
+                self._wait_for_navigation()
+
+                # Refresh frame reference after navigation
+                temp_list_frame = None
+                for frame in self.page.frames:
+                    if frame.name == CarewellSelectors.FRAME_LIST:
+                        temp_list_frame = frame
+                        break
+                if temp_list_frame:
+                    list_frame = temp_list_frame
+                    logger.info("✓ Frame refreshed after page correction")
 
             # Phase 6: Dynamic link detection without hardcoding URL strings
             # Find detail link dynamically by comparing href attributes
