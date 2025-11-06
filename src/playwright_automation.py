@@ -887,11 +887,12 @@ class PlaywrightAutomationEngine:
                         f"✓ Frame reference refreshed for page {next_page}"
                     )
 
-                    # Update list_url after pagination to ensure correct page URL
-                    # is passed to _get_download_link() for page 2+ students
+                    # Update list_url after pagination
+                    # Note: ASP.NET uses ViewState, so URL remains unchanged across pages
+                    # Page state is preserved via browser history (go_back) instead of URL
                     list_url = list_frame.url
                     self.logger.info(
-                        f"✓ Updated list URL for page {next_page}: {list_url}"
+                        f"✓ Page {next_page} loaded (ViewState-based, URL unchanged: {list_url})"
                     )
 
                     current_page = next_page
@@ -1066,8 +1067,9 @@ class PlaywrightAutomationEngine:
                 filename = download_link.text_content().strip()
                 self.logger.info(f"Found download link: {filename}")
 
-                # Navigate back to list within the frame (FIXED)
-                list_frame.goto(current_url, wait_until="load", timeout=30000)
+                # Navigate back to list within the frame using browser history
+                # This preserves ASP.NET ViewState (page number, "全て" tab selection)
+                list_frame.go_back(wait_until="load", timeout=30000)
                 self._wait_for_navigation()
 
                 # Phase 3: Refresh frame reference after navigation
@@ -1097,8 +1099,9 @@ class PlaywrightAutomationEngine:
                 return {"url": download_url, "filename": filename}
             else:
                 self.logger.warning(f"No download link found for {detail_url}")
-                # Navigate back to list within the frame (FIXED)
-                list_frame.goto(current_url, wait_until="load", timeout=30000)
+                # Navigate back to list within the frame using browser history
+                # This preserves ASP.NET ViewState (page number, "全て" tab selection)
+                list_frame.go_back(wait_until="load", timeout=30000)
                 self._wait_for_navigation()
 
                 # Phase 3: Refresh frame reference after navigation
@@ -1130,10 +1133,11 @@ class PlaywrightAutomationEngine:
             self.logger.error(
                 f"Error getting download link from {detail_url}: {e}", exc_info=True
             )
-            # Try to go back to list URL within the frame (FIXED)
+            # Try to go back to list using browser history (error recovery)
+            # This preserves ASP.NET ViewState (page number, "全て" tab selection)
             try:
-                if list_frame and current_url:
-                    list_frame.goto(current_url, wait_until="load", timeout=30000)
+                if list_frame:
+                    list_frame.go_back(wait_until="load", timeout=30000)
                     self._wait_for_navigation()
 
                     # Phase 3: Refresh frame reference after navigation (error recovery)
