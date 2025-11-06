@@ -962,31 +962,55 @@ class PlaywrightAutomationEngine:
             if not list_frame:
                 list_frame = self.page
 
-            # Use the provided list_url parameter instead of reading from frame
-            # This ensures we return to the correct page after detail page navigation
-            # (especially important for multi-page processing - e.g., page 2 students)
-            current_url = list_url
-            self.logger.debug(f"Target list URL (from parameter): {current_url}")
-
-            # Ensure we're on the correct page before searching for links
-            # This is critical for multi-page scenarios (e.g., page 2 students)
-            # where frame might have navigated away from the target page
-            if list_frame.url != current_url:
+            # STEP 1: Ensure we're on the correct page BEFORE searching for detail links
+            # This is critical for Page 2+ students - without this, detail links won't be found
+            # Use pagination control (not frame.goto) for reliable navigation
+            if current_page > 1:
                 self.logger.info(
-                    f"Frame URL mismatch detected. Navigating to correct page: {current_url}"
+                    f"Navigating to page {current_page} before detail link search"
                 )
-                list_frame.goto(current_url, wait_until="load", timeout=30000)
-                self._wait_for_navigation()
 
-                # Refresh frame reference after navigation
-                temp_list_frame = None
-                for frame in self.page.frames:
-                    if frame.name == CarewellSelectors.FRAME_LIST:
-                        temp_list_frame = frame
-                        break
-                if temp_list_frame:
-                    list_frame = temp_list_frame
-                    self.logger.info("✓ Frame refreshed after page correction")
+                # Navigate to target page using pagination control
+                pagination_select = list_frame.locator("#ctl00_masterMain_ddlPage")
+
+                if pagination_select.count() > 0:
+                    pagination_select.select_option(str(current_page))
+                    self.logger.info(
+                        f"Waiting for page transition to page {current_page} (15 seconds)..."
+                    )
+                    time.sleep(15)  # Same as existing pagination wait time
+
+                    # Refresh frame reference after navigation
+                    list_frame = None
+                    max_retries = 3
+                    for retry in range(max_retries):
+                        for frame in self.page.frames:
+                            if frame.name == CarewellSelectors.FRAME_LIST:
+                                try:
+                                    _ = frame.url  # Verify frame not detached
+                                    list_frame = frame
+                                    break
+                                except Exception:
+                                    continue
+
+                        if list_frame:
+                            break
+
+                        if retry < max_retries - 1:
+                            time.sleep(2)
+
+                    if not list_frame:
+                        self.logger.error(
+                            "List frame not found after page navigation, cannot search for detail link"
+                        )
+                        return {"url": None, "filename": None}
+
+                    self.logger.info(f"✓ Navigated to page {current_page}")
+                else:
+                    self.logger.warning(
+                        f"Pagination control not found, cannot navigate to page {current_page}"
+                    )
+                    return {"url": None, "filename": None}
 
             # Phase 6: Dynamic link detection without hardcoding URL strings
             # Find detail link dynamically by comparing href attributes
