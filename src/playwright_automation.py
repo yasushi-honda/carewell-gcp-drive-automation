@@ -14,6 +14,29 @@ from playwright.sync_api import Browser, Frame, Page, sync_playwright
 logger = logging.getLogger(__name__)
 
 
+def _format_log_context(class_name: Optional[str], task_id: Optional[str]) -> str:
+    """
+    Format class/task context for log identification.
+
+    Args:
+        class_name: Class name (e.g., "令和7年度 デジタル中核人材養成研修 №01")
+        task_id: Task ID (e.g., "課題①")
+
+    Returns:
+        Formatted context string (e.g., "[carewell-№01-課題①]")
+    """
+    if not class_name or not task_id:
+        return ""
+
+    # Extract class number from class_name (e.g., "№01" from "令和7年度 デジタル中核人材養成研修 №01")
+    import re
+    class_match = re.search(r"№(\d+)", class_name)
+    class_num = class_match.group(1) if class_match else "XX"
+
+    # Format: [carewell-№01-課題①]
+    return f"[carewell-№{class_num}-{task_id}]"
+
+
 def parse_student_info(student_name_with_id: str) -> tuple[str, str]:
     """
     Parse student name and ID from format: "森平　直樹 <N9902913>"
@@ -75,16 +98,40 @@ class CarewellConfig:
     RETRY_DELAY = 1000
 
 
+class ContextLoggerAdapter(logging.LoggerAdapter):
+    """
+    Custom LoggerAdapter that prepends context to all log messages.
+    This helps identify logs from different class/task executions.
+    """
+
+    def process(self, msg, kwargs):
+        """Prepend context to log message"""
+        context = self.extra.get("context", "")
+        if context:
+            # Prepend context to message
+            return f"{context} {msg}", kwargs
+        return msg, kwargs
+
+
 class PlaywrightAutomationEngine:
     """
     Handles browser automation for Carewell web service
     """
 
-    def __init__(self):
+    def __init__(
+        self, class_name: Optional[str] = None, task_id: Optional[str] = None
+    ):
         self.playwright = None
         self.browser = None
         self.page = None
         self._credentials = None
+
+        # Set up context-aware logger
+        self.class_name = class_name
+        self.task_id = task_id
+        log_context = _format_log_context(class_name, task_id)
+        # Use ContextLoggerAdapter to prepend context to all log messages
+        self.logger = ContextLoggerAdapter(logger, {"context": log_context})
 
     def _get_credentials(self) -> tuple[str, str]:
         """
@@ -120,7 +167,7 @@ class PlaywrightAutomationEngine:
 
     def _launch_browser(self) -> Browser:
         """Launch Chromium browser in headless mode"""
-        logger.info("Launching Chromium browser")
+        self.logger.info("Launching Chromium browser")
         self.playwright = sync_playwright().start()
         self.browser = self.playwright.chromium.launch(
             headless=True, args=["--no-sandbox", "--disable-dev-shm-usage"]
@@ -145,12 +192,12 @@ class PlaywrightAutomationEngine:
                 # Use wait_for_selector instead of immediate count check
                 # This allows dynamic content to load before checking
                 frame.wait_for_selector(selector, timeout=timeout_ms, state="attached")
-                logger.debug(
+                self.logger.debug(
                     f"Found selector '{selector}' in frame: {frame.name or frame.url}"
                 )
                 return frame
             except Exception as e:
-                logger.debug(f"Could not find selector in frame {frame.name}: {e}")
+                self.logger.debug(f"Could not find selector in frame {frame.name}: {e}")
                 continue
         return None
 
@@ -169,15 +216,15 @@ class PlaywrightAutomationEngine:
             True if clicked successfully, False otherwise
         """
         desc = description or selector
-        logger.info(f"Clicking '{desc}'")
+        self.logger.info(f"Clicking '{desc}'")
 
         frame = self._find_frame_with_selector(selector, timeout_ms=timeout_ms)
         if frame:
             frame.click(selector)
-            logger.info(f"Clicked '{desc}' in frame: {frame.name or 'unnamed'}")
+            self.logger.info(f"Clicked '{desc}' in frame: {frame.name or 'unnamed'}")
             return True
 
-        logger.warning(f"Could not find '{desc}' in any frame")
+        self.logger.warning(f"Could not find '{desc}' in any frame")
         return False
 
     def _wait_for_navigation(self, wait_ms: int = CarewellConfig.NAVIGATION_WAIT):
@@ -193,13 +240,13 @@ class PlaywrightAutomationEngine:
         """
         user_id, password = self._get_credentials()
 
-        logger.info(f"Navigating to {CarewellSelectors.BASE_URL}")
+        self.logger.info(f"Navigating to {CarewellSelectors.BASE_URL}")
         context = self.browser.new_context()
         self.page = context.new_page()
         self.page.set_default_timeout(CarewellConfig.PAGE_TIMEOUT)
 
         self.page.goto(CarewellSelectors.BASE_URL, wait_until="networkidle")
-        logger.info(f"Page loaded: {self.page.title()}")
+        self.logger.info(f"Page loaded: {self.page.title()}")
 
         # Wait for frames to load
         self._wait_for_navigation(2000)
@@ -207,11 +254,11 @@ class PlaywrightAutomationEngine:
         # Find login frame
         login_frame = self._find_frame_with_selector(CarewellSelectors.LOGIN_USER_ID)
         if not login_frame:
-            logger.warning("Login form not found in frames, using main page")
+            self.logger.warning("Login form not found in frames, using main page")
             login_frame = self.page
 
         # Fill and submit login form
-        logger.info("Submitting login credentials")
+        self.logger.info("Submitting login credentials")
         login_frame.fill(CarewellSelectors.LOGIN_USER_ID, user_id)
         login_frame.fill(CarewellSelectors.LOGIN_PASSWORD, password)
         login_frame.click(CarewellSelectors.LOGIN_SUBMIT)
@@ -221,12 +268,12 @@ class PlaywrightAutomationEngine:
         self._wait_for_navigation(CarewellConfig.FRAME_LOAD_WAIT)
         self.page.wait_for_load_state("networkidle")
 
-        logger.info(f"Login successful: {self.page.url}")
+        self.logger.info(f"Login successful: {self.page.url}")
         return self.page
 
     def _navigate_to_class_list(self):
         """Navigate to class list page"""
-        logger.info("Navigating to class management")
+        self.logger.info("Navigating to class management")
         self._wait_for_navigation(CarewellConfig.FRAME_LOAD_WAIT)
 
         # Click "クラス管理" button (image-based)
@@ -249,14 +296,14 @@ class PlaywrightAutomationEngine:
         Returns:
             True if class found and selected, False if not found
         """
-        logger.info(f"Selecting class: {class_name}")
+        self.logger.info(f"Selecting class: {class_name}")
 
         # Increase timeout to 10 seconds for class selection
         # (concurrent jobs may cause slower page load)
         if not self._click_in_any_frame(
             f'text="{class_name}"', f'class "{class_name}"'
         ):
-            logger.info(f"Class not found (likely not yet created): {class_name}")
+            self.logger.info(f"Class not found (likely not yet created): {class_name}")
             return False
 
         self._wait_for_navigation()
@@ -279,13 +326,13 @@ class PlaywrightAutomationEngine:
         Returns:
             True if task found and selected, False if not found
         """
-        logger.info(f"Selecting task with pattern: {task_pattern}")
+        self.logger.info(f"Selecting task with pattern: {task_pattern}")
 
         # Use text= selector without quotes for partial match
         if not self._click_in_any_frame(
             f"text={task_pattern}", f'task "{task_pattern}"'
         ):
-            logger.info(f"Task not found (likely not yet created): {task_pattern}")
+            self.logger.info(f"Task not found (likely not yet created): {task_pattern}")
             return False
 
         self._wait_for_navigation()
@@ -318,19 +365,19 @@ class PlaywrightAutomationEngine:
 
         # Check if class exists
         if not self._select_class(class_name):
-            logger.info(f"Class not found, skipping: {class_name}")
+            self.logger.info(f"Class not found, skipping: {class_name}")
             return None
 
         self._navigate_to_report_grading()
 
         # Check if task exists
         if not self._select_task(task_pattern):
-            logger.info(f"Task not found, skipping: {task_pattern}")
+            self.logger.info(f"Task not found, skipping: {task_pattern}")
             return None
 
         self._show_all_submissions()
 
-        logger.info("Successfully navigated to task page")
+        self.logger.info("Successfully navigated to task page")
         return self.page
 
     def get_submission_list(
@@ -353,7 +400,7 @@ class PlaywrightAutomationEngine:
             - total_count: Total number of submissions (from UI counter)
             - verified: Whether the count matches the extracted submissions
         """
-        logger.info("Extracting submission list from all pages")
+        self.logger.info("Extracting submission list from all pages")
 
         # Find the list frame
         # Frame may still be reloading after "全て" tab click, so retry
@@ -369,25 +416,25 @@ class PlaywrightAutomationEngine:
                         list_frame = frame
                         break
                     except Exception:
-                        logger.debug(
+                        self.logger.debug(
                             f"Frame found but detached, retry {retry + 1}/{max_frame_retries}"
                         )
                         continue
 
             if list_frame:
-                logger.info(
+                self.logger.info(
                     f"✓ Frame '{CarewellSelectors.FRAME_LIST}' found for total count extraction"
                 )
                 break
 
             if retry < max_frame_retries - 1:
-                logger.warning(
+                self.logger.warning(
                     f"'list' frame not found, retrying ({retry + 1}/{max_frame_retries})..."
                 )
                 time.sleep(2)  # Wait 2 seconds before retry
 
         if not list_frame:
-            logger.warning("'list' frame not found after retries, using main page")
+            self.logger.warning("'list' frame not found after retries, using main page")
             list_frame = self.page
 
         # Extract total count from UI (must be in list frame after "全て" is selected)
@@ -407,12 +454,12 @@ class PlaywrightAutomationEngine:
                 match = re.match(r"(\d+)件中", count_text.strip())
                 if match:
                     total_count = int(match.group(1))
-                    logger.info(f"✓ Total submission count from UI: {total_count}")
+                    self.logger.info(f"✓ Total submission count from UI: {total_count}")
                 else:
-                    logger.warning(f"Could not parse total count from: {count_text}")
+                    self.logger.warning(f"Could not parse total count from: {count_text}")
 
         except Exception as e:
-            logger.warning(f"Could not extract total count from UI: {e}")
+            self.logger.warning(f"Could not extract total count from UI: {e}")
 
         # Collect submissions from all pages
         all_submissions = []
@@ -421,7 +468,7 @@ class PlaywrightAutomationEngine:
         try:
             # Loop through all pages
             while True:
-                logger.info(f"Processing page {current_page}")
+                self.logger.info(f"Processing page {current_page}")
 
                 # Refresh frame reference for each page to handle pagination
                 # This ensures we always have the latest frame object after page transitions
@@ -438,39 +485,39 @@ class PlaywrightAutomationEngine:
                                 list_frame = frame
                                 break
                             except Exception:
-                                logger.debug(
+                                self.logger.debug(
                                     f"Frame found but detached, retry {retry + 1}/{max_frame_retries}"
                                 )
                                 continue
 
                     if list_frame:
-                        logger.info(
+                        self.logger.info(
                             f"✓ Frame '{CarewellSelectors.FRAME_LIST}' found (page {current_page})"
                         )
                         break
 
                     if retry < max_frame_retries - 1:
-                        logger.warning(
+                        self.logger.warning(
                             f"'list' frame not found, retrying ({retry + 1}/{max_frame_retries})..."
                         )
                         time.sleep(2)  # Wait 2 seconds before retry
 
                 if not list_frame:
-                    logger.warning(
+                    self.logger.warning(
                         "'list' frame not found after retries, using main page"
                     )
                     list_frame = self.page
 
                 # Save current page URL for navigation back from detail pages
                 list_url = list_frame.url
-                logger.debug(f"Current list URL for page {current_page}: {list_url}")
+                self.logger.debug(f"Current list URL for page {current_page}: {list_url}")
 
                 # Wait for table to be fully rendered after frame reload or page transition
                 if current_page == 1:
                     # Frame reload after "全て" tab click
                     # Extended wait time to 15 seconds to ensure table rendering
                     # completes after frame reload (increased from 10s due to timeout issues)
-                    logger.info(
+                    self.logger.info(
                         "Waiting for table to render after frame reload (15 seconds)..."
                     )
                     time.sleep(15)
@@ -478,7 +525,7 @@ class PlaywrightAutomationEngine:
                     # Page transition via ASP.NET __doPostBack
                     # Extended wait time to 15 seconds to ensure table rendering
                     # completes after page transition (increased from 10s due to timeout issues)
-                    logger.info(
+                    self.logger.info(
                         "Waiting for table to render after page navigation (15 seconds)..."
                     )
                     time.sleep(15)
@@ -492,51 +539,51 @@ class PlaywrightAutomationEngine:
                         break
 
                 if not temp_list_frame:
-                    logger.warning(
+                    self.logger.warning(
                         "'list' frame not found after sleep, using main page"
                     )
                     list_frame = self.page
                 else:
                     list_frame = temp_list_frame
-                    logger.info(f"✓ Frame refreshed after sleep (page {current_page})")
+                    self.logger.info(f"✓ Frame refreshed after sleep (page {current_page})")
 
                 # Phase 4: Step-by-step waiting strategy to identify exact failure point
                 # Wait for data to load with detailed logging at each step
-                logger.info("Waiting for submission table (step-by-step)...")
+                self.logger.info("Waiting for submission table (step-by-step)...")
 
                 try:
                     # Step 1: Wait for table element itself
-                    logger.info(
+                    self.logger.info(
                         "Step 1: Waiting for table element (#ctl00_masterMain_gvwMain)..."
                     )
                     list_frame.wait_for_selector(
                         "#ctl00_masterMain_gvwMain", timeout=60000
                     )
-                    logger.info("✓ Step 1 complete: Table element found")
+                    self.logger.info("✓ Step 1 complete: Table element found")
 
                     # Step 2: Wait for tbody within table
-                    logger.info("Step 2: Waiting for tbody element...")
+                    self.logger.info("Step 2: Waiting for tbody element...")
                     list_frame.wait_for_selector(
                         "#ctl00_masterMain_gvwMain tbody", timeout=60000
                     )
-                    logger.info("✓ Step 2 complete: Table tbody found")
+                    self.logger.info("✓ Step 2 complete: Table tbody found")
 
                     # Step 3: Wait for table rows
-                    logger.info(
+                    self.logger.info(
                         "Step 3: Waiting for table rows (tr.standard_grid_item)..."
                     )
                     list_frame.wait_for_selector(
                         "#ctl00_masterMain_gvwMain tbody tr.standard_grid_item",
                         timeout=60000,
                     )
-                    logger.info("✓ Step 3 complete: Table rows found")
+                    self.logger.info("✓ Step 3 complete: Table rows found")
 
                 except Exception as wait_error:
-                    logger.error(f"Table wait failed at one of the steps: {wait_error}")
-                    logger.error(
+                    self.logger.error(f"Table wait failed at one of the steps: {wait_error}")
+                    self.logger.error(
                         f"Frame URL: {list_frame.url if list_frame else 'N/A'}"
                     )
-                    logger.error(
+                    self.logger.error(
                         f"Frame name: {list_frame.name if list_frame else 'N/A'}"
                     )
                     raise
@@ -544,35 +591,35 @@ class PlaywrightAutomationEngine:
                 # Wait for table links to become fully interactive
                 # After ASP.NET __doPostBack page transition, JavaScript event handlers
                 # need time to initialize before links become clickable
-                logger.info(
+                self.logger.info(
                     "Waiting for table links to become fully interactive (10 seconds)..."
                 )
                 time.sleep(10)
-                logger.info("✓ Table links should now be interactive")
+                self.logger.info("✓ Table links should now be interactive")
 
                 # First pass: Extract all basic submission info from current page
                 rows = list_frame.locator(
                     "#ctl00_masterMain_gvwMain tbody tr.standard_grid_item"
                 ).all()
-                logger.info(f"Found {len(rows)} submission rows on page {current_page}")
+                self.logger.info(f"Found {len(rows)} submission rows on page {current_page}")
 
                 # Wait for individual row links to become fully interactive
                 # After table rendering, JavaScript event handlers need additional time
                 # to attach to individual row links (especially for rows later in the table)
                 # Extended from 5s to 15s based on production testing results
                 # (Phase 1: Timeout resolution - Nov 2025)
-                logger.info(
+                self.logger.info(
                     "Waiting for individual row links to become fully interactive (15 seconds)..."
                 )
                 time.sleep(15)
-                logger.info("✓ Individual row links should now be interactive")
+                self.logger.info("✓ Individual row links should now be interactive")
 
                 submission_basics = []
                 for i, row in enumerate(rows):
                     try:
                         cells = row.locator("td").all()
                         if len(cells) < 6:
-                            logger.warning(
+                            self.logger.warning(
                                 f"Row {i} has only {len(cells)} cells, skipping"
                             )
                             continue
@@ -606,17 +653,17 @@ class PlaywrightAutomationEngine:
                         )
 
                     except Exception as row_error:
-                        logger.error(
+                        self.logger.error(
                             f"Could not parse row {i}: {row_error}", exc_info=True
                         )
 
-                logger.info(
+                self.logger.info(
                     f"Extracted basic info for {len(submission_basics)} submissions on page {current_page}"
                 )
 
                 # Early duplicate check: Mark duplicates before download link retrieval
                 if firestore_service and class_name and task_id:
-                    logger.info(
+                    self.logger.info(
                         f"Performing early duplicate check for {len(submission_basics)} submissions"
                     )
 
@@ -634,20 +681,20 @@ class PlaywrightAutomationEngine:
                                 # Mark as duplicate
                                 basic["is_duplicate"] = True
                                 basic["skip_reason"] = "already_uploaded"
-                                logger.info(
+                                self.logger.info(
                                     f"Duplicate detected (early check): {basic['student_name']} (student_id={basic.get('student_id')}, submit_date={basic.get('submit_date')})"
                                 )
                             else:
                                 basic["is_duplicate"] = False
                         except Exception as e:
-                            logger.warning(
+                            self.logger.warning(
                                 f"Early duplicate check failed for {basic['student_name']}: {e}"
                             )
                             # Fail-open: if check fails, treat as non-duplicate
                             basic["is_duplicate"] = False
                 else:
                     # No Firestore service provided, mark all as non-duplicate
-                    logger.info(
+                    self.logger.info(
                         "No Firestore service provided, skipping early duplicate check"
                     )
                     for basic in submission_basics:
@@ -664,14 +711,14 @@ class PlaywrightAutomationEngine:
                             "filename": None,
                         }
                         all_submissions.append(submission)
-                        logger.info(
+                        self.logger.info(
                             f"Skipped download link retrieval (duplicate): {basic['student_name']}"
                         )
                         continue
 
                     # Get download link for non-duplicates
                     try:
-                        logger.info(
+                        self.logger.info(
                             f"Getting download link for: {basic['student_name']}"
                         )
 
@@ -688,7 +735,7 @@ class PlaywrightAutomationEngine:
                         for retry_attempt in range(max_retries):
                             try:
                                 if retry_attempt > 0:
-                                    logger.info(
+                                    self.logger.info(
                                         f"Retry {retry_attempt}/{max_retries-1} for {basic['student_name']}"
                                     )
                                     # Wait 5 seconds between retries to reduce server load
@@ -707,7 +754,7 @@ class PlaywrightAutomationEngine:
 
                             except Exception as retry_error:
                                 last_error = str(retry_error)
-                                logger.warning(
+                                self.logger.warning(
                                     f"Attempt {retry_attempt + 1}/{max_retries} failed for {basic['student_name']}: {retry_error}"
                                 )
                                 # Don't break, continue to next retry
@@ -715,7 +762,7 @@ class PlaywrightAutomationEngine:
                         # If all retries failed, log and use last result
                         if not download_info or not download_info.get("url"):
                             if last_error:
-                                logger.error(
+                                self.logger.error(
                                     f"Failed after {max_retries} retries for {basic['student_name']}: {last_error}"
                                 )
                             # Ensure download_info is a dict (even if empty)
@@ -731,12 +778,12 @@ class PlaywrightAutomationEngine:
                                 break
 
                         if not temp_list_frame:
-                            logger.warning(
+                            self.logger.warning(
                                 "'list' frame not found after download link retrieval"
                             )
                         else:
                             list_frame = temp_list_frame
-                            logger.info(
+                            self.logger.info(
                                 f"✓ Frame refreshed after {basic['student_name']}"
                             )
 
@@ -747,12 +794,12 @@ class PlaywrightAutomationEngine:
                         }
 
                         all_submissions.append(submission)
-                        logger.info(
+                        self.logger.info(
                             f"Added: {basic['student_name']} - {download_info.get('filename')}"
                         )
 
                     except Exception as e:
-                        logger.error(
+                        self.logger.error(
                             f"Error processing {basic['student_name']}: {e}",
                             exc_info=True,
                         )
@@ -766,12 +813,12 @@ class PlaywrightAutomationEngine:
                         break
 
                 if not list_frame:
-                    logger.warning(
+                    self.logger.warning(
                         "'list' frame not found for pagination check, using main page"
                     )
                     list_frame = self.page
 
-                logger.info("✓ Frame reference refreshed for pagination check")
+                self.logger.info("✓ Frame reference refreshed for pagination check")
 
                 # Check for pagination and navigate to next page
                 try:
@@ -780,35 +827,35 @@ class PlaywrightAutomationEngine:
                     )
 
                     if pagination_select.count() == 0:
-                        logger.info("No pagination control found, assuming single page")
+                        self.logger.info("No pagination control found, assuming single page")
                         break
 
                     # Get all page options
                     options = pagination_select.locator("option").all()
                     total_pages = len(options)
-                    logger.info(f"Total pages available: {total_pages}")
+                    self.logger.info(f"Total pages available: {total_pages}")
 
                     # Check if there's a next page
                     if current_page >= total_pages:
-                        logger.info(f"Reached last page {current_page}/{total_pages}")
+                        self.logger.info(f"Reached last page {current_page}/{total_pages}")
                         break
 
                     # Navigate to next page
                     next_page = current_page + 1
-                    logger.info(f"Navigating to page {next_page}/{total_pages}")
+                    self.logger.info(f"Navigating to page {next_page}/{total_pages}")
 
                     # Select next page by value (page numbers are 1-indexed)
                     pagination_select.select_option(str(next_page))
 
                     # Wait for page transition to complete (ASP.NET __doPostBack)
-                    logger.info(
+                    self.logger.info(
                         "Waiting for page transition to complete (15 seconds)..."
                     )
                     time.sleep(15)
 
                     # Refresh frame reference after page transition
                     # (frame may become stale after ASP.NET postback)
-                    logger.info("Refreshing frame reference after page transition...")
+                    self.logger.info("Refreshing frame reference after page transition...")
                     list_frame = None
                     for frame in self.page.frames:
                         if frame.name == CarewellSelectors.FRAME_LIST:
@@ -816,27 +863,27 @@ class PlaywrightAutomationEngine:
                             break
 
                     if not list_frame:
-                        logger.error(
+                        self.logger.error(
                             "'list' frame not found after pagination, breaking loop"
                         )
                         break
 
-                    logger.info(f"✓ Frame reference refreshed for page {next_page}")
+                    self.logger.info(f"✓ Frame reference refreshed for page {next_page}")
 
                     current_page = next_page
 
                 except Exception as pe:
-                    logger.warning(
+                    self.logger.warning(
                         f"Pagination navigation failed: {pe}, assuming last page"
                     )
                     break
 
-            logger.info(
+            self.logger.info(
                 f"Successfully extracted {len(all_submissions)} submissions from {current_page} page(s)"
             )
 
         except Exception as e:
-            logger.error(f"Error extracting submissions: {e}", exc_info=True)
+            self.logger.error(f"Error extracting submissions: {e}", exc_info=True)
 
         # Verify count matches
         extracted_count = len(all_submissions)
@@ -845,15 +892,15 @@ class PlaywrightAutomationEngine:
         if total_count is not None:
             verified = extracted_count == total_count
             if verified:
-                logger.info(
+                self.logger.info(
                     f"✓ Count verification passed: {extracted_count}/{total_count}"
                 )
             else:
-                logger.warning(
+                self.logger.warning(
                     f"⚠️ Count mismatch! Extracted {extracted_count} submissions but UI shows {total_count}"
                 )
         else:
-            logger.warning("Could not verify count: total_count not available from UI")
+            self.logger.warning("Could not verify count: total_count not available from UI")
 
         return {
             "submissions": all_submissions,
@@ -888,13 +935,13 @@ class PlaywrightAutomationEngine:
             # This ensures we return to the correct page after detail page navigation
             # (especially important for multi-page processing - e.g., page 2 students)
             current_url = list_url
-            logger.debug(f"Target list URL (from parameter): {current_url}")
+            self.logger.debug(f"Target list URL (from parameter): {current_url}")
 
             # Ensure we're on the correct page before searching for links
             # This is critical for multi-page scenarios (e.g., page 2 students)
             # where frame might have navigated away from the target page
             if list_frame.url != current_url:
-                logger.info(
+                self.logger.info(
                     f"Frame URL mismatch detected. Navigating to correct page: {current_url}"
                 )
                 list_frame.goto(current_url, wait_until="load", timeout=30000)
@@ -908,7 +955,7 @@ class PlaywrightAutomationEngine:
                         break
                 if temp_list_frame:
                     list_frame = temp_list_frame
-                    logger.info("✓ Frame refreshed after page correction")
+                    self.logger.info("✓ Frame refreshed after page correction")
 
             # Phase 6: Dynamic link detection without hardcoding URL strings
             # Find detail link dynamically by comparing href attributes
@@ -916,10 +963,10 @@ class PlaywrightAutomationEngine:
             try:
                 # Find all report links dynamically (not using URL string in selector)
                 report_links = list_frame.locator('a[href*="report.aspx"]').all()
-                logger.info(f"Found {len(report_links)} report links in the page")
+                self.logger.info(f"Found {len(report_links)} report links in the page")
 
                 if not report_links:
-                    logger.warning(f"No report links found for {detail_url}")
+                    self.logger.warning(f"No report links found for {detail_url}")
                     return {"url": None, "filename": None}
 
                 # Normalize detail_url for comparison (remove &filter= parameter if present)
@@ -955,7 +1002,7 @@ class PlaywrightAutomationEngine:
                             or detail_url in link_href
                             or detail_url.replace("&", "&amp;") in link_href
                         ):
-                            logger.info(
+                            self.logger.info(
                                 f"✓ Found detail link dynamically: {detail_url} (matched with {link_href[:100]})"
                             )
                             # Playwright's auto-waiting handles visibility checks before click
@@ -964,19 +1011,19 @@ class PlaywrightAutomationEngine:
                             break
 
                 if not detail_link_found:
-                    logger.warning(f"Detail link not found dynamically: {detail_url}")
+                    self.logger.warning(f"Detail link not found dynamically: {detail_url}")
                     # Log detailed info about found links for troubleshooting
                     found_links = [
                         link.get_attribute("href") for link in report_links[:3]
                     ]
-                    logger.warning(f"Sample found links (first 3): {found_links}")
-                    logger.warning(f"detail_url_normalized: {detail_url_normalized}")
+                    self.logger.warning(f"Sample found links (first 3): {found_links}")
+                    self.logger.warning(f"detail_url_normalized: {detail_url_normalized}")
                     return {"url": None, "filename": None}
 
                 self._wait_for_navigation(3000)  # Wait longer for detail page
 
             except Exception as e:
-                logger.warning(
+                self.logger.warning(
                     f"Error finding detail link dynamically: {detail_url} - {e}"
                 )
                 return {"url": None, "filename": None}
@@ -987,7 +1034,7 @@ class PlaywrightAutomationEngine:
             if download_link.count() > 0:
                 download_url = download_link.get_attribute("href")
                 filename = download_link.text_content().strip()
-                logger.info(f"Found download link: {filename}")
+                self.logger.info(f"Found download link: {filename}")
 
                 # Navigate back to list within the frame (FIXED)
                 list_frame.goto(current_url, wait_until="load", timeout=30000)
@@ -1002,7 +1049,7 @@ class PlaywrightAutomationEngine:
                         break
 
                 if not list_frame:
-                    logger.error("'list' frame not found after navigation back")
+                    self.logger.error("'list' frame not found after navigation back")
                     return {"url": None, "filename": None}
 
                 # Phase 3: Wait for table rows to re-render after navigation
@@ -1011,15 +1058,15 @@ class PlaywrightAutomationEngine:
                     list_frame.wait_for_selector(
                         "tr.standard_grid_item", timeout=10000, state="visible"
                     )
-                    logger.debug("✓ Table rows re-rendered after navigation back")
+                    self.logger.debug("✓ Table rows re-rendered after navigation back")
                 except Exception as e:
-                    logger.warning(
+                    self.logger.warning(
                         f"Table rows not immediately visible after navigation: {e}"
                     )
 
                 return {"url": download_url, "filename": filename}
             else:
-                logger.warning(f"No download link found for {detail_url}")
+                self.logger.warning(f"No download link found for {detail_url}")
                 # Navigate back to list within the frame (FIXED)
                 list_frame.goto(current_url, wait_until="load", timeout=30000)
                 self._wait_for_navigation()
@@ -1033,7 +1080,7 @@ class PlaywrightAutomationEngine:
                         break
 
                 if not list_frame:
-                    logger.error("'list' frame not found after navigation back")
+                    self.logger.error("'list' frame not found after navigation back")
                     return {"url": None, "filename": None}
 
                 # Phase 3: Wait for table rows to re-render after navigation
@@ -1041,16 +1088,16 @@ class PlaywrightAutomationEngine:
                     list_frame.wait_for_selector(
                         "tr.standard_grid_item", timeout=10000, state="visible"
                     )
-                    logger.debug("✓ Table rows re-rendered after navigation back")
+                    self.logger.debug("✓ Table rows re-rendered after navigation back")
                 except Exception as e:
-                    logger.warning(
+                    self.logger.warning(
                         f"Table rows not immediately visible after navigation: {e}"
                     )
 
                 return {"url": None, "filename": None}
 
         except Exception as e:
-            logger.error(
+            self.logger.error(
                 f"Error getting download link from {detail_url}: {e}", exc_info=True
             )
             # Try to go back to list URL within the frame (FIXED)
@@ -1072,7 +1119,7 @@ class PlaywrightAutomationEngine:
                             list_frame.wait_for_selector(
                                 "tr.standard_grid_item", timeout=10000, state="visible"
                             )
-                            logger.debug(
+                            self.logger.debug(
                                 "✓ Table rows re-rendered after error recovery"
                             )
                         except:
@@ -1110,10 +1157,10 @@ class PlaywrightAutomationEngine:
             if not list_frame:
                 list_frame = self.page
 
-            logger.info(f"Starting download: {filename}")
+            self.logger.info(f"Starting download: {filename}")
 
             # Navigate to detail page first (download link is there)
-            logger.debug(f"Navigating to detail page: {detail_url}")
+            self.logger.debug(f"Navigating to detail page: {detail_url}")
 
             # Strategy: Try multiple approaches to click the link
             detail_link_selector = f'a[href="{detail_url}"]'
@@ -1121,7 +1168,7 @@ class PlaywrightAutomationEngine:
 
             # Attempt 1: Standard click with short timeout
             try:
-                logger.debug(f"Attempt 1: Standard click")
+                self.logger.debug(f"Attempt 1: Standard click")
                 list_frame.wait_for_selector(
                     detail_link_selector, state="attached", timeout=5000
                 )
@@ -1129,11 +1176,11 @@ class PlaywrightAutomationEngine:
                 clicked = True
                 self._wait_for_navigation(2000)
             except Exception as e1:
-                logger.debug(f"Attempt 1 failed: {e1}")
+                self.logger.debug(f"Attempt 1 failed: {e1}")
 
                 # Attempt 2: Scroll into view and force click
                 try:
-                    logger.debug(f"Attempt 2: Scroll and force click")
+                    self.logger.debug(f"Attempt 2: Scroll and force click")
                     element = list_frame.query_selector(detail_link_selector)
                     if element:
                         element.scroll_into_view_if_needed()
@@ -1144,15 +1191,15 @@ class PlaywrightAutomationEngine:
                     else:
                         raise Exception("Element not found")
                 except Exception as e2:
-                    logger.debug(f"Attempt 2 failed: {e2}")
+                    self.logger.debug(f"Attempt 2 failed: {e2}")
 
                     # Attempt 3: Direct navigation
                     try:
-                        logger.debug(f"Attempt 3: Direct navigation")
+                        self.logger.debug(f"Attempt 3: Direct navigation")
                         current_url = list_frame.url
                         base_url = current_url.split("?")[0].rsplit("/", 1)[0]
                         full_detail_url = f"{base_url}/{detail_url}"
-                        logger.debug(f"Navigating to: {full_detail_url}")
+                        self.logger.debug(f"Navigating to: {full_detail_url}")
                         list_frame.goto(
                             full_detail_url,
                             timeout=10000,
@@ -1161,13 +1208,13 @@ class PlaywrightAutomationEngine:
                         clicked = True
                         self._wait_for_navigation(2000)
                     except Exception as e3:
-                        logger.error(f"All navigation attempts failed: {e3}")
+                        self.logger.error(f"All navigation attempts failed: {e3}")
                         raise Exception(
                             f"Cannot navigate to detail page after 3 attempts"
                         )
 
             # Set up download handler and click download link
-            logger.debug(f"Initiating download: {download_url}")
+            self.logger.debug(f"Initiating download: {download_url}")
             download = None
             with self.page.expect_download(timeout=60000) as download_info:
                 # Click download link
@@ -1184,13 +1231,13 @@ class PlaywrightAutomationEngine:
             download_path = f"/tmp/{safe_filename}"
 
             # Save the file
-            logger.debug(f"Saving file to: {download_path}")
+            self.logger.debug(f"Saving file to: {download_path}")
             download.save_as(download_path)
 
             # Verify file exists and has size
             if os.path.exists(download_path):
                 file_size = os.path.getsize(download_path)
-                logger.info(
+                self.logger.info(
                     f"Downloaded successfully: {download_path} ({file_size} bytes)"
                 )
                 return download_path
@@ -1198,12 +1245,12 @@ class PlaywrightAutomationEngine:
                 raise Exception(f"Download failed: file not found at {download_path}")
 
         except Exception as e:
-            logger.error(f"Error downloading {filename}: {e}", exc_info=True)
+            self.logger.error(f"Error downloading {filename}: {e}", exc_info=True)
             raise
 
     def close(self):
         """Close browser and cleanup resources"""
-        logger.info("Closing browser")
+        self.logger.info("Closing browser")
         if self.browser:
             self.browser.close()
         if self.playwright:

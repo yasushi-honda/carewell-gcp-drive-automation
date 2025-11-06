@@ -77,8 +77,10 @@ def main(request):
             f"Starting file collection for class={class_name}, task_id={task_id}, task_pattern={task_pattern}"
         )
 
-        # Initialize services
-        engine = PlaywrightAutomationEngine()
+        # Initialize services with class/task context for better log identification
+        engine = PlaywrightAutomationEngine(
+            class_name=class_name, task_id=task_id
+        )
         drive_service = GoogleDriveService()
         firestore_service = FirestoreService()
         sheets_service = SheetsService()
