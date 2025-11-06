@@ -500,6 +500,184 @@ Based on past incidents:
 
    **Reference**: `docs/incident-2025-11-06-cloud-run-timeout.md` (Section: 第3の問題発見 - フレーム取得タイミング問題)
 
+7. **🚨 Deployed Code Not Running** (2025-11-06 08:00 JST - RECURRING PATTERN)
+   - ❌ Deployed new code via GitHub Actions, but old code kept running
+   - ✅ **ALWAYS verify 3 points after deployment**: ①Revision created ②Traffic routed ③New code logs visible
+   - Impact: Fixed code not applied → users confused → wasted time debugging
+
+   **User Feedback**: _"今回のような新しくしたが、実行は実は古いままだった。という失敗は以前から有りました。"_
+   **This is a RECURRING pattern that MUST be prevented.**
+
+   **Symptoms**:
+   - New INFO-level logs added in fix don't appear
+   - Old error messages (pre-fix) keep appearing
+   - User reports: "8:06時点で新たに取得が出来てる状況が無いので、不安です"
+
+   **Root Causes**:
+   1. **Traffic still routed to old revision**
+      ```bash
+      # Current traffic
+      carewell-file-collector-00180-j9h  100%  # Old code
+
+      # Latest revision
+      carewell-file-collector-00183-nb9  Retired  # New code but inactive
+      ```
+
+   2. **Same Docker image digest** (caching issue)
+      ```bash
+      # 00183-nb9 and 00182-78r share same image
+      sha256:ef8d7ff49b0d89feddd7d451222208adac84db51f7a576fc8a32511c5cd2f48d
+      ```
+
+   3. **GitHub Actions deployed but new revision not activated**
+
+   **Investigation Steps** (MANDATORY after deployment):
+
+   **Step 1: Verify new code traces in logs**
+   ```bash
+   # Check if logs added in fix appear
+   gcloud logging read "resource.type=cloud_run_revision AND \
+     resource.labels.service_name=carewell-file-collector" \
+     --limit 50 --format json | \
+     jq -r '.[] | select(.textPayload) | .textPayload' | \
+     grep "YOUR_NEW_LOG_MESSAGE"  # Log added in fix
+
+   # If not found → old code running
+   ```
+
+   **Step 2: Check traffic routing**
+   ```bash
+   gcloud run services describe carewell-file-collector \
+     --region=asia-northeast1 \
+     --format="value(status.traffic[0].revisionName,status.traffic[0].percent)"
+
+   # Expected: Latest revision name
+   # If old revision → PROBLEM!
+   ```
+
+   **Step 3: Check image digest**
+   ```bash
+   gcloud run revisions list \
+     --service=carewell-file-collector \
+     --region=asia-northeast1 \
+     --limit 5 \
+     --format="table(metadata.name,status.conditions[0].status,status.conditions[0].reason,status.imageDigest)" \
+     --sort-by="~metadata.creationTimestamp"
+
+   # Same digest across revisions → Docker cache issue
+   ```
+
+   **Solutions**:
+
+   **Option 1: Manually route traffic** (if valid revision exists)
+   ```bash
+   gcloud run services update-traffic carewell-file-collector \
+     --region=asia-northeast1 \
+     --to-revisions LATEST_REVISION=100
+   ```
+
+   **Option 2: Re-run GitHub Actions** (bypass Docker cache)
+   ```bash
+   gh workflow run deploy.yml
+   gh run watch RUN_ID
+   ```
+
+   **Option 3: Add --no-cache to Docker build**
+   ```yaml
+   # .github/workflows/deploy.yml
+   docker build --no-cache -t ${IMAGE_TAG} .
+   ```
+
+   **Post-Deployment Verification Checklist** (MANDATORY):
+   - [ ] New revision created? (`gcloud run revisions list --limit 1`)
+   - [ ] Traffic routed 100% to new revision? (`status.traffic[0]`)
+   - [ ] New code logs visible? (grep for new log messages)
+   - [ ] Image digest different from previous revision?
+
+   **Critical Lessons**:
+   - ❌ **"GitHub Actions success ≠ new code running"**
+   - ✅ **Always verify 3 points**: revision, traffic, logs
+   - ✅ **User's "unease" is important signal** - investigate immediately
+   - ✅ **Check image digest for duplication** - same digest = same code
+
+   **Permanent Solutions**:
+   1. Create post-deployment verification script (automate 3-point check)
+   2. Add verification step to GitHub Actions workflow
+   3. Consider --no-cache for Docker builds to avoid cache issues
+
+   **Reference**: `.serena/memories/incident_response_lessons.md` Line 46-177
+
+8. **ASP.NET Pagination URL Update Delay** (2025-11-06 14:45 JST)
+   - ❌ Used `frame.url` property without verifying URL changed after pagination
+   - ✅ **Explicitly verify state changes** - don't blindly trust property values
+   - Impact: №01 課題① - 84/199 files (42.2%) not collected (Page 2+ students)
+
+   **Root Cause**: ASP.NET `__doPostBack` pagination delay
+
+   ```python
+   # ❌ Wrong (src/playwright_automation.py:892)
+   list_url = list_frame.url  # Retrieves stale Page 1 URL even after Page 2 transition
+
+   # Result: Page 2 student links searched using Page 1 URL → Not found → Download failed
+   ```
+
+   **Why it happened**:
+   - ASP.NET `__doPostBack` is async - DOM update ≠ URL update
+   - Playwright `frame.url` is sync property - no auto-wait for updates
+   - Fixed `sleep(15)` waited for time but didn't verify URL changed
+
+   **Solution** (commit `9330a23`):
+
+   ```python
+   # ✅ Correct - Explicit URL change verification
+   old_url = list_url
+   url_updated = False
+   for retry in range(10):
+       current_frame_url = list_frame.url
+       if current_frame_url != old_url:
+           list_url = current_frame_url
+           url_updated = True
+           self.logger.info(f"✓ URL changed after {retry * 2}s: {list_url}")
+           break
+       time.sleep(2)
+
+   if not url_updated:
+       self.logger.warning(
+           f"URL did not change after 20s, using current frame URL: {list_frame.url}"
+       )
+       list_url = list_frame.url
+   ```
+
+   **Key Features**:
+   - **Explicit verification**: Compare old vs new URL
+   - **Adaptive wait**: Max 20s, early exit when change detected
+   - **Detailed logging**: Record timing for debugging (`✓ URL changed after Xs`)
+   - **Fail-safe**: Use current frame URL if no change after timeout
+
+   **Critical Lessons**:
+   - ❌ **Avoid**: Blind property access after state changes
+   - ❌ **Avoid**: Fixed `sleep()` without state verification
+   - ✅ **Use**: Polling + explicit comparison + timeout
+   - ✅ **Use**: Detailed logs for timing analysis
+
+   **Playwright Limitations**:
+   - Auto-waiting works for actions (`click`, `fill`)
+   - Property access (`frame.url`) has NO auto-waiting
+   - → Always verify property updates explicitly
+
+   **ASP.NET Webforms Specific**:
+   - `__doPostBack` completion ≠ DOM/URL update completion
+   - Always poll for state changes, never assume timing
+
+   **Verification Checklist** (for Playwright property access):
+   - [ ] Property value compared before/after state change?
+   - [ ] Polling logic with timeout implemented?
+   - [ ] Early exit when change detected (not just fixed sleep)?
+   - [ ] Logs show timing of state change?
+   - [ ] Fail-safe for timeout case?
+
+   **Reference**: `docs/incident-2025-11-06-pagination-url-update-delay.md`
+
 ## Steering Configuration
 
 ### Current Steering Files

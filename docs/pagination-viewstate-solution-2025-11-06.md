@@ -120,19 +120,40 @@ Line 753: download_info = self._get_download_link(basic["detail_url"], list_url)
 
 ---
 
-## ✅ 解決策：`goto(url)` → `go_back()` への変更
+## ❌ 誤った解決策：`list_frame.go_back()` への変更（存在しないメソッド）
 
-### 根拠
+### 検証結果（2025-11-06 19:30）
 
-**仮説**: ブラウザ履歴で戻れば、ViewStateが保持される
+**Playwright API確認**:
+- ❌ `Frame.go_back()` メソッドは**存在しない**
+- ✅ `Page.go_back()` メソッドのみ利用可能
+- 参照: https://playwright.dev/python/docs/api/class-frame
 
-**理論的根拠**:
-1. `goto(url)` = 新しいページリクエスト → サーバーは初期状態（page=1）を返す
-2. `go_back()` = ブラウザキャッシュから復元 → ViewState含む完全な状態を復元
+### 実際の動作
 
-**Playwright API仕様**:
-- `frame.goto(url)`: 新しいHTTPリクエストを送信
-- `frame.go_back()`: ブラウザ履歴を使用（bfcache利用）
+**`page.go_back()` を使用した場合**:
+```python
+self.page.go_back(wait_until="load", timeout=30000)
+# → ページ全体の履歴を戻す
+# → ASP.NET ViewStateの性質により、常にページ1に戻る
+```
+
+**手動確認結果**（ユーザー検証）:
+> 「戻る」操作をすると必ず1ページ目に遷移する
+
+**結論**: `go_back()` だけではViewStateを保持できない
+
+---
+
+## ✅ 正しい解決策：再遷移アプローチ
+
+### 方針
+
+**`page.go_back()` でページ1に戻ることを受け入れ、その後対象ページへ再遷移する**
+
+1. `page.go_back()` 実行 → ページ1に戻る（これは避けられない）
+2. `current_page > 1` の場合、ページネーション操作で対象ページに再遷移
+3. 再遷移時は適切な待機時間とフレーム取得リトライを実装
 
 ### 実装計画
 
@@ -144,27 +165,79 @@ Line 753: download_info = self._get_download_link(basic["detail_url"], list_url)
 list_frame.goto(current_url, wait_until="load", timeout=30000)
 
 # After
-list_frame.go_back(wait_until="load", timeout=30000)
+# Navigate back using browser history (page level)
+# Note: Always returns to page 1 due to ASP.NET ViewState behavior
+self.page.go_back(wait_until="load", timeout=30000)
+self._wait_for_navigation()
+
+# Re-navigate to target page if not page 1
+if current_page > 1:
+    self.logger.info(f"Re-navigating to page {current_page} after go_back()")
+
+    # Get frame reference with retry logic (Common Mistake #6 pattern)
+    list_frame = None
+    max_retries = 3
+
+    for retry in range(max_retries):
+        for frame in self.page.frames:
+            if frame.name == CarewellSelectors.FRAME_LIST:
+                try:
+                    _ = frame.url  # Verify frame not detached
+                    list_frame = frame
+                    break
+                except Exception:
+                    continue
+
+        if list_frame:
+            break
+
+        if retry < max_retries - 1:
+            self.logger.debug(f"Frame not found, retrying ({retry + 1}/{max_retries})...")
+            time.sleep(2)
+
+    if not list_frame:
+        self.logger.error("List frame not found after go_back, cannot re-navigate")
+        return {"url": None, "filename": None}
+
+    # Navigate to target page
+    pagination_select = list_frame.locator("#ctl00_masterMain_ddlPage")
+
+    if pagination_select.count() > 0:
+        pagination_select.select_option(str(current_page))
+        self.logger.info(f"Waiting for page transition to page {current_page} (15 seconds)...")
+        time.sleep(15)  # Same as existing pagination wait time
+
+        # Refresh frame reference after re-navigation
+        list_frame = None
+        for retry in range(max_retries):
+            for frame in self.page.frames:
+                if frame.name == CarewellSelectors.FRAME_LIST:
+                    try:
+                        _ = frame.url
+                        list_frame = frame
+                        break
+                    except Exception:
+                        continue
+
+            if list_frame:
+                break
+
+            if retry < max_retries - 1:
+                time.sleep(2)
+
+        self.logger.info(f"✓ Re-navigated to page {current_page}")
+    else:
+        self.logger.warning("Pagination control not found after go_back")
 ```
 
 **箇所2**: Line 1101（異常系 - ダウンロードリンクが見つからない）
 ```python
-# Before
-list_frame.goto(current_url, wait_until="load", timeout=30000)
-
-# After
-list_frame.go_back(wait_until="load", timeout=30000)
+# 箇所1と同じ再遷移ロジックを実装
 ```
 
 **箇所3**: Line 1136（エラーリカバリー - 例外発生時）
 ```python
-# Before
-if list_frame and current_url:
-    list_frame.goto(current_url, wait_until="load", timeout=30000)
-
-# After
-if list_frame:
-    list_frame.go_back(wait_until="load", timeout=30000)
+# 箇所1と同じ再遷移ロジックを実装
 ```
 
 #### 変更しない箇所

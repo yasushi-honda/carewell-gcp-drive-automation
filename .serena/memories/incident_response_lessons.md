@@ -43,6 +43,141 @@ gcloud scheduler jobs describe JOB_NAME --location=asia-northeast1
 
 ### 実践的な教訓（過去のインシデントから）
 
+#### 🚨 2025-11-06 08:00 JST: デプロイ済みのはずが古いコードが実行されていた
+
+**問題**: コード修正してGitHub Actionsでデプロイしたのに、実際には古いコードが実行され続けていた
+
+**症状**:
+- 修正版コードで追加したINFOレベルログが一切出ない
+- 古いエラーメッセージ（修正前のもの）が繰り返し出る
+- ユーザー報告: 「8:06時点で新たに取得が出来てる状況が無いので、不安です」
+
+**根本原因**:
+1. **トラフィックが古いリビジョンに向いたまま**
+   ```bash
+   # 現在のトラフィック
+   carewell-file-collector-00180-j9h  100%  # 古いコード
+
+   # 最新リビジョン
+   carewell-file-collector-00183-nb9  True  Retired  # 新しいコードだが無効化
+   ```
+
+2. **Dockerイメージダイジェストが同じ** (キャッシュの問題)
+   ```bash
+   # 00183-nb9 と 00182-78r が同じイメージ
+   sha256:ef8d7ff49b0d89feddd7d451222208adac84db51f7a576fc8a32511c5cd2f48d
+   ```
+
+3. **GitHub Actionsがデプロイしたが、新リビジョンが有効化されなかった**
+
+**❌ 誤った仮定**:
+1. 「GitHub Actionsが成功したから、新しいコードが動いているはず」
+2. 「リビジョンが作成されたから、トラフィックも切り替わっているはず」
+3. 「ログを見て同じエラーが出ていても、まだ処理中だから様子を見よう」
+
+**✅ 正しい調査ステップ**:
+
+**Step 1: 修正版コードの痕跡をログで確認**
+```bash
+# 修正版コードで追加したログが出ているか？
+gcloud logging read "resource.type=cloud_run_revision AND \
+  resource.labels.service_name=carewell-file-collector" \
+  --limit 50 --format json | \
+  jq -r '.[] | select(.textPayload) | .textPayload' | \
+  grep "Found [0-9]+ report links"  # 修正版で追加したINFOログ
+
+# 出ない場合 → 古いコードが実行中
+```
+
+**Step 2: トラフィック配分を確認**
+```bash
+gcloud run services describe carewell-file-collector \
+  --region=asia-northeast1 \
+  --format="value(status.traffic[0].revisionName,status.traffic[0].percent)"
+
+# 期待: 最新リビジョン名が表示される
+# 実際: 古いリビジョン名 → 問題！
+```
+
+**Step 3: リビジョン一覧とイメージダイジェスト確認**
+```bash
+gcloud run revisions list \
+  --service=carewell-file-collector \
+  --region=asia-northeast1 \
+  --limit 5 \
+  --format="table(metadata.name,status.conditions[0].status,status.conditions[0].reason,status.imageDigest)" \
+  --sort-by="~metadata.creationTimestamp"
+
+# 同じダイジェストのリビジョンが複数ある場合 → Dockerキャッシュの問題
+```
+
+**Step 4: 最新リビジョンのステータス確認**
+```bash
+gcloud run revisions describe LATEST_REVISION \
+  --region=asia-northeast1 \
+  --format="value(status.conditions[0].status,status.conditions[0].reason)"
+
+# "Retired" と表示される場合 → 無効化されている
+```
+
+**解決方法**:
+
+**Option 1: トラフィックを手動で最新リビジョンに切り替え** (有効なリビジョンがある場合)
+```bash
+gcloud run services update-traffic carewell-file-collector \
+  --region=asia-northeast1 \
+  --to-revisions LATEST_REVISION=100
+```
+
+**Option 2: GitHub Actionsを再実行** (Dockerキャッシュ問題を回避)
+```bash
+# ワークフローを手動トリガー
+gh workflow run deploy.yml
+
+# 進捗監視
+gh run watch RUN_ID
+```
+
+**Option 3: Dockerキャッシュを無視して再ビルド**
+```yaml
+# .github/workflows/deploy.yml で --no-cache オプション追加
+docker build --no-cache -t ${IMAGE_TAG} .
+```
+
+**検証方法**:
+```bash
+# 1. 新しいリビジョンが作成されたか
+gcloud run revisions list --service=carewell-file-collector \
+  --region=asia-northeast1 --limit 1
+
+# 2. トラフィックが100%新リビジョンに向いているか
+gcloud run services describe carewell-file-collector \
+  --region=asia-northeast1 \
+  --format="value(status.traffic[0].revisionName,status.traffic[0].percent)"
+
+# 3. ログに修正版コードの痕跡があるか
+gcloud logging read "..." --limit 20 | grep "修正版で追加したログ"
+```
+
+**重要な教訓**:
+- ❌ **「GitHub Actions成功 = 新コード稼働」ではない**
+- ✅ **デプロイ後は必ず3点確認**: ①リビジョン作成 ②トラフィック配分 ③ログで新コード確認
+- ✅ **修正版コードの痕跡をログで確認** - 新しいログメッセージが出ているか
+- ✅ **イメージダイジェストの重複に注意** - 同じダイジェスト = 同じコード
+- ✅ **ユーザーの「不安」は重要なシグナル** - 期待した動作がない = 調査すべき
+
+**繰り返し発生しているパターン**:
+> ユーザー: 「今回のような新しくしたが、実行は実は古いままだった。という失敗は以前から有りました。」
+
+**恒久対策**:
+1. **デプロイ後検証スクリプトを作成** - 3点確認を自動化
+2. **GitHub Actionsに検証ステップ追加** - デプロイ後に新リビジョン確認
+3. **Dockerビルドに--no-cacheオプション検討** - キャッシュ問題を回避
+
+**参考**: 今回は08:13 JSTにGitHub Actions再実行で解決（予定）
+
+---
+
 #### 2025-11-06: Cloud Run Timeout 設定ミス
 
 **問題**: №01 課題① が Firestore/Drive/Spreadsheet に**一切データ保存されない**
@@ -162,6 +297,105 @@ wait_for_selector → 60秒タイムアウト ❌
 - [ ] ログでフレーム取得成功/失敗を確認
 
 **参考**: `docs/incident-2025-11-06-cloud-run-timeout.md` (Section: 第3の問題発見)
+
+#### 🚨 2025-11-06 19:30 JST: Playwright API 検証を怠り、存在しないメソッドをドキュメント・実装に記載
+
+**問題**: `Frame.go_back()` という存在しないメソッドをドキュメントに記載し、実装計画まで作成してしまった
+
+**症状**:
+- ドキュメント `pagination-viewstate-solution-2025-11-06.md` に `list_frame.go_back()` の使用を推奨
+- 実装計画 `page-re-navigation-implementation-plan-2025-11-06.md` も誤った API に基づく
+- ユーザーから指摘を受けて初めて気づく
+
+**ユーザーからの厳しいフィードバック**:
+> "なぜ同じ間違いを繰り返しましたか？ドキュメントへの書き込みとコードの改変やエラーの分析などするときは必ずドキュメントを参照してから対応をするようにしてください。"
+
+**根本原因**:
+1. **Playwright API ドキュメントを確認しなかった**
+   - Frame クラスに `go_back()` メソッドが存在するか検証せず
+   - 公式ドキュメント: https://playwright.dev/python/docs/api/class-frame
+   - 実際には `Page.go_back()` のみ存在（Frame には存在しない）
+
+2. **既存ドキュメントを盲目的に信頼**
+   - 自分が作成したドキュメントであっても技術的正確性を再確認しなかった
+   - ドキュメントの内容が API 仕様と一致するか検証を怠った
+
+3. **繰り返しパターン**
+   - ユーザー: "なぜ同じ間違いを繰り返しましたか？"
+   - 過去にも類似の問題があったことを示唆
+
+**❌ 誤った行動パターン**:
+1. API の存在を検証せずにドキュメントに記載
+2. 実装計画を作成（存在しないメソッドに基づく）
+3. コードを実装（`page.go_back()` は存在するが、フレームレベルでは使えない）
+4. ユーザーの指摘で初めて気づく
+
+**✅ 正しいアプローチ**:
+
+**Step 1: API メソッドの検証**
+```python
+# 使用する前に Playwright 公式ドキュメントで確認
+# https://playwright.dev/python/docs/api/class-frame
+# → Frame.go_back() は存在しない ❌
+# → Page.go_back() のみ存在 ✅
+```
+
+**Step 2: 正しい API を使用**
+```python
+# ✅ Correct - Page レベルでのみ利用可能
+self.page.go_back(wait_until="load", timeout=30000)
+
+# ❌ Wrong - Frame レベルでは存在しない
+list_frame.go_back()  # AttributeError になる
+```
+
+**Step 3: ASP.NET の制約を理解**
+- `page.go_back()` は常にページ1に戻る（ViewState の仕様）
+- ページ2以降の処理では、go_back() 後に再遷移が必要
+
+**修正内容**:
+1. **ドキュメントの即座の修正**:
+   - `pagination-viewstate-solution-2025-11-06.md` に「❌ 誤った解決策」セクション追加
+   - Playwright API 検証結果を明記
+   - 正しいアプローチ（`page.go_back()` + 再遷移）を文書化
+
+2. **実装計画の修正**:
+   - `page-re-navigation-implementation-plan-2025-11-06.md` に更新履歴追加
+   - 「⚠️ 重要な技術的制約」セクション追加
+   - API 制約を明示
+
+**重要な教訓**:
+- ❌ **「このメソッドは存在するはず」という思い込みで実装しない**
+- ❌ **自分が書いたドキュメントを無批判に信頼しない**
+- ✅ **使用するすべての API を公式ドキュメントで検証**
+- ✅ **ドキュメント作成時も技術的正確性を確認**
+- ✅ **ユーザーからの指摘を重く受け止める** - "なぜ同じ間違いを繰り返す？"
+- ✅ **誤ったドキュメントは即座に修正** - 次に読む人（自分自身を含む）を誤導しない
+
+**恒久対策**:
+
+**API 使用前チェックリスト**:
+- [ ] メソッドが公式ドキュメントに存在するか確認
+- [ ] 使用例を公式ドキュメントで確認
+- [ ] 対象クラス（Page/Frame/Locator）が正しいか確認
+- [ ] 自分の記憶・推測だけに頼らない
+
+**ドキュメント品質チェックリスト**:
+- [ ] 技術的事実を公式ソースで検証
+- [ ] コード例が実際に実行可能か確認
+- [ ] API メソッド名が正確か確認
+- [ ] 誤った情報を含んでいないか自己レビュー
+
+**Playwright 特有の注意点**:
+- `Page` クラスと `Frame` クラスは API が異なる
+- `Page.go_back()` は存在するが、`Frame.go_back()` は存在しない
+- 使用前に必ずクラスごとの API リファレンスを確認
+
+**参考**:
+- Playwright Frame API: https://playwright.dev/python/docs/api/class-frame
+- Playwright Page API: https://playwright.dev/python/docs/api/class-page
+- 修正されたドキュメント: `docs/pagination-viewstate-solution-2025-11-06.md`
+- 修正された実装計画: `docs/page-re-navigation-implementation-plan-2025-11-06.md`
 
 #### 2025-11-04: Cloud Scheduler task_pattern 不一致
 
