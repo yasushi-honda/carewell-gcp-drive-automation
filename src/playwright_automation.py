@@ -996,7 +996,9 @@ class PlaywrightAutomationEngine:
                 pagination_retry_max = 5
                 for pagination_retry in range(pagination_retry_max):
                     try:
-                        pagination_select = list_frame.locator("#ctl00_masterMain_ddlPage")
+                        pagination_select = list_frame.locator(
+                            "#ctl00_masterMain_ddlPage"
+                        )
                         # Wait for element to be present and visible
                         pagination_select.wait_for(state="visible", timeout=5000)
                         if pagination_select.count() > 0:
@@ -1090,7 +1092,9 @@ class PlaywrightAutomationEngine:
 
             sid_match = re.search(r"Sid=(\d+)", detail_url)
             if not sid_match:
-                self.logger.error(f"Failed to extract Sid from detail_url: {detail_url}")
+                self.logger.error(
+                    f"Failed to extract Sid from detail_url: {detail_url}"
+                )
                 return {"url": None, "filename": None}
 
             target_sid = sid_match.group(1)
