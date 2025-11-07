@@ -1029,11 +1029,11 @@ class PlaywrightAutomationEngine:
 
                         self.logger.info(f"[STEP 1 診断] Current list_frame status: {frame_status}, URL: {frame_url}")
 
-                        # DOM tbody行数を取得（Page 1=100行、Page 2=100行）
+                        # DOM tbody行数を取得
                         try:
-                            tbody_locator = list_frame.locator("#ctl00_masterMain_gdvList tbody tr")
+                            tbody_locator = list_frame.locator(f"{CarewellSelectors.SUBMISSION_TABLE} tbody tr")
                             tbody_row_count = tbody_locator.count()
-                            self.logger.info(f"[STEP 1 診断] Current list_frame DOM tbody row count (BEFORE refresh): {tbody_row_count} rows (Page 1=100, Page 2=100)")
+                            self.logger.info(f"[STEP 1 診断] Current list_frame DOM tbody row count (BEFORE refresh): {tbody_row_count} rows")
                         except Exception as e:
                             self.logger.warning(f"[STEP 1 診断] Failed to get tbody row count (BEFORE refresh): {e}")
                     else:
@@ -1066,9 +1066,9 @@ class PlaywrightAutomationEngine:
 
                                     # DOM tbody行数を取得（AFTER refresh）
                                     try:
-                                        tbody_locator_after = list_frame.locator("#ctl00_masterMain_gdvList tbody tr")
+                                        tbody_locator_after = list_frame.locator(f"{CarewellSelectors.SUBMISSION_TABLE} tbody tr")
                                         tbody_row_count_after = tbody_locator_after.count()
-                                        self.logger.info(f"[STEP 1 診断] Refreshed list_frame DOM tbody row count (AFTER refresh): {tbody_row_count_after} rows (Page 1=100, Page 2=100)")
+                                        self.logger.info(f"[STEP 1 診断] Refreshed list_frame DOM tbody row count (AFTER refresh): {tbody_row_count_after} rows")
                                     except Exception as e:
                                         self.logger.warning(f"[STEP 1 診断] Failed to get tbody row count (AFTER refresh): {e}")
                                 except Exception as e:
@@ -1120,7 +1120,7 @@ class PlaywrightAutomationEngine:
 
                         # DOM tbody行数確認（各retry時）
                         try:
-                            tbody_retry_locator = list_frame.locator("#ctl00_masterMain_gdvList tbody tr")
+                            tbody_retry_locator = list_frame.locator(f"{CarewellSelectors.SUBMISSION_TABLE} tbody tr")
                             tbody_retry_count = tbody_retry_locator.count()
                             self.logger.info(f"[STEP 1 診断] Retry {retry + 1}/{max_retries}: DOM tbody row count={tbody_retry_count} rows")
                         except Exception as e:
@@ -1129,7 +1129,7 @@ class PlaywrightAutomationEngine:
                         self.logger.warning(f"[STEP 1 診断] Retry {retry + 1}/{max_retries}: Failed to collect diagnostic info: {e}")
 
                     pagination_select_locator = list_frame.locator(
-                        "#ctl00_masterMain_ddlPage"
+                        CarewellSelectors.PAGINATION_SELECT
                     )
                     control_count = pagination_select_locator.count()
 
@@ -1337,7 +1337,7 @@ class PlaywrightAutomationEngine:
 
                         for retry in range(max_retries):
                             pagination_select_locator = list_frame.locator(
-                                "#ctl00_masterMain_ddlPage"
+                                CarewellSelectors.PAGINATION_SELECT
                             )
                             if pagination_select_locator.count() > 0:
                                 pagination_select = pagination_select_locator
