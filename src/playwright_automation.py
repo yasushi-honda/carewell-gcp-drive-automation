@@ -1003,6 +1003,44 @@ class PlaywrightAutomationEngine:
                     f"[STEP 1 START] Navigating to page {current_page} BEFORE detail link search"
                 )
 
+                # === 診断ログ追加 Part 1: 初期状態の診断 ===
+                try:
+                    # ブラウザURL
+                    browser_url = self.page.url
+                    self.logger.info(f"[STEP 1 診断] Browser URL: {browser_url}")
+
+                    # 利用可能なフレーム一覧
+                    available_frames = []
+                    for frame in self.page.frames:
+                        try:
+                            available_frames.append(f"{frame.name} ({frame.url})")
+                        except Exception:
+                            available_frames.append(f"{frame.name} (detached)")
+                    self.logger.info(f"[STEP 1 診断] Available frames: {available_frames}")
+
+                    # 現在のlist_frameの状態
+                    if list_frame:
+                        try:
+                            frame_url = list_frame.url
+                            frame_status = "ATTACHED"
+                        except Exception as e:
+                            frame_url = "unknown"
+                            frame_status = "DETACHED"
+
+                        self.logger.info(f"[STEP 1 診断] Current list_frame status: {frame_status}, URL: {frame_url}")
+
+                        # DOM tbody行数を取得（Page 1=100行、Page 2=99行）
+                        try:
+                            tbody_locator = list_frame.locator("#ctl00_masterMain_gdvList tbody tr")
+                            tbody_row_count = tbody_locator.count()
+                            self.logger.info(f"[STEP 1 診断] Current list_frame DOM tbody row count (BEFORE refresh): {tbody_row_count} rows (Page 1=100, Page 2=99)")
+                        except Exception as e:
+                            self.logger.warning(f"[STEP 1 診断] Failed to get tbody row count (BEFORE refresh): {e}")
+                    else:
+                        self.logger.warning("[STEP 1 診断] list_frame is None before refresh")
+                except Exception as e:
+                    self.logger.warning(f"[STEP 1 診断] Failed to collect initial diagnostic info: {e}")
+
                 # === 追加: Frame refresh logic (STEP 2と同じパターンを適用) ===
                 # Frame Context Temporal Degradation対策: extract_submissions()で取得したFrameが
                 # 2分後のこの時点で古くなっている可能性がある
@@ -1020,6 +1058,22 @@ class PlaywrightAutomationEngine:
                                 self.logger.info(
                                     f"[STEP 1] ✓ Frame refreshed successfully (retry {retry + 1}/{max_frame_retries})"
                                 )
+
+                                # === 診断ログ追加 Part 2: Frame refresh成功後の診断 ===
+                                try:
+                                    refreshed_frame_url = list_frame.url
+                                    self.logger.info(f"[STEP 1 診断] Refreshed list_frame URL: {refreshed_frame_url}")
+
+                                    # DOM tbody行数を取得（AFTER refresh）
+                                    try:
+                                        tbody_locator_after = list_frame.locator("#ctl00_masterMain_gdvList tbody tr")
+                                        tbody_row_count_after = tbody_locator_after.count()
+                                        self.logger.info(f"[STEP 1 診断] Refreshed list_frame DOM tbody row count (AFTER refresh): {tbody_row_count_after} rows (Page 1=100, Page 2=99)")
+                                    except Exception as e:
+                                        self.logger.warning(f"[STEP 1 診断] Failed to get tbody row count (AFTER refresh): {e}")
+                                except Exception as e:
+                                    self.logger.warning(f"[STEP 1 診断] Failed to collect post-refresh diagnostic info: {e}")
+
                                 break
                             except Exception as e:
                                 self.logger.warning(
@@ -1052,10 +1106,35 @@ class PlaywrightAutomationEngine:
                 max_retries = 3
 
                 for retry in range(max_retries):
+                    # === 診断ログ追加 Part 3: Pagination control retry loop内の診断 ===
+                    try:
+                        # Frame状態確認
+                        try:
+                            retry_frame_url = list_frame.url
+                            retry_frame_status = "ATTACHED"
+                        except Exception:
+                            retry_frame_url = "unknown"
+                            retry_frame_status = "DETACHED"
+
+                        self.logger.info(f"[STEP 1 診断] Retry {retry + 1}/{max_retries}: Frame status={retry_frame_status}, URL={retry_frame_url}")
+
+                        # DOM tbody行数確認（各retry時）
+                        try:
+                            tbody_retry_locator = list_frame.locator("#ctl00_masterMain_gdvList tbody tr")
+                            tbody_retry_count = tbody_retry_locator.count()
+                            self.logger.info(f"[STEP 1 診断] Retry {retry + 1}/{max_retries}: DOM tbody row count={tbody_retry_count} rows")
+                        except Exception as e:
+                            self.logger.warning(f"[STEP 1 診断] Retry {retry + 1}/{max_retries}: Failed to get tbody row count: {e}")
+                    except Exception as e:
+                        self.logger.warning(f"[STEP 1 診断] Retry {retry + 1}/{max_retries}: Failed to collect diagnostic info: {e}")
+
                     pagination_select_locator = list_frame.locator(
                         "#ctl00_masterMain_ddlPage"
                     )
                     control_count = pagination_select_locator.count()
+
+                    # 診断ログ: Pagination control locator count結果
+                    self.logger.info(f"[STEP 1 診断] Retry {retry + 1}/{max_retries}: pagination_select_locator.count()={control_count}")
 
                     if control_count > 0:
                         pagination_select = pagination_select_locator
