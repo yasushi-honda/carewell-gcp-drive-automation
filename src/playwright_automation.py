@@ -991,10 +991,28 @@ class PlaywrightAutomationEngine:
                     f"Navigating to page {current_page} before detail link search"
                 )
 
-                # Use same logic as main loop: simple count() check instead of wait_for(visible)
-                pagination_select = list_frame.locator("#ctl00_masterMain_ddlPage")
+                # Retry logic for pagination control (may be unstable after go_back)
+                # go_back() causes DOM instability - pagination control may not be immediately available
+                pagination_select = None
+                max_retries = 3
+                for retry in range(max_retries):
+                    pagination_select_locator = list_frame.locator(
+                        "#ctl00_masterMain_ddlPage"
+                    )
+                    if pagination_select_locator.count() > 0:
+                        pagination_select = pagination_select_locator
+                        self.logger.info(
+                            f"✓ Pagination control found (retry {retry}/{max_retries})"
+                        )
+                        break
 
-                if pagination_select.count() > 0:
+                    if retry < max_retries - 1:
+                        self.logger.debug(
+                            f"Pagination control not found, waiting 2s (retry {retry + 1}/{max_retries})..."
+                        )
+                        time.sleep(2)  # Wait for DOM to stabilize
+
+                if pagination_select is not None and pagination_select.count() > 0:
                     pagination_select.select_option(str(current_page))
                     self.logger.info(
                         f"Waiting for page transition to page {current_page} (15 seconds)..."
@@ -1049,10 +1067,11 @@ class PlaywrightAutomationEngine:
 
                     self.logger.info(f"✓ Navigated to page {current_page}")
                 else:
-                    # Pagination control not found - assume main loop already navigated to correct page
-                    self.logger.info(
-                        f"Pagination control not found - assuming already on page {current_page}"
+                    # Pagination control not found after retries - cannot proceed
+                    self.logger.error(
+                        f"❌ Pagination control not found after {max_retries} retries for page {current_page}"
                     )
+                    return {"url": None, "filename": None}
 
             # Verify frame.url matches list_url (if mismatch, navigate to correct page)
             if list_frame.url != list_url:
