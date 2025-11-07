@@ -990,9 +990,29 @@ class PlaywrightAutomationEngine:
                     f"Navigating to page {current_page} BEFORE detail link search (STEP 1)"
                 )
 
-                # Pagination controlを使用してページに移動
-                pagination_select = list_frame.locator("#ctl00_masterMain_ddlPage")
-                if pagination_select.count() > 0:
+                # Pagination controlを使用してページに移動（retry logic付き）
+                # Reference: STEP 2 implementation (Lines 1136-1151)
+                pagination_select = None
+                max_retries = 3
+
+                for retry in range(max_retries):
+                    pagination_select_locator = list_frame.locator(
+                        "#ctl00_masterMain_ddlPage"
+                    )
+                    if pagination_select_locator.count() > 0:
+                        pagination_select = pagination_select_locator
+                        self.logger.info(
+                            f"✓ Pagination control found BEFORE detail link search (retry {retry}/{max_retries})"
+                        )
+                        break
+
+                    if retry < max_retries - 1:
+                        self.logger.debug(
+                            f"Pagination control not found, waiting 2s before retry (STEP 1: {retry + 1}/{max_retries})..."
+                        )
+                        time.sleep(2)
+
+                if pagination_select is not None and pagination_select.count() > 0:
                     pagination_select.select_option(str(current_page))
                     self.logger.info(
                         f"✓ Pagination control selected: page {current_page}"
@@ -1028,7 +1048,7 @@ class PlaywrightAutomationEngine:
                     )
                 else:
                     self.logger.warning(
-                        f"Pagination control not found for page {current_page}"
+                        f"Pagination control not found after {max_retries} retries for page {current_page} (STEP 1)"
                     )
 
             # Extract submission ID from detail_url (e.g., "Sid=12345")
