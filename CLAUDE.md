@@ -678,6 +678,85 @@ Based on past incidents:
 
    **Reference**: `docs/incident-2025-11-06-pagination-url-update-delay.md`
 
+9. **Phase B: Deleting Critical STEP 1 Based on False Premise** (2025-11-07 incident)
+   - ❌ Deleted STEP 1 (118 lines) assuming commit 3bd3399 was correct
+   - ❌ Added ineffective URL check code (Lines 988-1019) based on false premise that "URL changes after pagination"
+   - ✅ **Always verify assumptions against documentation before deleting critical code**
+   - Impact: Page 2+ students (100 out of 200 reports) failed to collect
+
+   **Root Cause**: Commit 672afc9 assumed `list_frame.url` changes after pagination, but it always equals the original `list_url`
+
+   ```python
+   # Lines 988-1019 (Phase B ineffective code - DELETED in fix)
+   if list_frame.url != list_url:  # ❌ Always FALSE
+       # This condition NEVER executes
+       # URL remains "carewel.dk-lab.jp" regardless of page number
+   ```
+
+   **Evidence**:
+   - `docs/pagination-viewstate-solution-2025-11-06.md` Line 251: "このチェックは常にFalse" (This check is always False)
+   - `docs/playwright-page-navigation-flow.md` Lines 182-185: Official specification that Phase B violated
+
+   **Why it happened**:
+   - Misinterpreted git history without verifying against current documentation
+   - Assumed newer commit (672afc9) was correct without testing the premise
+   - Deleted STEP 1 (the ONLY way to navigate to Page 2+ before detail link search)
+   - Added 43 lines of URL polling code based on false assumption
+
+   **Impact Chain**:
+   ```
+   STEP 1 deleted → No navigation to Page 2 before detail link search
+   → Page 2 students processed on Page 1's DOM
+   → Detail links not found (students are on different page)
+   → 100 out of 200 reports failed to collect
+   ```
+
+   **Solution** (commit `00a87be`):
+
+   **Part 1: Delete ineffective code**
+   ```python
+   # Deleted Lines 988-1019 (32 lines)
+   # - frame.url != list_url check (always False)
+   # - Unnecessary frame.goto() logic
+   # - URL polling code based on false premise
+   ```
+
+   **Part 2: Restore STEP 1 with pagination control**
+   ```python
+   # Added 48 lines (Lines 986-1032)
+   # STEP 1: Navigate to correct page BEFORE detail link search
+   if current_page > 1:
+       pagination_select = list_frame.locator("#ctl00_masterMain_ddlPage")
+       if pagination_select.count() > 0:
+           pagination_select.select_option(str(current_page))
+           time.sleep(15)  # Page transition wait
+
+           # Frame refresh with retry logic
+           for retry in range(3):
+               # ... frame refresh code ...
+   ```
+
+   **Critical Lessons**:
+   - ❌ **"Newer commit ≠ Correct approach"** - Always verify against specifications
+   - ❌ **Don't delete code without understanding WHY it existed**
+   - ✅ **Read specification documents BEFORE making architectural changes**
+   - ✅ **Test critical assumptions** (e.g., "Does URL actually change?")
+   - ✅ **Document-driven verification**: Compare implementation against `docs/playwright-page-navigation-flow.md`
+
+   **Verification Checklist** (before deleting critical code):
+   - [ ] Read specification documents that describe this code's purpose?
+   - [ ] Understand WHY the code was added (check git history AND docs)?
+   - [ ] Test assumptions in newer commits (e.g., URL change behavior)?
+   - [ ] Identify alternative approaches if this code is removed?
+   - [ ] Consider impact on multi-page processing (Page 2+ scenarios)?
+
+   **User Quote**: _"ちゃんとドキュメントをみてから行動してください"_ (Please check documentation properly before taking action)
+
+   **References**:
+   - `docs/playwright-page-navigation-flow.md` Lines 182-185 (official specification)
+   - `docs/pagination-viewstate-solution-2025-11-06.md` Line 251 (evidence URL never changes)
+   - `docs/incident-2025-11-06-pagination-url-update-delay.md` (related ASP.NET behavior)
+
 ## Steering Configuration
 
 ### Current Steering Files
