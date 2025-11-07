@@ -711,6 +711,18 @@ class PlaywrightAutomationEngine:
 
                 # Second pass: Get download links for non-duplicate submissions only
                 for basic in submission_basics:
+                    # === 追加: 診断ログ - 学生処理開始時の状態記録 ===
+                    try:
+                        current_student_id = basic.get("student_id", "UNKNOWN")
+                        current_page_num = basic.get("page", "UNKNOWN")
+                        self.logger.info(
+                            f"[STUDENT LOOP DIAGNOSTIC] Processing student: {basic['student_name']} (ID: {current_student_id}, Page: {current_page_num})"
+                        )
+                    except Exception as e:
+                        self.logger.warning(
+                            f"[STUDENT LOOP DIAGNOSTIC] Error capturing student info: {e}"
+                        )
+
                     # Skip download link retrieval for duplicates
                     if basic.get("is_duplicate", False):
                         # Add to submissions list with minimal info (no download link needed)
@@ -985,13 +997,57 @@ class PlaywrightAutomationEngine:
 
             # STEP 1: Detail link検索の前に、current_page > 1 なら pagination control で正しいページに移動
             # Reference: docs/playwright-page-navigation-flow.md Lines 182-185
+            # Approach A Implementation: Frame refresh FIRST + 15s wait + Diagnostic logs
             if current_page > 1:
                 self.logger.info(
-                    f"Navigating to page {current_page} BEFORE detail link search (STEP 1)"
+                    f"[STEP 1 START] Navigating to page {current_page} BEFORE detail link search"
                 )
 
-                # Pagination controlを使用してページに移動（retry logic付き）
-                # Reference: STEP 2 implementation (Lines 1136-1151)
+                # === 追加: Frame refresh logic (STEP 2と同じパターンを適用) ===
+                # Frame Context Temporal Degradation対策: extract_submissions()で取得したFrameが
+                # 2分後のこの時点で古くなっている可能性がある
+                self.logger.info("[STEP 1] Refreshing frame BEFORE pagination control search...")
+
+                list_frame = None
+                max_frame_retries = 3
+
+                for retry in range(max_frame_retries):
+                    for frame in self.page.frames:
+                        if frame.name == CarewellSelectors.FRAME_LIST:
+                            try:
+                                _ = frame.url  # Verify frame not detached
+                                list_frame = frame
+                                self.logger.info(
+                                    f"[STEP 1] ✓ Frame refreshed successfully (retry {retry + 1}/{max_frame_retries})"
+                                )
+                                break
+                            except Exception as e:
+                                self.logger.warning(
+                                    f"[STEP 1] Frame detached during refresh (retry {retry + 1}/{max_frame_retries}): {e}"
+                                )
+                                continue
+
+                    if list_frame:
+                        break
+
+                    if retry < max_frame_retries - 1:
+                        self.logger.warning(
+                            f"[STEP 1] Frame not found, waiting 2s before retry ({retry + 1}/{max_frame_retries})..."
+                        )
+                        time.sleep(2)
+
+                if not list_frame:
+                    self.logger.error(
+                        "[STEP 1] FATAL: List frame not found after refresh retries - Cannot proceed with pagination"
+                    )
+                    return {"url": None, "filename": None}
+
+                # === 追加: 15秒待機 (ASP.NET ViewState再構築) ===
+                # STEP 2で実証済み: 15秒待機によりViewStateが安定
+                self.logger.info("[STEP 1] Waiting 15s for ASP.NET ViewState reconstruction...")
+                time.sleep(15)
+
+                # === 既存: Pagination control検索 (retry logic付き) ===
                 pagination_select = None
                 max_retries = 3
 
@@ -999,27 +1055,34 @@ class PlaywrightAutomationEngine:
                     pagination_select_locator = list_frame.locator(
                         "#ctl00_masterMain_ddlPage"
                     )
-                    if pagination_select_locator.count() > 0:
+                    control_count = pagination_select_locator.count()
+
+                    if control_count > 0:
                         pagination_select = pagination_select_locator
                         self.logger.info(
-                            f"✓ Pagination control found BEFORE detail link search (retry {retry}/{max_retries})"
+                            f"[STEP 1] ✓ Pagination control found (retry {retry + 1}/{max_retries}, count={control_count})"
                         )
                         break
+                    else:
+                        self.logger.warning(
+                            f"[STEP 1] Pagination control NOT found (retry {retry + 1}/{max_retries}, count={control_count})"
+                        )
 
                     if retry < max_retries - 1:
-                        self.logger.debug(
-                            f"Pagination control not found, waiting 2s before retry (STEP 1: {retry + 1}/{max_retries})..."
+                        self.logger.info(
+                            f"[STEP 1] Waiting 2s before retry ({retry + 1}/{max_retries})..."
                         )
                         time.sleep(2)
 
                 if pagination_select is not None and pagination_select.count() > 0:
+                    # Pagination control使用可能
                     pagination_select.select_option(str(current_page))
                     self.logger.info(
-                        f"✓ Pagination control selected: page {current_page}"
+                        f"[STEP 1] ✓ Pagination control selected: page {current_page}"
                     )
                     time.sleep(15)  # ページ遷移待機
 
-                    # Frame refresh (retry logic)
+                    # Frame refresh after pagination (既存ロジック保持)
                     list_frame = None
                     for retry in range(3):
                         for frame in self.page.frames:
@@ -1032,23 +1095,23 @@ class PlaywrightAutomationEngine:
                                     continue
                         if list_frame:
                             self.logger.info(
-                                f"✓ Frame refreshed after pagination (retry {retry + 1})"
+                                f"[STEP 1] ✓ Frame refreshed after pagination (retry {retry + 1})"
                             )
                             break
                         time.sleep(2)
 
                     if not list_frame:
                         self.logger.error(
-                            f"List frame not found after pagination to page {current_page}"
+                            f"[STEP 1] List frame not found after pagination to page {current_page}"
                         )
                         return {"url": None, "filename": None}
 
                     self.logger.info(
-                        f"✓ Navigated to page {current_page} (STEP 1 complete)"
+                        f"[STEP 1 COMPLETE] ✓ Successfully navigated to page {current_page}"
                     )
                 else:
                     self.logger.warning(
-                        f"Pagination control not found after {max_retries} retries for page {current_page} (STEP 1)"
+                        f"[STEP 1 FAILED] Pagination control not found after {max_retries} retries for page {current_page}"
                     )
 
             # Extract submission ID from detail_url (e.g., "Sid=12345")
@@ -1109,6 +1172,46 @@ class PlaywrightAutomationEngine:
 
                     # Wait for DOM to stabilize after go_back (same as pagination transition wait)
                     time.sleep(15)
+
+                    # === 追加: 診断ログ - go_back()後の状態記録 ===
+                    # STEP 1とSTEP 2の動作比較のため、詳細な状態を記録
+                    try:
+                        browser_url_after_goback = self.page.url
+                        self.logger.info(
+                            f"[STEP 2 DIAGNOSTIC] Browser URL after go_back(): {browser_url_after_goback}"
+                        )
+
+                        # 利用可能なFrameを列挙
+                        available_frames = [f.name for f in self.page.frames]
+                        self.logger.info(
+                            f"[STEP 2 DIAGNOSTIC] Available frames: {available_frames}"
+                        )
+
+                        # list frameの状態確認
+                        list_frame_found = False
+                        for frame in self.page.frames:
+                            if frame.name == CarewellSelectors.FRAME_LIST:
+                                try:
+                                    frame_url = frame.url
+                                    self.logger.info(
+                                        f"[STEP 2 DIAGNOSTIC] list frame URL: {frame_url}"
+                                    )
+                                    list_frame_found = True
+                                except Exception as e:
+                                    self.logger.warning(
+                                        f"[STEP 2 DIAGNOSTIC] list frame DETACHED: {e}"
+                                    )
+                                break
+
+                        if not list_frame_found:
+                            self.logger.warning(
+                                "[STEP 2 DIAGNOSTIC] list frame NOT FOUND in available frames"
+                            )
+
+                    except Exception as e:
+                        self.logger.error(
+                            f"[STEP 2 DIAGNOSTIC] Error during diagnostic logging: {e}"
+                        )
 
                     # STEP 2: Re-navigate to correct page if needed (after go_back always returns to Page 1)
                     if current_page > 1:
