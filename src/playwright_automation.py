@@ -991,6 +991,37 @@ class PlaywrightAutomationEngine:
                     f"Navigating to page {current_page} before detail link search"
                 )
 
+                # Phase 4: Refresh frame reference BEFORE pagination control search
+                # go_back() causes frame re-render - old reference may be stale
+                list_frame = None
+                for retry in range(max_retries):
+                    for frame in self.page.frames:
+                        if frame.name == CarewellSelectors.FRAME_LIST:
+                            try:
+                                _ = frame.url  # Verify frame not detached
+                                list_frame = frame
+                                self.logger.debug(
+                                    f"✓ Frame refreshed before pagination (retry {retry}/{max_retries})"
+                                )
+                                break
+                            except Exception:
+                                continue
+
+                    if list_frame:
+                        break
+
+                    if retry < max_retries - 1:
+                        self.logger.debug(
+                            f"Frame not found before pagination, waiting 2s (retry {retry + 1}/{max_retries})..."
+                        )
+                        time.sleep(2)
+
+                if not list_frame:
+                    self.logger.error(
+                        "List frame not found before pagination control search, cannot proceed"
+                    )
+                    return {"url": None, "filename": None}
+
                 # Retry logic for pagination control (may be unstable after go_back)
                 # go_back() causes DOM instability - pagination control may not be immediately available
                 pagination_select = None
