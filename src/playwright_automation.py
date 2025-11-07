@@ -983,40 +983,53 @@ class PlaywrightAutomationEngine:
                 )
                 return {"url": None, "filename": None}
 
-            # STEP 1: Ensure we're on the correct page BEFORE searching for detail links
-            # This is critical for Page 2+ students - without this, detail links won't be found
-            # Verify frame.url matches list_url (if mismatch, navigate to correct page)
-            if list_frame.url != list_url:
+            # STEP 1: Detail link検索の前に、current_page > 1 なら pagination control で正しいページに移動
+            # Reference: docs/playwright-page-navigation-flow.md Lines 182-185
+            if current_page > 1:
                 self.logger.info(
-                    f"Frame URL mismatch (expected: {list_url}, got: {list_frame.url}), navigating to correct page"
+                    f"Navigating to page {current_page} BEFORE detail link search (STEP 1)"
                 )
-                list_frame.goto(list_url)
-                time.sleep(2)  # Wait for navigation to complete
 
-                # Refresh frame reference
-                list_frame = None
-                max_retries = 3
-                for retry in range(max_retries):
-                    for frame in self.page.frames:
-                        if frame.name == CarewellSelectors.FRAME_LIST:
-                            try:
-                                _ = frame.url  # Verify frame not detached
-                                list_frame = frame
-                                break
-                            except Exception:
-                                continue
+                # Pagination controlを使用してページに移動
+                pagination_select = list_frame.locator("#ctl00_masterMain_ddlPage")
+                if pagination_select.count() > 0:
+                    pagination_select.select_option(str(current_page))
+                    self.logger.info(
+                        f"✓ Pagination control selected: page {current_page}"
+                    )
+                    time.sleep(15)  # ページ遷移待機
 
-                    if list_frame:
-                        break
-
-                    if retry < max_retries - 1:
+                    # Frame refresh (retry logic)
+                    list_frame = None
+                    for retry in range(3):
+                        for frame in self.page.frames:
+                            if frame.name == CarewellSelectors.FRAME_LIST:
+                                try:
+                                    _ = frame.url
+                                    list_frame = frame
+                                    break
+                                except Exception:
+                                    continue
+                        if list_frame:
+                            self.logger.info(
+                                f"✓ Frame refreshed after pagination (retry {retry + 1})"
+                            )
+                            break
                         time.sleep(2)
 
-                if not list_frame:
-                    self.logger.error(
-                        "List frame not found after goto, cannot search for detail link"
+                    if not list_frame:
+                        self.logger.error(
+                            f"List frame not found after pagination to page {current_page}"
+                        )
+                        return {"url": None, "filename": None}
+
+                    self.logger.info(
+                        f"✓ Navigated to page {current_page} (STEP 1 complete)"
                     )
-                    return {"url": None, "filename": None}
+                else:
+                    self.logger.warning(
+                        f"Pagination control not found for page {current_page}"
+                    )
 
             # Extract submission ID from detail_url (e.g., "Sid=12345")
             import re
@@ -1137,7 +1150,10 @@ class PlaywrightAutomationEngine:
                                 )
                                 time.sleep(2)
 
-                        if pagination_select is not None and pagination_select.count() > 0:
+                        if (
+                            pagination_select is not None
+                            and pagination_select.count() > 0
+                        ):
                             pagination_select.select_option(str(current_page))
                             self.logger.info(
                                 f"Waiting for page transition to page {current_page} (15 seconds)..."
