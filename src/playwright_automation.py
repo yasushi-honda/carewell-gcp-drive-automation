@@ -985,125 +985,6 @@ class PlaywrightAutomationEngine:
 
             # STEP 1: Ensure we're on the correct page BEFORE searching for detail links
             # This is critical for Page 2+ students - without this, detail links won't be found
-            # Use pagination control (not frame.goto) for reliable navigation
-            if current_page > 1:
-                self.logger.info(
-                    f"Navigating to page {current_page} before detail link search"
-                )
-
-                # Phase 4: Refresh frame reference BEFORE pagination control search
-                # go_back() causes frame re-render - old reference may be stale
-                list_frame = None
-                for retry in range(max_retries):
-                    for frame in self.page.frames:
-                        if frame.name == CarewellSelectors.FRAME_LIST:
-                            try:
-                                _ = frame.url  # Verify frame not detached
-                                list_frame = frame
-                                self.logger.debug(
-                                    f"✓ Frame refreshed before pagination (retry {retry}/{max_retries})"
-                                )
-                                break
-                            except Exception:
-                                continue
-
-                    if list_frame:
-                        break
-
-                    if retry < max_retries - 1:
-                        self.logger.debug(
-                            f"Frame not found before pagination, waiting 2s (retry {retry + 1}/{max_retries})..."
-                        )
-                        time.sleep(2)
-
-                if not list_frame:
-                    self.logger.error(
-                        "List frame not found before pagination control search, cannot proceed"
-                    )
-                    return {"url": None, "filename": None}
-
-                # Retry logic for pagination control (may be unstable after go_back)
-                # go_back() causes DOM instability - pagination control may not be immediately available
-                pagination_select = None
-                max_retries = 3
-                for retry in range(max_retries):
-                    pagination_select_locator = list_frame.locator(
-                        "#ctl00_masterMain_ddlPage"
-                    )
-                    if pagination_select_locator.count() > 0:
-                        pagination_select = pagination_select_locator
-                        self.logger.info(
-                            f"✓ Pagination control found (retry {retry}/{max_retries})"
-                        )
-                        break
-
-                    if retry < max_retries - 1:
-                        self.logger.debug(
-                            f"Pagination control not found, waiting 2s (retry {retry + 1}/{max_retries})..."
-                        )
-                        time.sleep(2)  # Wait for DOM to stabilize
-
-                if pagination_select is not None and pagination_select.count() > 0:
-                    pagination_select.select_option(str(current_page))
-                    self.logger.info(
-                        f"Waiting for page transition to page {current_page} (15 seconds)..."
-                    )
-                    time.sleep(15)  # Same as existing pagination wait time
-
-                    # Refresh frame reference after navigation
-                    list_frame = None
-                    max_retries = 3
-                    for retry in range(max_retries):
-                        for frame in self.page.frames:
-                            if frame.name == CarewellSelectors.FRAME_LIST:
-                                try:
-                                    _ = frame.url  # Verify frame not detached
-                                    list_frame = frame
-                                    break
-                                except Exception:
-                                    continue
-
-                        if list_frame:
-                            break
-
-                        if retry < max_retries - 1:
-                            time.sleep(2)
-
-                    if not list_frame:
-                        self.logger.error(
-                            "List frame not found after page navigation, cannot search for detail link"
-                        )
-                        return {"url": None, "filename": None}
-
-                    # Update list_url after pagination transition
-                    # Wait for frame URL to actually change after pagination
-                    old_url = list_url
-                    url_updated = False
-                    for retry in range(10):
-                        current_frame_url = list_frame.url
-                        if current_frame_url != old_url:
-                            list_url = current_frame_url
-                            url_updated = True
-                            self.logger.info(
-                                f"✓ URL changed after {retry * 2}s: {list_url}"
-                            )
-                            break
-                        time.sleep(2)
-
-                    if not url_updated:
-                        self.logger.warning(
-                            f"URL did not change after 20s, using current frame URL: {list_frame.url}"
-                        )
-                        list_url = list_frame.url
-
-                    self.logger.info(f"✓ Navigated to page {current_page}")
-                else:
-                    # Pagination control not found after retries - cannot proceed
-                    self.logger.error(
-                        f"❌ Pagination control not found after {max_retries} retries for page {current_page}"
-                    )
-                    return {"url": None, "filename": None}
-
             # Verify frame.url matches list_url (if mismatch, navigate to correct page)
             if list_frame.url != list_url:
                 self.logger.info(
@@ -1232,12 +1113,31 @@ class PlaywrightAutomationEngine:
                             # Still return download info since we got the file
                             return {"url": download_url, "filename": filename}
 
-                        # Navigate back to target page using pagination control
-                        pagination_select = list_frame.locator(
-                            "#ctl00_masterMain_ddlPage"
-                        )
+                        # Navigate back to target page using pagination control with retry logic
+                        # Phase B: Add retry logic for pagination control search (document-driven approach)
+                        # Historical evidence (2025-11-04): STEP 2 alone was sufficient for pagination control detection
+                        # Reference: commit 3bd3399 correctly identified STEP 1 as "incorrect location"
+                        pagination_select = None
+                        max_retries = 3
 
-                        if pagination_select.count() > 0:
+                        for retry in range(max_retries):
+                            pagination_select_locator = list_frame.locator(
+                                "#ctl00_masterMain_ddlPage"
+                            )
+                            if pagination_select_locator.count() > 0:
+                                pagination_select = pagination_select_locator
+                                self.logger.info(
+                                    f"✓ Pagination control found after go_back (retry {retry}/{max_retries})"
+                                )
+                                break
+
+                            if retry < max_retries - 1:
+                                self.logger.debug(
+                                    f"Pagination control not found after go_back, waiting 2s (retry {retry + 1}/{max_retries})..."
+                                )
+                                time.sleep(2)
+
+                        if pagination_select is not None and pagination_select.count() > 0:
                             pagination_select.select_option(str(current_page))
                             self.logger.info(
                                 f"Waiting for page transition to page {current_page} (15 seconds)..."
