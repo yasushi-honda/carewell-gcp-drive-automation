@@ -997,7 +997,7 @@ class PlaywrightAutomationEngine:
 
                 for retry in range(max_retries):
                     pagination_select_locator = list_frame.locator(
-                        "#ctl00_masterMain_ddlPage"
+                        CarewellSelectors.PAGINATION_SELECT
                     )
                     if pagination_select_locator.count() > 0:
                         pagination_select = pagination_select_locator
@@ -1155,7 +1155,7 @@ class PlaywrightAutomationEngine:
 
                         for retry in range(max_retries):
                             pagination_select_locator = list_frame.locator(
-                                "#ctl00_masterMain_ddlPage"
+                                CarewellSelectors.PAGINATION_SELECT
                             )
                             if pagination_select_locator.count() > 0:
                                 pagination_select = pagination_select_locator
