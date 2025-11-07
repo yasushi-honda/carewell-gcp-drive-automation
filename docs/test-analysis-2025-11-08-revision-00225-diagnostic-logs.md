@@ -33,12 +33,12 @@
 | 状態 | 期待値 | 実際の値 | 判定 |
 |------|--------|---------|------|
 | **Page 1** | 100行 | **0行** | ❌ FAILED |
-| **Page 2** | 99行 | **0行** | ❌ FAILED |
-| **BEFORE refresh** | 100 or 99行 | **0行** | ❌ FAILED |
-| **AFTER refresh** | 100 or 99行 | **0行** | ❌ FAILED |
-| **Retry 1/3** | 100 or 99行 | **0行** | ❌ FAILED |
-| **Retry 2/3** | 100 or 99行 | **0行** | ❌ FAILED |
-| **Retry 3/3** | 100 or 99行 | **0行** | ❌ FAILED |
+| **Page 2** | 100行 | **0行** | ❌ FAILED |
+| **BEFORE refresh** | 100行 | **0行** | ❌ FAILED |
+| **AFTER refresh** | 100行 | **0行** | ❌ FAILED |
+| **Retry 1/3** | 100行 | **0行** | ❌ FAILED |
+| **Retry 2/3** | 100行 | **0行** | ❌ FAILED |
+| **Retry 3/3** | 100行 | **0行** | ❌ FAILED |
 | **pagination_select_locator.count()** | > 0 | **0** | ❌ FAILED |
 
 **結論**: `go_back()` → 3秒待機 → Frame refresh → 15秒待機という処理の後でも、**DOM tbodyは空のまま**。
@@ -55,11 +55,11 @@
                                    'left (https://jaccw-carewel.study.jp/course/report/left.aspx)',
                                    'list (https://jaccw-carewel.study.jp/course/report/list.aspx?...)']
 [STEP 1 診断] Current list_frame status: ATTACHED, URL: https://jaccw-carewel.study.jp/course/report/list.aspx?...
-[STEP 1 診断] Current list_frame DOM tbody row count (BEFORE refresh): 0 rows (Page 1=100, Page 2=99)
+[STEP 1 診断] Current list_frame DOM tbody row count (BEFORE refresh): 0 rows (Page 1=100, Page 2=100)
 [STEP 1 START] Navigating to page 2 BEFORE detail link search (current student on page 2)
 [STEP 1] ✓ Frame refreshed before pagination (retry 1)
 [STEP 1 診断] Refreshed list_frame URL: https://jaccw-carewel.study.jp/course/report/list.aspx?...
-[STEP 1 診断] Refreshed list_frame DOM tbody row count (AFTER refresh): 0 rows (Page 1=100, Page 2=99)
+[STEP 1 診断] Refreshed list_frame DOM tbody row count (AFTER refresh): 0 rows (Page 1=100, Page 2=100)
 [STEP 1 診断] Retry 1/3: Frame status=ATTACHED, URL=https://jaccw-carewel.study.jp/course/report/list.aspx?...
 [STEP 1 診断] Retry 1/3: DOM tbody row count=0 rows
 [STEP 1 診断] Retry 1/3: pagination_select_locator.count()=0
@@ -183,7 +183,7 @@ if current_page > 1:
             if tbody_count > 0:
                 self.logger.info(
                     f"✓ DOM ready: {tbody_count} rows detected after {retry * 2}s "
-                    f"(Page 1=100, Page 2=99)"
+                    f"(Page 1=100, Page 2=100)"
                 )
                 dom_ready = True
                 break
@@ -214,7 +214,7 @@ if current_page > 1:
 **期待される効果**:
 - ✅ DOM tbodyが実際に構築されてから次の処理へ
 - ✅ 固定15秒待機より効率的（早ければ6秒、遅くても30秒）
-- ✅ Page 1 (100行) vs Page 2 (99行) の判定も可能
+- ✅ Page 1 (100行) vs Page 2 (100行) の判定も可能
 
 **デメリット**:
 - 最大30秒待機（現在は15秒）
@@ -281,13 +281,13 @@ try:
             f"[STEP 1 診断] Current list_frame status: {frame_status}, URL: {frame_url}"
         )
 
-        # DOM tbody行数を取得（Page 1=100行、Page 2=99行）
+        # DOM tbody行数を取得（Page 1=100行、Page 2=100行）
         try:
             tbody_locator = list_frame.locator("#ctl00_masterMain_gdvList tbody tr")
             tbody_row_count = tbody_locator.count()
             self.logger.info(
                 f"[STEP 1 診断] Current list_frame DOM tbody row count (BEFORE refresh): "
-                f"{tbody_row_count} rows (Page 1=100, Page 2=99)"
+                f"{tbody_row_count} rows (Page 1=100, Page 2=100)"
             )
         except Exception as e:
             self.logger.warning(
@@ -315,7 +315,7 @@ try:
         tbody_row_count_after = tbody_locator_after.count()
         self.logger.info(
             f"[STEP 1 診断] Refreshed list_frame DOM tbody row count (AFTER refresh): "
-            f"{tbody_row_count_after} rows (Page 1=100, Page 2=99)"
+            f"{tbody_row_count_after} rows (Page 1=100, Page 2=100)"
         )
     except Exception as e:
         self.logger.warning(

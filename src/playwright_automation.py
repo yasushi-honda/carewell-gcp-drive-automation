@@ -1029,11 +1029,11 @@ class PlaywrightAutomationEngine:
 
                         self.logger.info(f"[STEP 1 診断] Current list_frame status: {frame_status}, URL: {frame_url}")
 
-                        # DOM tbody行数を取得（Page 1=100行、Page 2=99行）
+                        # DOM tbody行数を取得（Page 1=100行、Page 2=100行）
                         try:
                             tbody_locator = list_frame.locator("#ctl00_masterMain_gdvList tbody tr")
                             tbody_row_count = tbody_locator.count()
-                            self.logger.info(f"[STEP 1 診断] Current list_frame DOM tbody row count (BEFORE refresh): {tbody_row_count} rows (Page 1=100, Page 2=99)")
+                            self.logger.info(f"[STEP 1 診断] Current list_frame DOM tbody row count (BEFORE refresh): {tbody_row_count} rows (Page 1=100, Page 2=100)")
                         except Exception as e:
                             self.logger.warning(f"[STEP 1 診断] Failed to get tbody row count (BEFORE refresh): {e}")
                     else:
@@ -1068,7 +1068,7 @@ class PlaywrightAutomationEngine:
                                     try:
                                         tbody_locator_after = list_frame.locator("#ctl00_masterMain_gdvList tbody tr")
                                         tbody_row_count_after = tbody_locator_after.count()
-                                        self.logger.info(f"[STEP 1 診断] Refreshed list_frame DOM tbody row count (AFTER refresh): {tbody_row_count_after} rows (Page 1=100, Page 2=99)")
+                                        self.logger.info(f"[STEP 1 診断] Refreshed list_frame DOM tbody row count (AFTER refresh): {tbody_row_count_after} rows (Page 1=100, Page 2=100)")
                                     except Exception as e:
                                         self.logger.warning(f"[STEP 1 診断] Failed to get tbody row count (AFTER refresh): {e}")
                                 except Exception as e:
