@@ -1271,7 +1271,7 @@ class PlaywrightAutomationEngine:
 
                     # Go back to list page
                     try:
-                        self.page.go_back(wait_until="domcontentloaded")
+                        self.page.go_back(wait_until="domcontentloaded", timeout=10000)
                     except Exception as e:
                         self.logger.warning(
                             f"go_back timeout expected (ASP.NET ViewState behavior): {e}"
@@ -1444,7 +1444,7 @@ class PlaywrightAutomationEngine:
                 self.logger.error("Timeout waiting for download link on detail page")
                 # Go back to list page to avoid staying on detail page
                 try:
-                    self.page.go_back(wait_until="domcontentloaded")
+                    self.page.go_back(wait_until="domcontentloaded", timeout=10000)
                     time.sleep(15)  # Wait for DOM to stabilize
                     self.logger.info("✓ Returned to list page after timeout")
                 except Exception as e:
@@ -1455,7 +1455,7 @@ class PlaywrightAutomationEngine:
             self.logger.error(f"Error in _get_download_link: {e}")
             # Go back to list page to avoid staying on detail page
             try:
-                self.page.go_back(wait_until="domcontentloaded")
+                self.page.go_back(wait_until="domcontentloaded", timeout=10000)
                 time.sleep(15)  # Wait for DOM to stabilize
                 self.logger.info("✓ Returned to list page after exception")
             except Exception as go_back_error:
