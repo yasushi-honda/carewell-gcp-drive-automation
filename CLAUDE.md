@@ -906,6 +906,93 @@ Based on past incidents:
    - Commit 054614c (introduced Sid - wrong assumption)
    - Commit ae5d169 (fixed with log_id - verified from HTML)
 
+11. **Playwright go_back() Default Timeout Too Long** (2025-11-08 incident)
+   - ❌ Used Playwright default timeout (180s) for go_back() that always fails
+   - ✅ **Set explicit short timeout for operations expected to fail**
+   - Impact: 3 minutes wasted per student → 10 hours wasted per 200-student execution
+
+   **Root Cause**: go_back() used default timeout without explicit timeout parameter
+
+   ```python
+   # ❌ Wrong (Line 1274 - Default 180s timeout)
+   self.page.go_back(wait_until="domcontentloaded")
+   # Waits 180 seconds before raising TimeoutError
+
+   # ✅ Correct - Explicit 10s timeout
+   self.page.go_back(wait_until="domcontentloaded", timeout=10000)
+   # Fails fast in 10 seconds
+   ```
+
+   **Evidence from Logs** (2025-11-08 05:10-05:14 JST):
+   ```
+   05:10:18 - Found download link: ０１C０４０齊藤誠改善方針シート.xlsx
+   05:13:18 - go_back timeout (exactly 180 seconds later)
+   05:13:33 - Error recovery complete
+   05:14:08 - Student added successfully
+
+   Total: ~4 minutes (3 min timeout + 1 min processing)
+   ```
+
+   **Why it happened**:
+   - ASP.NET ViewState causes go_back() to always timeout (documented in Common Mistake #6)
+   - Error handling already in place (try-except)
+   - **BUT timeout parameter was not specified → used Playwright default 180s**
+   - No one questioned why timeout takes exactly 3 minutes
+
+   **Impact**:
+   - 1 student: 4 minutes (3 min timeout + 1 min processing)
+   - 200 students: ~13 hours total
+   - **10 hours wasted just waiting for known failures**
+
+   **Solution** (commit `d3554b3`):
+   - Reduced timeout from 180s to 10s (3 locations)
+     - Line 1274: Normal flow (download success)
+     - Line 1447: TimeoutError recovery
+     - Line 1458: Exception recovery
+
+   **Impact After Fix**:
+   - 1 student: ~30 seconds (10s timeout + 20s processing)
+   - 200 students: ~3 hours total
+   - **Saved ~10 hours per execution**
+
+   **Critical Lessons**:
+   - ❌ **Don't rely on default timeout for operations known to fail**
+   - ❌ **3 minutes per operation should have been a red flag**
+   - ✅ **Set explicit timeout values based on expected behavior**
+   - ✅ **For operations expected to fail: use short timeout (10s)**
+   - ✅ **For operations expected to succeed: use longer timeout (60s+)**
+   - ✅ **Question suspicious timing patterns in logs**
+
+   **Playwright Default Timeouts**:
+   - Navigation: 30s
+   - Action (click, fill): 30s
+   - **wait_for operations: 30s** (NOT 180s)
+   - **page.goto, go_back: 180s** ← This is the culprit
+   - Always check Playwright docs for default values
+
+   **Verification Checklist** (before deploying timeout-related code):
+   - [ ] Timeout value explicitly specified? (not relying on default)
+   - [ ] Timeout appropriate for expected behavior? (fail fast vs wait long)
+   - [ ] Logs show actual timeout duration? (to verify setting works)
+   - [ ] Error handling in place for timeout case?
+   - [ ] Impact calculated for batch operations? (N students × timeout)
+
+   **Prevention**:
+   ```python
+   # ✅ Good practice: Always specify timeout explicitly
+   # For operations expected to fail (ASP.NET ViewState)
+   self.page.go_back(wait_until="domcontentloaded", timeout=10000)  # 10s
+
+   # For operations expected to succeed (normal navigation)
+   self.page.goto(url, wait_until="domcontentloaded", timeout=60000)  # 60s
+   ```
+
+   **Reference**:
+   - Cloud Run logs 2025-11-08 05:10-05:14 JST
+   - Commit d3554b3 (reduced timeout 180s → 10s)
+   - Common Mistake #6 (ASP.NET ViewState go_back() behavior)
+   - [Playwright Timeout Documentation](https://playwright.dev/python/docs/api/class-page#page-go-back)
+
 ## Steering Configuration
 
 ### Current Steering Files
