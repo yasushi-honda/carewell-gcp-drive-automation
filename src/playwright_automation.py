@@ -1226,21 +1226,46 @@ class PlaywrightAutomationEngine:
             # Click the first matching link
             detail_links.first.click()
 
+            # Wait for frame navigation to detail page (report.aspx)
+            time.sleep(3)
+
+            # Refresh list_frame reference after click (frame navigated to report.aspx)
+            list_frame = None
+            for retry in range(3):
+                for frame in self.page.frames:
+                    if frame.name == CarewellSelectors.FRAME_LIST:
+                        try:
+                            _ = frame.url
+                            list_frame = frame
+                            self.logger.debug(f"✓ Frame refreshed after detail click (URL: {frame.url})")
+                            break
+                        except Exception:
+                            continue
+
+                if list_frame:
+                    break
+
+                if retry < 2:
+                    time.sleep(2)
+
+            if not list_frame:
+                self.logger.error("List frame not found after detail link click")
+                return {"url": None, "filename": None}
+
             # Wait for detail page to load by checking for the download link
             try:
-                download_link = self.page.wait_for_selector(
+                download_link = list_frame.wait_for_selector(
                     CarewellSelectors.DOWNLOAD_LINK, timeout=30000
                 )
                 if download_link:
                     download_url = download_link.get_attribute("href")
-                    # Extract filename from the onclick attribute
-                    onclick_attr = download_link.get_attribute("onclick") or ""
-                    filename_match = re.search(r"'([^']+)'", onclick_attr)
-                    filename = (
-                        filename_match.group(1)
-                        if filename_match
-                        else f"download_{int(time.time())}.pdf"
-                    )
+                    # Extract filename from text content (not onclick attribute)
+                    filename = download_link.text_content().strip()
+
+                    if not filename:
+                        # Fallback: extract from href
+                        self.logger.warning("Download link has no text content, using fallback filename")
+                        filename = f"download_{int(time.time())}.pdf"
 
                     self.logger.info(f"Found download link: {filename}")
 
