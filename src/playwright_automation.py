@@ -81,6 +81,9 @@ class CarewellSelectors:
     # Pagination selectors
     PAGINATION_SELECT = 'select[name="ctl00$masterMain$dpgMain$dpgMain$ctl00$ddlPage"]'
 
+    # Download link selector (on detail/report page)
+    DOWNLOAD_LINK = 'a[href^="download.aspx"]'
+
     # Frame names
     FRAME_LIST = "list"
 
@@ -1414,10 +1417,24 @@ class PlaywrightAutomationEngine:
                     return {"url": download_url, "filename": filename}
             except TimeoutError:
                 self.logger.error("Timeout waiting for download link on detail page")
+                # Go back to list page to avoid staying on detail page
+                try:
+                    self.page.go_back(wait_until="domcontentloaded")
+                    time.sleep(15)  # Wait for DOM to stabilize
+                    self.logger.info("✓ Returned to list page after timeout")
+                except Exception as e:
+                    self.logger.warning(f"Failed to go_back after timeout: {e}")
                 return {"url": None, "filename": None}
 
         except Exception as e:
             self.logger.error(f"Error in _get_download_link: {e}")
+            # Go back to list page to avoid staying on detail page
+            try:
+                self.page.go_back(wait_until="domcontentloaded")
+                time.sleep(15)  # Wait for DOM to stabilize
+                self.logger.info("✓ Returned to list page after error")
+            except Exception as go_back_error:
+                self.logger.warning(f"Failed to go_back after error: {go_back_error}")
             return {"url": None, "filename": None}
 
     def download_file(self, download_url: str, filename: str, detail_url: str) -> str:
