@@ -757,6 +757,86 @@ Based on past incidents:
    - `docs/pagination-viewstate-solution-2025-11-06.md` Line 251 (evidence URL never changes)
    - `docs/incident-2025-11-06-pagination-url-update-delay.md` (related ASP.NET behavior)
 
+10. **Assuming Parameter Names Without Verification** (2025-11-08 incident)
+   - ❌ Assumed `Sid` parameter exists in detail links without checking actual HTML
+   - ✅ **Always verify actual parameter names in production HTML before coding**
+   - Impact: Page 2+ students failed with 0% success rate (№01 課題①)
+
+   **Root Cause**: Commit `054614c` introduced `Sid` parameter extraction without verifying production HTML
+
+   ```python
+   # ❌ Wrong (Line 1199 - Assumed parameter name)
+   sid_match = re.search(r"Sid=(\d+)", detail_url)  # Sid doesn't exist!
+
+   # ✅ Correct (Verified from actual HTML)
+   log_id_match = re.search(r"log_id=(\d+)", detail_url)
+   ```
+
+   **Evidence from Production HTML** (verified 2025-11-08):
+
+   ```html
+   <!-- Page 1 student -->
+   <a href="report.aspx?log_id=7451&unit_id=684&course_id=41&filter=all">
+     川久保　晃 <N9903754>
+   </a>
+
+   <!-- Page 2 student -->
+   <a href="report.aspx?log_id=8577&unit_id=684&course_id=41&filter=all">
+     杉山　千晶 <N9903321>
+   </a>
+   ```
+   → **Sid parameter does NOT exist. Only log_id exists.**
+
+   **Why it happened**:
+   - Tried to improve from exact match (`a[href="{detail_url}"]`) to partial match
+   - Changed to parameter-based search for flexibility
+   - **Guessed parameter name `Sid` without checking actual HTML**
+   - Possibly assumed based on experience with other ASP.NET systems
+   - Did not verify parameter names in browser DevTools
+
+   **Impact Chain**:
+   ```
+   Sid extraction fails → return {"url": None, "filename": None}
+   → Student download fails → Retry 3 times → Still fails
+   → Page 2+ students 0% success rate
+   ```
+
+   **Solution** (commit `ae5d169`):
+   - Replace all `Sid` references with `log_id` (5 locations, Lines 1196-1217)
+   - Verify regex matches actual URL parameter: `r"log_id=(\d+)"`
+
+   **Critical Lessons**:
+   - ❌ **NEVER guess parameter/field names without verification**
+   - ❌ Don't rely on assumptions from other systems
+   - ✅ **ALWAYS inspect actual production HTML in browser DevTools**
+   - ✅ Log actual URL values during development to verify parameters
+   - ✅ Add diagnostic logs that show extracted parameter values
+
+   **Verification Checklist** (before implementing URL/parameter parsing):
+   - [ ] Opened browser DevTools and inspected actual HTML?
+   - [ ] Verified parameter names in production environment?
+   - [ ] Logged actual URL examples in code comments?
+   - [ ] Added error logs that show full URL when extraction fails?
+   - [ ] Tested with real data from all pages (Page 1, Page 2, etc.)?
+
+   **Prevention**:
+   ```python
+   # ✅ Good practice: Log actual URL for verification
+   self.logger.debug(f"Extracting from detail_url: {detail_url}")
+   log_id_match = re.search(r"log_id=(\d+)", detail_url)
+   if not log_id_match:
+       self.logger.error(
+           f"Failed to extract log_id from detail_url: {detail_url}"
+           # ↑ Full URL logged - easy to spot parameter name issues
+       )
+   ```
+
+   **Reference**:
+   - Cloud Run logs 2025-11-08 00:10-00:12 JST
+   - Student: 杉山 千晶 (N9903321, Page 2)
+   - Commit 054614c (introduced Sid - wrong assumption)
+   - Commit ae5d169 (fixed with log_id - verified from HTML)
+
 ## Steering Configuration
 
 ### Current Steering Files
