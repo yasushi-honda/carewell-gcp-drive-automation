@@ -1025,7 +1025,9 @@ class PlaywrightAutomationEngine:
                             available_frames.append(f"{frame.name} ({frame.url})")
                         except Exception:
                             available_frames.append(f"{frame.name} (detached)")
-                    self.logger.info(f"[STEP 1 診断] Available frames: {available_frames}")
+                    self.logger.info(
+                        f"[STEP 1 診断] Available frames: {available_frames}"
+                    )
 
                     # 現在のlist_frameの状態
                     if list_frame:
@@ -1036,24 +1038,38 @@ class PlaywrightAutomationEngine:
                             frame_url = "unknown"
                             frame_status = "DETACHED"
 
-                        self.logger.info(f"[STEP 1 診断] Current list_frame status: {frame_status}, URL: {frame_url}")
+                        self.logger.info(
+                            f"[STEP 1 診断] Current list_frame status: {frame_status}, URL: {frame_url}"
+                        )
 
                         # DOM tbody行数を取得
                         try:
-                            tbody_locator = list_frame.locator(f"{CarewellSelectors.SUBMISSION_TABLE} tbody tr")
+                            tbody_locator = list_frame.locator(
+                                f"{CarewellSelectors.SUBMISSION_TABLE} tbody tr"
+                            )
                             tbody_row_count = tbody_locator.count()
-                            self.logger.info(f"[STEP 1 診断] Current list_frame DOM tbody row count (BEFORE refresh): {tbody_row_count} rows")
+                            self.logger.info(
+                                f"[STEP 1 診断] Current list_frame DOM tbody row count (BEFORE refresh): {tbody_row_count} rows"
+                            )
                         except Exception as e:
-                            self.logger.warning(f"[STEP 1 診断] Failed to get tbody row count (BEFORE refresh): {e}")
+                            self.logger.warning(
+                                f"[STEP 1 診断] Failed to get tbody row count (BEFORE refresh): {e}"
+                            )
                     else:
-                        self.logger.warning("[STEP 1 診断] list_frame is None before refresh")
+                        self.logger.warning(
+                            "[STEP 1 診断] list_frame is None before refresh"
+                        )
                 except Exception as e:
-                    self.logger.warning(f"[STEP 1 診断] Failed to collect initial diagnostic info: {e}")
+                    self.logger.warning(
+                        f"[STEP 1 診断] Failed to collect initial diagnostic info: {e}"
+                    )
 
                 # === 追加: Frame refresh logic (STEP 2と同じパターンを適用) ===
                 # Frame Context Temporal Degradation対策: extract_submissions()で取得したFrameが
                 # 2分後のこの時点で古くなっている可能性がある
-                self.logger.info("[STEP 1] Refreshing frame BEFORE pagination control search...")
+                self.logger.info(
+                    "[STEP 1] Refreshing frame BEFORE pagination control search..."
+                )
 
                 list_frame = None
                 max_frame_retries = 3
@@ -1071,17 +1087,29 @@ class PlaywrightAutomationEngine:
                                 # === 診断ログ追加 Part 2: Frame refresh成功後の診断 ===
                                 try:
                                     refreshed_frame_url = list_frame.url
-                                    self.logger.info(f"[STEP 1 診断] Refreshed list_frame URL: {refreshed_frame_url}")
+                                    self.logger.info(
+                                        f"[STEP 1 診断] Refreshed list_frame URL: {refreshed_frame_url}"
+                                    )
 
                                     # DOM tbody行数を取得（AFTER refresh）
                                     try:
-                                        tbody_locator_after = list_frame.locator(f"{CarewellSelectors.SUBMISSION_TABLE} tbody tr")
-                                        tbody_row_count_after = tbody_locator_after.count()
-                                        self.logger.info(f"[STEP 1 診断] Refreshed list_frame DOM tbody row count (AFTER refresh): {tbody_row_count_after} rows")
+                                        tbody_locator_after = list_frame.locator(
+                                            f"{CarewellSelectors.SUBMISSION_TABLE} tbody tr"
+                                        )
+                                        tbody_row_count_after = (
+                                            tbody_locator_after.count()
+                                        )
+                                        self.logger.info(
+                                            f"[STEP 1 診断] Refreshed list_frame DOM tbody row count (AFTER refresh): {tbody_row_count_after} rows"
+                                        )
                                     except Exception as e:
-                                        self.logger.warning(f"[STEP 1 診断] Failed to get tbody row count (AFTER refresh): {e}")
+                                        self.logger.warning(
+                                            f"[STEP 1 診断] Failed to get tbody row count (AFTER refresh): {e}"
+                                        )
                                 except Exception as e:
-                                    self.logger.warning(f"[STEP 1 診断] Failed to collect post-refresh diagnostic info: {e}")
+                                    self.logger.warning(
+                                        f"[STEP 1 診断] Failed to collect post-refresh diagnostic info: {e}"
+                                    )
 
                                 break
                             except Exception as e:
@@ -1107,7 +1135,9 @@ class PlaywrightAutomationEngine:
 
                 # === 追加: 15秒待機 (ASP.NET ViewState再構築) ===
                 # STEP 2で実証済み: 15秒待機によりViewStateが安定
-                self.logger.info("[STEP 1] Waiting 15s for ASP.NET ViewState reconstruction...")
+                self.logger.info(
+                    "[STEP 1] Waiting 15s for ASP.NET ViewState reconstruction..."
+                )
                 time.sleep(15)
 
                 # === 既存: Pagination control検索 (retry logic付き) ===
@@ -1125,17 +1155,27 @@ class PlaywrightAutomationEngine:
                             retry_frame_url = "unknown"
                             retry_frame_status = "DETACHED"
 
-                        self.logger.info(f"[STEP 1 診断] Retry {retry + 1}/{max_retries}: Frame status={retry_frame_status}, URL={retry_frame_url}")
+                        self.logger.info(
+                            f"[STEP 1 診断] Retry {retry + 1}/{max_retries}: Frame status={retry_frame_status}, URL={retry_frame_url}"
+                        )
 
                         # DOM tbody行数確認（各retry時）
                         try:
-                            tbody_retry_locator = list_frame.locator(f"{CarewellSelectors.SUBMISSION_TABLE} tbody tr")
+                            tbody_retry_locator = list_frame.locator(
+                                f"{CarewellSelectors.SUBMISSION_TABLE} tbody tr"
+                            )
                             tbody_retry_count = tbody_retry_locator.count()
-                            self.logger.info(f"[STEP 1 診断] Retry {retry + 1}/{max_retries}: DOM tbody row count={tbody_retry_count} rows")
+                            self.logger.info(
+                                f"[STEP 1 診断] Retry {retry + 1}/{max_retries}: DOM tbody row count={tbody_retry_count} rows"
+                            )
                         except Exception as e:
-                            self.logger.warning(f"[STEP 1 診断] Retry {retry + 1}/{max_retries}: Failed to get tbody row count: {e}")
+                            self.logger.warning(
+                                f"[STEP 1 診断] Retry {retry + 1}/{max_retries}: Failed to get tbody row count: {e}"
+                            )
                     except Exception as e:
-                        self.logger.warning(f"[STEP 1 診断] Retry {retry + 1}/{max_retries}: Failed to collect diagnostic info: {e}")
+                        self.logger.warning(
+                            f"[STEP 1 診断] Retry {retry + 1}/{max_retries}: Failed to collect diagnostic info: {e}"
+                        )
 
                     pagination_select_locator = list_frame.locator(
                         CarewellSelectors.PAGINATION_SELECT
@@ -1143,7 +1183,9 @@ class PlaywrightAutomationEngine:
                     control_count = pagination_select_locator.count()
 
                     # 診断ログ: Pagination control locator count結果
-                    self.logger.info(f"[STEP 1 診断] Retry {retry + 1}/{max_retries}: pagination_select_locator.count()={control_count}")
+                    self.logger.info(
+                        f"[STEP 1 診断] Retry {retry + 1}/{max_retries}: pagination_select_locator.count()={control_count}"
+                    )
 
                     if control_count > 0:
                         pagination_select = pagination_select_locator
@@ -1243,7 +1285,9 @@ class PlaywrightAutomationEngine:
                         try:
                             _ = frame.url
                             list_frame = frame
-                            self.logger.debug(f"✓ Frame refreshed after detail click (URL: {frame.url})")
+                            self.logger.debug(
+                                f"✓ Frame refreshed after detail click (URL: {frame.url})"
+                            )
                             break
                         except Exception:
                             continue
@@ -1270,7 +1314,9 @@ class PlaywrightAutomationEngine:
 
                     if not filename:
                         # Fallback: extract from href
-                        self.logger.warning("Download link has no text content, using fallback filename")
+                        self.logger.warning(
+                            "Download link has no text content, using fallback filename"
+                        )
                         filename = f"download_{int(time.time())}.pdf"
 
                     self.logger.info(f"Found download link: {filename}")
@@ -1462,7 +1508,9 @@ class PlaywrightAutomationEngine:
                     )
                     return {"url": download_url, "filename": filename}
             except TimeoutError:
-                self.logger.error("[PHASE 1] Timeout waiting for download link on detail page")
+                self.logger.error(
+                    "[PHASE 1] Timeout waiting for download link on detail page"
+                )
                 # Go back to list page to avoid staying on detail page
                 if current_page > 1:
                     self.logger.info(
@@ -1474,9 +1522,13 @@ class PlaywrightAutomationEngine:
                     try:
                         self.page.go_back(wait_until="load", timeout=30000)
                         self._wait_for_navigation()
-                        self.logger.info("[PHASE 1] ✓ Returned to list page after timeout")
+                        self.logger.info(
+                            "[PHASE 1] ✓ Returned to list page after timeout"
+                        )
                     except Exception as e:
-                        self.logger.warning(f"[PHASE 1] Failed to go_back after timeout: {e}")
+                        self.logger.warning(
+                            f"[PHASE 1] Failed to go_back after timeout: {e}"
+                        )
                 return {"url": None, "filename": None}
 
         except Exception as e:
@@ -1492,9 +1544,13 @@ class PlaywrightAutomationEngine:
                 try:
                     self.page.go_back(wait_until="load", timeout=30000)
                     self._wait_for_navigation()
-                    self.logger.info("[PHASE 1] ✓ Returned to list page after exception")
+                    self.logger.info(
+                        "[PHASE 1] ✓ Returned to list page after exception"
+                    )
                 except Exception as go_back_error:
-                    self.logger.warning(f"[PHASE 1] Failed to go_back after exception: {go_back_error}")
+                    self.logger.warning(
+                        f"[PHASE 1] Failed to go_back after exception: {go_back_error}"
+                    )
             return {"url": None, "filename": None}
 
     def download_file(self, download_url: str, filename: str, detail_url: str) -> str:
