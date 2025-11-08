@@ -765,6 +765,179 @@ EOF
 
 ---
 
-**最終更新**: 2025/11/06
-**バージョン**: 1.1
+## 🔍 診断パターン: 1人目成功・2人目以降全員失敗
+
+### 症状チェックリスト
+
+以下のすべてに該当する場合、このパターンです：
+
+- [ ] 1人目の学生: 処理成功（URL・ファイル名取得成功）
+- [ ] 2人目以降の学生: **全員失敗**（download_url=None）
+- [ ] ログに `[STEP 1 FAILED] Pagination control not found` が連続出現
+- [ ] Phase 2（Downloading:）ログが少ない、または出ない
+
+---
+
+### 診断フローチャート
+
+```mermaid
+graph TD
+    A[症状: 1人目成功・2人目以降失敗] --> B{ログ確認1:<br/>STEP 1 FAILED連続?}
+    B -->|Yes| C{ログ確認2:<br/>Frame URLを確認}
+    B -->|No| Z1[別の問題]
+
+    C -->|report.aspx?log_id=XXX<br/>詳細ページ| D{ログ確認3:<br/>go_back実行状況}
+    C -->|list.aspx<br/>リストページ| Z2[別の問題]
+
+    D -->|Skipping go_back| E[★根本原因:<br/>go_backスキップ]
+    D -->|Timeout exceeded| F{タイムアウト設定確認}
+    D -->|エラーなし| Z3[別の問題]
+
+    E --> G[修正:<br/>go_backを全ページで実行]
+    F -->|wait_until=domcontentloaded| H[修正:<br/>wait_until=load]
+    F -->|timeout<30000| I[修正:<br/>timeout=30000]
+
+    style E fill:#ff9999
+    style G fill:#99ff99
+    style H fill:#99ff99
+    style I fill:#99ff99
+```
+
+### ステップ1: Frame URL確認
+
+**確認コマンド**:
+
+```bash
+# 詳細ページに留まっているか確認
+gcloud logging read "resource.type=cloud_run_revision AND \
+  textPayload=~'Frame URL.*report.aspx\?log_id'" \
+  --limit 20 --format json | \
+  jq -r '.[] | "\(.timestamp) - \(.textPayload)"'
+```
+
+**期待される結果**:
+- ❌ 異常: 詳細ページURL（`report.aspx?log_id=8559`）が連続出現
+- ✅ 正常: リストページURL（`list.aspx`）が出現
+
+### ステップ2: go_back()実行確認
+
+**確認コマンド**:
+
+```bash
+# go_back()がスキップされているか確認
+gcloud logging read "resource.type=cloud_run_revision AND \
+  textPayload=~'Skipping go_back'" \
+  --limit 10 --format json | \
+  jq -r '.[] | "\(.timestamp) - \(.textPayload)"'
+```
+
+**期待される結果**:
+- ❌ 異常: `[PHASE 1] Skipping go_back() for Page 2` が出現
+- ✅ 正常: スキップログが0件
+
+### ステップ3: STEP 1失敗パターン確認
+
+**確認コマンド**:
+
+```bash
+# STEP 1失敗が連続しているか確認
+gcloud logging read "resource.type=cloud_run_revision AND \
+  textPayload=~'\[STEP 1 FAILED\]'" \
+  --limit 20 --format json | \
+  jq -r '.[] | "\(.timestamp) - \(.textPayload)"'
+```
+
+**期待される結果**:
+- ❌ 異常: 連続で出現（2人目以降全員失敗の証拠）
+- ✅ 正常: 0件、またはごく少数
+
+---
+
+### 修正パターン
+
+#### パターンA: go_back()スキップの修正
+
+**問題のコード**:
+
+```python
+# ❌ Wrong
+if current_page > 1:
+    self.logger.info(f"Skipping go_back() for Page {current_page}")
+    # スキップ → 詳細ページに留まる → 次の学生処理失敗
+else:
+    self.page.go_back(wait_until="load", timeout=30000)
+```
+
+**修正後のコード**:
+
+```python
+# ✅ Correct
+# 全ページでgo_back()を実行（スキップしない）
+try:
+    self.page.go_back(wait_until="load", timeout=30000)
+except Exception as e:
+    self.logger.warning(f"[PHASE 1] go_back timeout expected: {e}")
+
+self._wait_for_navigation()
+```
+
+**修正箇所**: 3箇所（Success Path、TimeoutError Path、Exception Path）
+
+**Reference**:
+- Incident: `docs/incident-2025-11-08-phase1-go-back-skip-bug.md`
+- Commit: bbd61ab（問題）→ 6e39cce（修正）
+
+#### パターンB: タイムアウト設定の修正
+
+**問題のコード**:
+
+```python
+# ❌ Wrong
+self.page.go_back(wait_until="domcontentloaded", timeout=10000)
+```
+
+**修正後のコード**:
+
+```python
+# ✅ Correct
+self.page.go_back(wait_until="load", timeout=30000)
+```
+
+**理由**:
+- ASP.NET ViewStateの再構築には `wait_until="load"` が必要
+- タイムアウトは30秒（30000ms）が最適
+
+**Reference**: `docs/pagination-viewstate-solution-2025-11-06.md` Lines 136-139, 170-171
+
+---
+
+### 予防チェックリスト
+
+**ナビゲーション処理を変更する前**:
+
+- [ ] `docs/playwright-page-navigation-flow.md` Lines 182-185 を確認したか？
+- [ ] STEP 2の前提条件（リストページに戻る）を理解したか？
+- [ ] go_back()が詳細ページ→リストページへの**唯一の手段**であることを理解したか？
+- [ ] 条件分岐で処理をスキップする場合、次の処理への影響を検証したか？
+
+**実装後のテスト**:
+
+- [ ] 1人目の学生が成功するか確認
+- [ ] **2人目の学生が成功するか確認**（最重要）
+- [ ] 3人目以降も成功するか確認
+- [ ] Phase 2（Downloading:）ログが出現するか確認
+
+---
+
+### 関連ドキュメント
+
+- **CLAUDE.md Lines 909+** (Common Mistake #11)
+- **docs/phase1-optimization-patterns.md** (最適化ベストプラクティス)
+- **docs/incident-2025-11-08-phase1-go-back-skip-bug.md** (インシデントレポート)
+- **docs/playwright-page-navigation-flow.md Lines 182-185** (STEP 2設計)
+
+---
+
+**最終更新**: 2025/11/09
+**バージョン**: 1.2
 **メンテナー**: Claude Code

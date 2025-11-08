@@ -945,7 +945,7 @@ Based on past incidents:
    ...（以降全員失敗）
    ```
 
-   **Solution** (commit `1b68c41`):
+   **Solution** (commit `6e39cce`):
    - 3箇所のgo_back()処理を統一（Success/TimeoutError/Exception Path）
    - 全ページで30秒タイムアウトgo_back()を実行（スキップしない）
    - 処理時間: 200レポート = 600分 → 100分（500分削減、83%削減）
@@ -969,13 +969,101 @@ Based on past incidents:
    - [ ] STEP 1の「pagination control not found」が連続発生していないか？
 
    **Reference**:
+   - **docs/incident-2025-11-08-phase1-go-back-skip-bug.md** - 詳細なインシデントレポート
    - docs/playwright-page-navigation-flow.md Lines 182-185 (STEP 2 design)
    - docs/pagination-viewstate-solution-2025-11-06.md Lines 136-139, 170-171 (ASP.NET behavior)
    - CLAUDE.md Lines 269-309 (Common Mistake #9 - similar pattern)
-   - Cloud Run logs 2025-11-08 08:06-08:09 JST
-   - Student: 齊藤誠（成功）、林秀明（失敗）、田中洋江（失敗）
+   - Cloud Run logs 2025-11-08 23:25-23:51 JST
+   - Revision: carewell-file-collector-00232-wj4 (問題発生), 00234-q22 (修正後)
+   - Student: 齊藤誠（1人目・成功）、林秀明（2人目・失敗）、以降全員失敗
    - Commit bbd61ab (introduced bug - go_back skip)
-   - Commit 1b68c41 (fixed - unified go_back with 30s timeout)
+   - Commit 6e39cce (fixed - unified go_back with 30s timeout)
+
+   ---
+
+   **🔍 診断手順（1人目成功・2人目以降失敗パターン）**:
+
+   1. **Frame URL確認**:
+      ```bash
+      gcloud logging read "textPayload=~'Frame URL'" --limit 20 | grep "report.aspx?log_id"
+      ```
+      → 詳細ページ（`report.aspx?log_id=XXX`）に留まっている場合、go_back()がスキップされている
+
+   2. **go_back()実行確認**:
+      ```bash
+      gcloud logging read "textPayload=~'Skipping go_back'" --limit 10
+      ```
+      → スキップログが出ている場合、条件分岐を確認
+
+   3. **STEP 1 FAILEDパターン確認**:
+      ```bash
+      gcloud logging read "textPayload=~'STEP 1 FAILED'" --limit 20
+      ```
+      → 連続発生している場合、pagination controlが見つからない（詳細ページにいる証拠）
+
+   **詳細診断**: `docs/troubleshooting.md`（Mermaid診断フローチャート参照）
+
+   ---
+
+   **✅ 最適化ベストプラクティス**:
+
+   | アプローチ | 処理時間削減 | 成功率 | リスク | 推奨度 |
+   |----------|------------|-------|-------|--------|
+   | タイムアウト短縮（30秒） | 83% | 100% | 低 | ⭐⭐⭐⭐⭐ |
+   | 必須処理スキップ | 理論上91% | 0.5% | **致命的** | ❌ **禁止** |
+   | 並列処理 | 最大50% | 不明 | 中 | △ 将来検討 |
+   | Frame待機短縮 | 10-20% | 80-90% | 中 | △ 慎重に |
+
+   **推奨アプローチ**: タイムアウト短縮（180秒 → 30秒）
+
+   **禁止アプローチ**: 必須処理（go_back）のスキップ
+
+   **詳細ガイド**: `docs/phase1-optimization-patterns.md`
+
+   ---
+
+   **📊 参考処理時間**:
+
+   | 学生数 | 元の実装（180秒/件） | 最適化後（30秒/件） | 削減時間 | 削減率 |
+   |-------|-------------------|------------------|---------|--------|
+   | 100名 | 300分 (5時間) | 50分 | 250分 | 83% |
+   | 158名 | 474分 (7.9時間) | 79分 | 395分 | 83% |
+   | 200名 | 600分 (10時間) | 100分 (1.7時間) | 500分 | 83% |
+
+   Cloud Run 25分タイムアウト制限により、元の実装では完了不可 → 最適化必須
+
+   ---
+
+   **🎯 デプロイ後の検証コマンド**:
+
+   ```bash
+   # 1. STEP 1失敗確認（0件が期待値）
+   gcloud logging read "textPayload=~'\[STEP 1 FAILED\]'" --limit 10
+
+   # 2. Phase 1完了統計
+   gcloud logging read "textPayload=~'Download links obtained'" --limit 5
+
+   # 3. Phase 2開始確認
+   gcloud logging read "textPayload=~'Downloading:'" --limit 20
+
+   # 4. 2人目の学生が成功しているか確認
+   gcloud logging read "textPayload=~'Added:.*-'" --limit 5
+   ```
+
+   **期待される結果**:
+   - STEP 1 FAILED: 0件
+   - Download links obtained: 49/200など（重複除外後の新規ファイル数）
+   - Downloading: 複数件（Phase 2実行中）
+   - Added: 全員がファイル名付き（"None"が無い）
+
+   ---
+
+   **📚 関連ドキュメント**:
+   - **トラブルシューティング**: `docs/troubleshooting.md`（診断フローチャート）
+   - **最適化ガイド**: `docs/phase1-optimization-patterns.md`（ベストプラクティス）
+   - **インシデントレポート**: `docs/incident-2025-11-08-phase1-go-back-skip-bug.md`（詳細記録）
+   - **STEP 2設計**: `docs/playwright-page-navigation-flow.md` Lines 182-185
+   - **ASP.NET behavior**: `docs/pagination-viewstate-solution-2025-11-06.md` Lines 136-139, 170-171
 
 ## Steering Configuration
 
