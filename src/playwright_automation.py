@@ -1193,28 +1193,28 @@ class PlaywrightAutomationEngine:
                         f"[STEP 1 FAILED] Pagination control not found after {max_retries} retries for page {current_page}"
                     )
 
-            # Extract submission ID from detail_url (e.g., "Sid=12345")
+            # Extract submission ID from detail_url (e.g., "log_id=8577")
             import re
 
-            sid_match = re.search(r"Sid=(\d+)", detail_url)
-            if not sid_match:
+            log_id_match = re.search(r"log_id=(\d+)", detail_url)
+            if not log_id_match:
                 self.logger.error(
-                    f"Failed to extract Sid from detail_url: {detail_url}"
+                    f"Failed to extract log_id from detail_url: {detail_url}"
                 )
                 return {"url": None, "filename": None}
 
-            target_sid = sid_match.group(1)
-            self.logger.debug(f"Looking for detail link with Sid={target_sid}")
+            target_log_id = log_id_match.group(1)
+            self.logger.debug(f"Looking for detail link with log_id={target_log_id}")
 
-            # Search for detail link with matching Sid
+            # Search for detail link with matching log_id
             detail_links = list_frame.locator(
-                f'a[href*="report.aspx"][href*="Sid={target_sid}"]'
+                f'a[href*="report.aspx"][href*="log_id={target_log_id}"]'
             )
             link_count = detail_links.count()
 
             if link_count == 0:
                 self.logger.warning(
-                    f"Detail link not found for Sid={target_sid} in frame (URL: {list_frame.url})"
+                    f"Detail link not found for log_id={target_log_id} in frame (URL: {list_frame.url})"
                 )
                 return {"url": None, "filename": None}
 
