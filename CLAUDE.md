@@ -906,6 +906,77 @@ Based on past incidents:
    - Commit 054614c (introduced Sid - wrong assumption)
    - Commit ae5d169 (fixed with log_id - verified from HTML)
 
+11. **Phase 1最適化の設計ミス - 必須処理のスキップ禁止** (2025-11-08 incident)
+   - ❌ go_back()をスキップして詳細ページに留まる
+   - ❌ 次の学生処理時に詳細ページから抜け出せない
+   - ✅ タイムアウト短縮で最適化（180秒 → 30秒）
+   - Impact: 2人目以降の学生全員が処理失敗（1人目のみ成功）
+
+   **Root Cause**: コミット bbd61ab（Phase 1最適化）
+
+   ```python
+   # ❌ Wrong (Lines 1272-1292) - Page 2+でgo_back()スキップ
+   if current_page > 1:
+       self.logger.info(f"[PHASE 1] Skipping go_back() for Page {current_page}")
+       # → 詳細ページに留まる
+       # → 次の学生処理時にpagination control見つからず失敗
+   else:
+       self.page.go_back(wait_until="load", timeout=30000)
+
+   # ✅ Correct - 全ページでgo_back()を30秒で実行
+   try:
+       self.page.go_back(wait_until="load", timeout=30000)
+   except Exception as e:
+       self.logger.warning(f"[PHASE 1] go_back timeout: {e}")
+   self._wait_for_navigation()
+   ```
+
+   **Why it happened**:
+   - タイムアウト回避を優先しすぎて必須処理（go_back）をスキップ
+   - 詳細ページからリストページに戻る手段がgo_back()しかないことを見落とし
+   - STEP 2のpagination control検索が「リストページに戻った後」を前提としていることを見落とし
+   - docs/playwright-page-navigation-flow.md Lines 182-185を確認しなかった
+
+   **Impact Chain**:
+   ```
+   学生A: 詳細ページ表示 → go_back()スキップ → 詳細ページ留まる
+   学生B: STEP 1開始 → 詳細ページのまま → pagination control無し → 失敗
+   学生C: STEP 1開始 → 詳細ページのまま → pagination control無し → 失敗
+   ...（以降全員失敗）
+   ```
+
+   **Solution** (commit `1b68c41`):
+   - 3箇所のgo_back()処理を統一（Success/TimeoutError/Exception Path）
+   - 全ページで30秒タイムアウトgo_back()を実行（スキップしない）
+   - 処理時間: 200レポート = 600分 → 100分（500分削減、83%削減）
+
+   **Critical Lessons**:
+   - ❌ タイムアウト回避のために必須処理をスキップしてはいけない
+   - ❌ 条件分岐で処理をスキップする前に、スキップ後のフローを検証する
+   - ❌ ドキュメント確認なしにナビゲーション処理を変更してはいけない
+   - ✅ タイムアウト短縮で最適化する（スキップではなく短縮）
+   - ✅ 戻り処理（go_back）は次の処理の前提条件
+   - ✅ 1人目成功・2人目以降失敗のパターンは処理間の状態引き継ぎミス
+   - ✅ Common Mistake #9（Phase B）と同じ失敗パターン
+
+   **Verification Checklist** (before skipping navigation):
+   - [ ] docs/playwright-page-navigation-flow.md Lines 182-185を確認したか？
+   - [ ] STEP 2の前提条件（リストページに戻る）を理解したか？
+   - [ ] スキップ後、次の処理の前提条件（ページ状態）は満たされるか？
+   - [ ] 詳細ページからリストページに戻る代替手段があるか？
+   - [ ] 1人目成功・2人目失敗のパターンになっていないか？
+   - [ ] ログで「Frame URL」が詳細ページのまま留まっていないか？
+   - [ ] STEP 1の「pagination control not found」が連続発生していないか？
+
+   **Reference**:
+   - docs/playwright-page-navigation-flow.md Lines 182-185 (STEP 2 design)
+   - docs/pagination-viewstate-solution-2025-11-06.md Lines 136-139, 170-171 (ASP.NET behavior)
+   - CLAUDE.md Lines 269-309 (Common Mistake #9 - similar pattern)
+   - Cloud Run logs 2025-11-08 08:06-08:09 JST
+   - Student: 齊藤誠（成功）、林秀明（失敗）、田中洋江（失敗）
+   - Commit bbd61ab (introduced bug - go_back skip)
+   - Commit 1b68c41 (fixed - unified go_back with 30s timeout)
+
 ## Steering Configuration
 
 ### Current Steering Files

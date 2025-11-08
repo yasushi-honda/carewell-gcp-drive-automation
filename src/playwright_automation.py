@@ -1322,25 +1322,19 @@ class PlaywrightAutomationEngine:
                     self.logger.info(f"Found download link: {filename}")
 
                     # Go back to list page
-                    # Page 2+: Skip go_back() and use pagination control directly (STEP 2)
-                    # Page 1: Use go_back() with 30-second timeout and wait_until="load"
+                    # All pages: Use go_back() with 30-second timeout and wait_until="load"
+                    # This is REQUIRED to return from detail page to list page (no alternative)
                     # Reference: docs/pagination-viewstate-solution-2025-11-06.md Lines 136-139, 170-171
-                    if current_page > 1:
-                        self.logger.info(
-                            f"[PHASE 1] Skipping go_back() for Page {current_page}, "
-                            f"will use pagination control (STEP 2) to navigate back"
+                    # Reference: docs/playwright-page-navigation-flow.md Lines 182-185 (STEP 2 prerequisite)
+                    try:
+                        self.page.go_back(wait_until="load", timeout=30000)
+                    except Exception as e:
+                        self.logger.warning(
+                            f"[PHASE 1] go_back timeout expected (ASP.NET ViewState behavior): {e}"
                         )
-                    else:
-                        # Page 1 only: go_back() with 30-second timeout
-                        try:
-                            self.page.go_back(wait_until="load", timeout=30000)
-                        except Exception as e:
-                            self.logger.warning(
-                                f"[PHASE 1] go_back timeout expected (ASP.NET ViewState behavior): {e}"
-                            )
 
-                        # Wait for navigation to complete (approx 2 seconds)
-                        self._wait_for_navigation()
+                    # Wait for navigation to complete (approx 2 seconds)
+                    self._wait_for_navigation()
 
                     # === 追加: 診断ログ - go_back()後の状態記録 ===
                     # STEP 1とSTEP 2の動作比較のため、詳細な状態を記録
@@ -1512,45 +1506,29 @@ class PlaywrightAutomationEngine:
                     "[PHASE 1] Timeout waiting for download link on detail page"
                 )
                 # Go back to list page to avoid staying on detail page
-                if current_page > 1:
-                    self.logger.info(
-                        f"[PHASE 1] Skipping go_back() after timeout (Page {current_page}), "
-                        f"pagination control (STEP 2) will handle navigation"
+                # Required for next student processing (STEP 2 prerequisite)
+                try:
+                    self.page.go_back(wait_until="load", timeout=30000)
+                    self._wait_for_navigation()
+                    self.logger.info("[PHASE 1] ✓ Returned to list page after timeout")
+                except Exception as e:
+                    self.logger.warning(
+                        f"[PHASE 1] Failed to go_back after timeout: {e}"
                     )
-                else:
-                    # Page 1 only: go_back() with 30-second timeout and wait_until="load"
-                    try:
-                        self.page.go_back(wait_until="load", timeout=30000)
-                        self._wait_for_navigation()
-                        self.logger.info(
-                            "[PHASE 1] ✓ Returned to list page after timeout"
-                        )
-                    except Exception as e:
-                        self.logger.warning(
-                            f"[PHASE 1] Failed to go_back after timeout: {e}"
-                        )
                 return {"url": None, "filename": None}
 
         except Exception as e:
             self.logger.error(f"[PHASE 1] Error in _get_download_link: {e}")
             # Go back to list page to avoid staying on detail page
-            if current_page > 1:
-                self.logger.info(
-                    f"[PHASE 1] Skipping go_back() after exception (Page {current_page}), "
-                    f"pagination control (STEP 2) will handle navigation"
+            # Required for next student processing (STEP 2 prerequisite)
+            try:
+                self.page.go_back(wait_until="load", timeout=30000)
+                self._wait_for_navigation()
+                self.logger.info("[PHASE 1] ✓ Returned to list page after exception")
+            except Exception as go_back_error:
+                self.logger.warning(
+                    f"[PHASE 1] Failed to go_back after exception: {go_back_error}"
                 )
-            else:
-                # Page 1 only: go_back() with 30-second timeout and wait_until="load"
-                try:
-                    self.page.go_back(wait_until="load", timeout=30000)
-                    self._wait_for_navigation()
-                    self.logger.info(
-                        "[PHASE 1] ✓ Returned to list page after exception"
-                    )
-                except Exception as go_back_error:
-                    self.logger.warning(
-                        f"[PHASE 1] Failed to go_back after exception: {go_back_error}"
-                    )
             return {"url": None, "filename": None}
 
     def download_file(self, download_url: str, filename: str, detail_url: str) -> str:
