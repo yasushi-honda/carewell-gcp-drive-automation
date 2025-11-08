@@ -322,6 +322,75 @@ Based on past incidents:
 
    **Reference**: `docs/incident-2025-11-05-schema-migration-and-playwright-fix.md`
 
+11. **Iframe Context and Missing Error Recovery** (2025-11-08 incident)
+   - ❌ Downloaded links searched in wrong context (main page vs iframe)
+   - ❌ Missing go_back() calls after errors → stayed on detail page
+   - ✅ ALWAYS verify iframe navigation and refresh frame references
+   - ✅ ALWAYS add error recovery to return to list page
+   - Impact: Page 2+ students (100名) failed with 100% failure rate
+
+   **Root Causes**:
+
+   **Cause 1**: DOWNLOAD_LINK constant undefined
+   ```python
+   # ❌ Wrong (src/playwright_automation.py)
+   # Constant not defined in CarewellSelectors class
+
+   # ✅ Correct
+   class CarewellSelectors:
+       DOWNLOAD_LINK = 'a[href^="download.aspx"]'
+   ```
+
+   **Cause 2**: Frame context error - detail page loads in iframe
+   ```python
+   # ❌ Wrong - searching in main page context
+   download_link = self.page.wait_for_selector(DOWNLOAD_LINK)
+
+   # ✅ Correct - refresh frame reference after navigation, search in iframe
+   # Refresh list_frame reference (detail page loaded in iframe)
+   list_frame = None
+   for frame in self.page.frames:
+       if frame.name == "list":
+           list_frame = frame
+           break
+
+   download_link = list_frame.wait_for_selector(CarewellSelectors.DOWNLOAD_LINK)
+   ```
+
+   **Cause 3**: Missing error recovery
+   ```python
+   # ❌ Wrong - stays on detail page after error
+   except TimeoutError:
+       self.logger.error("Timeout waiting for download link")
+       return {"url": None, "filename": None}
+
+   # ✅ Correct - go_back() to list page
+   except TimeoutError:
+       self.logger.error("Timeout waiting for download link")
+       try:
+           self.page.go_back(wait_until="domcontentloaded")
+           time.sleep(15)  # Wait for DOM to stabilize
+       except Exception as e:
+           self.logger.warning(f"Failed to go_back: {e}")
+       return {"url": None, "filename": None}
+   ```
+
+   **Critical Lessons**:
+   - ❌ **Avoid**: Assuming download page loads in main page context
+   - ❌ **Avoid**: Missing error recovery in multi-page flows
+   - ✅ **Use**: Frame refresh after click-based navigation
+   - ✅ **Use**: go_back() in ALL error handlers
+   - ✅ **Verify**: Actual HTML structure (not onclick, use text_content())
+
+   **Verification Checklist** (before deploying iframe-related fixes):
+   - [ ] Frame reference refreshed after click navigation?
+   - [ ] Search context changed from self.page to iframe?
+   - [ ] go_back() added to TimeoutError handler?
+   - [ ] go_back() added to Exception handler?
+   - [ ] Actual HTML structure verified in DevTools?
+
+   **Reference**: src/playwright_automation.py:1227-1463
+
 5. **Playwright Invalid API Call** (2025-11-05 incident)
    - ❌ Used non-existent method: `locator.wait_for_element_state("visible")`
    - ✅ Use Playwright's Auto-waiting feature (no explicit wait needed)
