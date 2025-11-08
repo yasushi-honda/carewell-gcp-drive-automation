@@ -5,6 +5,7 @@ Carewell File Collector - Cloud Functions Entrypoint
 import json
 import logging
 import os
+import time  # ✅ 追加: 診断ログで使用（将来の拡張用に追加）
 
 from flask import Request
 
@@ -132,6 +133,14 @@ def main(request):
                         )
                         skipped_count += 1
                         continue
+
+                    # ✅ 診断ログ: Phase 2条件チェック（download_url/filename/detail_url の有無確認）
+                    logger.info(
+                        f"[PHASE 2] Checking submission: {submission.get('student_name', 'UNKNOWN')} - "
+                        f"download_url={'SET' if submission.get('download_url') else 'NONE'}, "
+                        f"filename={'SET' if submission.get('filename') else 'NONE'}, "
+                        f"detail_url={'SET' if submission.get('detail_url') else 'NONE'}"
+                    )
 
                     if (
                         submission.get("download_url")
