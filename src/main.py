@@ -126,10 +126,46 @@ def main(request):
             for submission in submissions:
                 file_path = None
                 try:
+                    # Prepare metadata from submission data (for both new uploads and backfill)
+                    new_metadata = {
+                        "pass_status": submission.get("pass_status"),
+                        "score": submission.get("score"),
+                        "grading_status": submission.get("status"),
+                        "log_no": submission.get("log_no"),
+                    }
+
                     # Check early duplicate flag first (set during get_submission_list)
                     if submission.get("is_duplicate", False):
+                        # Attempt to backfill metadata if grading info is available
+                        if new_metadata.get("pass_status"):
+                            logger.info(
+                                f"Attempting to backfill grading info for duplicate: {submission.get('student_name')}"
+                            )
+                            # Get existing record to retrieve composite_key
+                            existing_upload = firestore_service.check_already_uploaded_by_student_date(
+                                class_name,
+                                task_id,
+                                submission.get("student_id", ""),
+                                submission.get("submit_date", ""),
+                            )
+                            if existing_upload and existing_upload.get("composite_key"):
+                                success = firestore_service.update_file_metadata(
+                                    class_name,
+                                    task_id,
+                                    existing_upload["composite_key"],
+                                    new_metadata,
+                                )
+                                if success:
+                                    logger.info(
+                                        f"Successfully backfilled metadata for: {submission.get('student_name')}"
+                                    )
+                                else:
+                                    logger.warning(
+                                        f"Failed to backfill metadata for: {submission.get('student_name')}"
+                                    )
+
                         logger.info(
-                            f"Skipping already uploaded file (early check): student_id={submission.get('student_id')}, submit_date={submission.get('submit_date')}"
+                            f"Skipping file re-upload (early check): student_id={submission.get('student_id')}, submit_date={submission.get('submit_date')}"
                         )
                         skipped_count += 1
                         continue
@@ -158,8 +194,26 @@ def main(request):
                         )
 
                         if existing_upload:
+                            # Attempt to backfill metadata if grading info is available
+                            if new_metadata.get("pass_status") and existing_upload.get(
+                                "composite_key"
+                            ):
+                                logger.info(
+                                    f"Attempting to backfill grading info for duplicate (filename check): {submission['filename']}"
+                                )
+                                success = firestore_service.update_file_metadata(
+                                    class_name,
+                                    task_id,
+                                    existing_upload["composite_key"],
+                                    new_metadata,
+                                )
+                                if success:
+                                    logger.info(
+                                        f"Successfully backfilled metadata (filename check) for: {submission['filename']}"
+                                    )
+
                             logger.info(
-                                f"Skipping already uploaded file (filename check): {submission['filename']} (Drive ID: {existing_upload.get('drive_file_id')})"
+                                f"Skipping file re-upload (filename check): {submission['filename']} (Drive ID: {existing_upload.get('drive_file_id')})"
                             )
                             skipped_count += 1
                             continue
@@ -179,16 +233,7 @@ def main(request):
                         )
                         logger.info(f"Uploaded to Drive: {drive_file_id}")
 
-                        # Record upload in Firestore
-                        metadata = {
-                            "student_id": submission.get("student_id"),
-                            "log_no": submission.get("log_no"),
-                            "score": submission.get("score"),
-                            "pass_status": submission.get("pass_status"),
-                            "status": submission.get("status"),
-                            "submit_date": submission.get("submit_date"),
-                        }
-
+                        # Record upload in Firestore with grading metadata (prepared earlier)
                         firestore_service.record_upload(
                             class_name,
                             task_id,
@@ -198,7 +243,7 @@ def main(request):
                             drive_file_id,
                             drive_folder_id,
                             submission.get("submit_date", ""),
-                            metadata=metadata,
+                            metadata=new_metadata,
                             task_pattern=task_pattern,
                         )
 

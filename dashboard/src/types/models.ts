@@ -22,6 +22,16 @@ export interface TaskData {
 }
 
 /**
+ * 合否情報（メタデータ）
+ */
+export interface GradingMetadata {
+  pass_status?: string;      // "合格" | "不合格"
+  score?: string;            // "0点 / 1点" 形式
+  grading_status?: string;   // "採点済み" | "未採点"
+  log_no?: string;           // ログ番号（文字列）
+}
+
+/**
  * ファイル提出情報（UI表示用）
  */
 export interface FileData {
@@ -31,6 +41,12 @@ export interface FileData {
   filename: string;
   submit_date: string;
   drive_file_id: string; // Google Drive file ID (URLは動的生成)
+
+  /**
+   * 合否情報（オプショナル）
+   * 既存データでは undefined の可能性がある
+   */
+  metadata?: GradingMetadata;
 }
 
 /**
@@ -45,6 +61,7 @@ export interface FirestoreDocument {
   drive_file_id: string;
   drive_url: string;
   uploaded_at: string;
+  metadata?: GradingMetadata; // 合否情報（オプショナル）
 }
 
 /**
