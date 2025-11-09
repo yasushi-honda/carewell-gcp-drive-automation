@@ -690,11 +690,14 @@ class PlaywrightAutomationEngine:
                             )
 
                             if existing_upload:
-                                # Mark as duplicate
+                                # Mark as duplicate and save composite_key for backfill
                                 basic["is_duplicate"] = True
                                 basic["skip_reason"] = "already_uploaded"
+                                basic["existing_composite_key"] = existing_upload.get(
+                                    "composite_key"
+                                )
                                 self.logger.info(
-                                    f"Duplicate detected (early check): {basic['student_name']} (student_id={basic.get('student_id')}, submit_date={basic.get('submit_date')})"
+                                    f"Duplicate detected (early check): {basic['student_name']} (student_id={basic.get('student_id')}, submit_date={basic.get('submit_date')}, composite_key={basic['existing_composite_key']})"
                                 )
                             else:
                                 basic["is_duplicate"] = False

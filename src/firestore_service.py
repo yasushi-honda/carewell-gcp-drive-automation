@@ -206,6 +206,55 @@ class FirestoreService:
             # Return None to allow upload on error (fail-open for availability)
             return None
 
+    def update_file_metadata(
+        self,
+        class_name: str,
+        task_id: str,
+        composite_key: str,
+        metadata: dict,
+    ) -> bool:
+        """
+        Update metadata field of an existing file document (for backfilling grading info).
+
+        Args:
+            class_name: Class name
+            task_id: Task ID (e.g., "課題①")
+            composite_key: Existing document's composite key
+            metadata: Updated metadata dict (grading information)
+
+        Returns:
+            True if successful, False if error occurred (fail-open strategy)
+
+        Note:
+            Only updates the metadata field. All other fields remain unchanged.
+            Existing metadata is overwritten with new values (latest grading info).
+        """
+        try:
+            # Collection path: submissions/{class_name}/tasks/{task_id}/files/{composite_key}
+            doc_ref = (
+                self.db.collection("submissions")
+                .document(class_name)
+                .collection("tasks")
+                .document(task_id)
+                .collection("files")
+                .document(composite_key)
+            )
+
+            # Update metadata field only (overwrites existing metadata)
+            doc_ref.update({"metadata": metadata})
+
+            logger.info(
+                f"Backfilled metadata for existing file: {composite_key}, metadata: {metadata}"
+            )
+            return True
+
+        except Exception as e:
+            logger.error(
+                f"Failed to update metadata for {composite_key}: {e}", exc_info=True
+            )
+            # fail-open: continue processing even if metadata update fails
+            return False
+
     def record_upload(
         self,
         class_name: str,

@@ -88,6 +88,8 @@ export function useFileList(className: string, taskId: string): UseFileListRetur
         filename: doc.filename,
         submit_date: doc.submit_date,
         drive_file_id: doc.drive_file_id,
+        // Include metadata (grading information) if available
+        metadata: doc.metadata || undefined,
       }));
     } catch (err) {
       error.value = getErrorMessage(err);

@@ -69,6 +69,28 @@
               </div>
             </th>
 
+            <!-- 合否情報カラム（新規追加） -->
+            <th
+              scope="col"
+              class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
+            >
+              スコア
+            </th>
+
+            <th
+              scope="col"
+              class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
+            >
+              合否
+            </th>
+
+            <th
+              scope="col"
+              class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
+            >
+              採点状況
+            </th>
+
             <th
               scope="col"
               class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
@@ -99,6 +121,28 @@
 
             <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
               {{ formatDate(file.submit_date) }}
+            </td>
+
+            <!-- 合否情報セル（新規追加） -->
+            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
+              {{ file.metadata?.score || '-' }}
+            </td>
+
+            <td class="px-6 py-4 whitespace-nowrap text-sm">
+              <span
+                v-if="file.metadata?.pass_status"
+                :class="{
+                  'text-green-600 font-semibold': file.metadata.pass_status.includes('合格'),
+                  'text-red-600 font-semibold': file.metadata.pass_status.includes('不合格')
+                }"
+              >
+                {{ file.metadata.pass_status }}
+              </span>
+              <span v-else class="text-gray-400">-</span>
+            </td>
+
+            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
+              {{ file.metadata?.grading_status || '-' }}
             </td>
 
             <td class="px-6 py-4 whitespace-nowrap text-sm">
@@ -246,6 +290,65 @@
             />
           </svg>
           <span>{{ formatDate(file.submit_date) }}</span>
+        </div>
+
+        <!-- 合否情報（新規追加） -->
+        <div v-if="file.metadata?.score" class="flex items-center text-sm text-gray-700">
+          <svg
+            class="h-4 w-4 text-gray-400 mr-2"
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+          >
+            <path
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              stroke-width="2"
+              d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
+            />
+          </svg>
+          <span>スコア: {{ file.metadata.score }}</span>
+        </div>
+
+        <div v-if="file.metadata?.pass_status" class="flex items-center text-sm">
+          <svg
+            class="h-4 w-4 text-gray-400 mr-2"
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+          >
+            <path
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              stroke-width="2"
+              d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"
+            />
+          </svg>
+          <span
+            :class="{
+              'text-green-600 font-bold': file.metadata.pass_status.includes('合格'),
+              'text-red-600 font-bold': file.metadata.pass_status.includes('不合格')
+            }"
+          >
+            {{ file.metadata.pass_status }}
+          </span>
+        </div>
+
+        <div v-if="file.metadata?.grading_status" class="flex items-center text-sm text-gray-600">
+          <svg
+            class="h-4 w-4 text-gray-400 mr-2"
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+          >
+            <path
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              stroke-width="2"
+              d="M5 13l4 4L19 7"
+            />
+          </svg>
+          <span>{{ file.metadata.grading_status }}</span>
         </div>
 
         <!-- Driveリンクボタン -->

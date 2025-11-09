@@ -128,6 +128,45 @@ def main(request):
                 try:
                     # Check early duplicate flag first (set during get_submission_list)
                     if submission.get("is_duplicate", False):
+                        # Backfill grading info if available
+                        grading_metadata = {
+                            "pass_status": submission.get("pass_status"),
+                            "score": submission.get("score"),
+                            "grading_status": submission.get("status"),
+                            "log_no": submission.get("log_no"),
+                        }
+                        # Remove None values
+                        grading_metadata = {
+                            k: v for k, v in grading_metadata.items() if v is not None
+                        }
+
+                        # Only update if we have grading info to backfill
+                        if grading_metadata:
+                            # Get composite_key from early duplicate check result
+                            composite_key = submission.get("existing_composite_key")
+
+                            if composite_key:
+                                logger.info(
+                                    f"Backfilling grading info for existing file: student_id={submission.get('student_id')}, submit_date={submission.get('submit_date')}, composite_key={composite_key}"
+                                )
+
+                                success = firestore_service.update_file_metadata(
+                                    class_name, task_id, composite_key, grading_metadata
+                                )
+
+                                if success:
+                                    logger.info(
+                                        f"Successfully backfilled grading info: {composite_key}"
+                                    )
+                                else:
+                                    logger.warning(
+                                        f"Failed to backfill grading info: {composite_key}"
+                                    )
+                            else:
+                                logger.warning(
+                                    "Cannot backfill: existing_composite_key not available"
+                                )
+
                         logger.info(
                             f"Skipping already uploaded file (early check): student_id={submission.get('student_id')}, submit_date={submission.get('submit_date')}"
                         )
@@ -180,14 +219,15 @@ def main(request):
                         logger.info(f"Uploaded to Drive: {drive_file_id}")
 
                         # Record upload in Firestore
+                        # Build metadata with grading information (excluding fields already in parent doc)
                         metadata = {
-                            "student_id": submission.get("student_id"),
-                            "log_no": submission.get("log_no"),
-                            "score": submission.get("score"),
                             "pass_status": submission.get("pass_status"),
-                            "status": submission.get("status"),
-                            "submit_date": submission.get("submit_date"),
+                            "score": submission.get("score"),
+                            "grading_status": submission.get("status"),  # Renamed from "status" for clarity
+                            "log_no": submission.get("log_no"),
                         }
+                        # Remove None values to keep metadata clean
+                        metadata = {k: v for k, v in metadata.items() if v is not None}
 
                         firestore_service.record_upload(
                             class_name,
