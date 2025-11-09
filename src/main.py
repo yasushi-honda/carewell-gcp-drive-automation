@@ -228,6 +228,7 @@ def main(request):
                         student_office = ""
                         student_service_type = ""
                         student_serial_number = 0
+                        student_number = ""
 
                         if student_id:
                             student = firestore_service.get_student(student_id)
@@ -239,6 +240,7 @@ def main(request):
                                 student_office = student.get("office", "")
                                 student_service_type = student.get("service_type", "")
                                 student_serial_number = student.get("serial_number", 0)
+                                student_number = student.get("student_number", "")
                             else:
                                 logger.warning(
                                     f"Student not found in students collection: {student_id}"
@@ -274,6 +276,7 @@ def main(request):
                             student_office=student_office,
                             student_service_type=student_service_type,
                             student_serial_number=student_serial_number,
+                            student_number=student_number,
                         )
 
                         # Record in Google Sheets
@@ -682,6 +685,7 @@ def _backfill_all_files(firestore_service):
                             "student_office": student.get("office", ""),
                             "student_service_type": student.get("service_type", ""),
                             "student_serial_number": student.get("serial_number", 0),
+                            "student_number": student.get("student_number", ""),
                         }
 
                         file_doc.reference.update(update_data)

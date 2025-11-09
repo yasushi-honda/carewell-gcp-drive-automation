@@ -275,6 +275,7 @@ class FirestoreService:
         student_office: str = "",
         student_service_type: str = "",
         student_serial_number: int = 0,
+        student_number: str = "",
     ) -> bool:
         """
         Record successful file upload and update parent document metadata.
@@ -297,6 +298,7 @@ class FirestoreService:
             student_office: Student office (denormalized)
             student_service_type: Student service type (denormalized)
             student_serial_number: Student serial number (denormalized)
+            student_number: Student number/受講生番号 (denormalized)
 
         Returns:
             True if recorded successfully, False otherwise
@@ -340,6 +342,7 @@ class FirestoreService:
                 "student_office": student_office,
                 "student_service_type": student_service_type,
                 "student_serial_number": student_serial_number,
+                "student_number": student_number,
             }
 
             # Collection path: submissions/{class_name}/tasks/{task_id}/files
@@ -444,6 +447,7 @@ class FirestoreService:
                 - office: 事業所
                 - service_type: サービス種別
                 - serial_number: Serial No.
+                - student_number: 受講生番号
 
         Returns:
             True if successful, False otherwise (fail-open strategy)
@@ -465,6 +469,7 @@ class FirestoreService:
                 "office": student_data.get("office", ""),
                 "service_type": student_data.get("service_type", ""),
                 "serial_number": student_data.get("serial_number", 0),
+                "student_number": student_data.get("student_number", ""),
                 "created_at": firestore.SERVER_TIMESTAMP,
                 "last_updated": firestore.SERVER_TIMESTAMP,
             }
