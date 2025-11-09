@@ -267,6 +267,14 @@ class FirestoreService:
         submit_date: str,
         metadata: Optional[dict] = None,
         task_pattern: Optional[str] = None,
+        # Denormalized student fields (新規追加)
+        student_furigana: str = "",
+        student_group: str = "未分類",
+        student_status: str = "active",
+        student_company: str = "",
+        student_office: str = "",
+        student_service_type: str = "",
+        student_serial_number: int = 0,
     ) -> bool:
         """
         Record successful file upload and update parent document metadata.
@@ -282,6 +290,13 @@ class FirestoreService:
             submit_date: Submission date/time
             metadata: Additional metadata (optional)
             task_pattern: Task pattern/title (optional, defaults to task_id)
+            student_furigana: Student name in furigana (denormalized)
+            student_group: Student group (denormalized)
+            student_status: Student status (denormalized)
+            student_company: Student company (denormalized)
+            student_office: Student office (denormalized)
+            student_service_type: Student service type (denormalized)
+            student_serial_number: Student serial number (denormalized)
 
         Returns:
             True if recorded successfully, False otherwise
@@ -289,6 +304,10 @@ class FirestoreService:
         Note:
             Uses fail-open strategy: even if parent document update fails,
             file document will still be created to ensure high availability.
+
+            Denormalized student fields are embedded in the file document for
+            optimized querying and to avoid 301 queries (1 query per file).
+            These fields default to empty/default values if not provided.
         """
         try:
             # Default task_pattern to task_id if not provided
@@ -313,6 +332,14 @@ class FirestoreService:
                 "submit_date": submit_date,
                 "uploaded_at": firestore.SERVER_TIMESTAMP,
                 "metadata": metadata or {},
+                # Denormalized student fields (新規追加)
+                "student_furigana": student_furigana,
+                "student_group": student_group,
+                "student_status": student_status,
+                "student_company": student_company,
+                "student_office": student_office,
+                "student_service_type": student_service_type,
+                "student_serial_number": student_serial_number,
             }
 
             # Collection path: submissions/{class_name}/tasks/{task_id}/files
@@ -327,7 +354,7 @@ class FirestoreService:
             doc_ref.set(record)
 
             logger.info(
-                f"Recorded upload: {filename} (Student ID: {student_id}, Drive ID: {drive_file_id})"
+                f"Recorded upload: {filename} (Student ID: {student_id}, Group: {student_group}, Drive ID: {drive_file_id})"
             )
             return True
 
@@ -376,3 +403,180 @@ class FirestoreService:
                 "total_uploaded": 0,
                 "error": str(e),
             }
+
+    # Student Master Data Management Methods
+
+    def student_exists(self, student_id: str) -> bool:
+        """
+        Check if student exists in students collection
+
+        Args:
+            student_id: Student ID (日介番号)
+
+        Returns:
+            True if student exists, False otherwise
+        """
+        try:
+            doc_ref = self.db.collection("students").document(student_id)
+            doc = doc_ref.get()
+            return doc.exists
+
+        except Exception as e:
+            logger.error(
+                f"Error checking student existence for {student_id}: {e}",
+                exc_info=True,
+            )
+            # Return False on error (fail-open strategy)
+            return False
+
+    def create_student(self, student_data: dict) -> bool:
+        """
+        Create or update student document in students collection
+
+        Args:
+            student_data: Dictionary containing student information with keys:
+                - student_id (required): 日介番号
+                - furigana: ふりがな
+                - name: 氏名
+                - group: グループ
+                - status: ステータス
+                - company: 勤務先
+                - office: 事業所
+                - service_type: サービス種別
+                - serial_number: Serial No.
+
+        Returns:
+            True if successful, False otherwise (fail-open strategy)
+        """
+        try:
+            student_id = student_data.get("student_id")
+            if not student_id:
+                logger.error("student_id is required but not provided")
+                return False
+
+            # Prepare student document
+            doc_data = {
+                "student_id": student_id,
+                "furigana": student_data.get("furigana", ""),
+                "name": student_data.get("name", ""),
+                "group": student_data.get("group", "未分類"),
+                "status": student_data.get("status", "active"),
+                "company": student_data.get("company", ""),
+                "office": student_data.get("office", ""),
+                "service_type": student_data.get("service_type", ""),
+                "serial_number": student_data.get("serial_number", 0),
+                "created_at": firestore.SERVER_TIMESTAMP,
+                "last_updated": firestore.SERVER_TIMESTAMP,
+            }
+
+            doc_ref = self.db.collection("students").document(student_id)
+            doc_ref.set(doc_data, merge=True)
+
+            logger.info(f"Created/updated student: {student_id} - {student_data.get('name', '')}")
+            return True
+
+        except Exception as e:
+            logger.error(
+                f"Error creating student {student_data.get('student_id', 'unknown')}: {e}",
+                exc_info=True,
+            )
+            # Return False on error (fail-open strategy)
+            return False
+
+    def get_student(self, student_id: str) -> Optional[dict]:
+        """
+        Get student data from students collection
+
+        Args:
+            student_id: Student ID (日介番号)
+
+        Returns:
+            Student data dictionary if exists, None otherwise
+        """
+        try:
+            doc_ref = self.db.collection("students").document(student_id)
+            doc = doc_ref.get()
+
+            if doc.exists:
+                return doc.to_dict()
+            else:
+                return None
+
+        except Exception as e:
+            logger.error(
+                f"Error getting student {student_id}: {e}", exc_info=True
+            )
+            # Return None on error (fail-open strategy)
+            return None
+
+    def get_all_students(self) -> list:
+        """
+        Get all student data from students collection
+
+        Returns:
+            List of student data dictionaries
+        """
+        try:
+            students = []
+            docs = self.db.collection("students").stream()
+
+            for doc in docs:
+                students.append(doc.to_dict())
+
+            logger.info(f"Retrieved {len(students)} students from Firestore")
+            return students
+
+        except Exception as e:
+            logger.error(f"Error getting all students: {e}", exc_info=True)
+            # Return empty list on error (fail-open strategy)
+            return []
+
+    def get_students_by_ids(self, student_ids: list) -> list:
+        """
+        Get student data for multiple student IDs
+
+        Args:
+            student_ids: List of student IDs (日介番号)
+
+        Returns:
+            List of student data dictionaries
+
+        Note:
+            Uses batch get for efficiency (max 500 documents per batch)
+        """
+        try:
+            if not student_ids:
+                return []
+
+            students = []
+
+            # Firestore allows max 500 documents per batch get
+            # Split into chunks of 500
+            chunk_size = 500
+            for i in range(0, len(student_ids), chunk_size):
+                chunk = student_ids[i : i + chunk_size]
+
+                # Get document references
+                doc_refs = [
+                    self.db.collection("students").document(student_id)
+                    for student_id in chunk
+                ]
+
+                # Batch get
+                docs = self.db.get_all(doc_refs)
+
+                for doc in docs:
+                    if doc.exists:
+                        students.append(doc.to_dict())
+
+            logger.info(
+                f"Retrieved {len(students)}/{len(student_ids)} students from Firestore"
+            )
+            return students
+
+        except Exception as e:
+            logger.error(
+                f"Error getting students by IDs: {e}", exc_info=True
+            )
+            # Return empty list on error (fail-open strategy)
+            return []

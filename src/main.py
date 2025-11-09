@@ -218,6 +218,32 @@ def main(request):
                         )
                         logger.info(f"Uploaded to Drive: {drive_file_id}")
 
+                        # Get student data for denormalization (Phase 3: Student metadata integration)
+                        student_id = submission.get("student_id", "")
+                        student = None
+                        student_furigana = ""
+                        student_group = "未分類"
+                        student_status = "active"
+                        student_company = ""
+                        student_office = ""
+                        student_service_type = ""
+                        student_serial_number = 0
+
+                        if student_id:
+                            student = firestore_service.get_student(student_id)
+                            if student:
+                                student_furigana = student.get("furigana", "")
+                                student_group = student.get("group", "未分類")
+                                student_status = student.get("status", "active")
+                                student_company = student.get("company", "")
+                                student_office = student.get("office", "")
+                                student_service_type = student.get("service_type", "")
+                                student_serial_number = student.get("serial_number", 0)
+                            else:
+                                logger.warning(
+                                    f"Student not found in students collection: {student_id}"
+                                )
+
                         # Record upload in Firestore
                         # Build metadata with grading information (excluding fields already in parent doc)
                         metadata = {
@@ -233,13 +259,21 @@ def main(request):
                             class_name,
                             task_id,
                             submission["student_name"],
-                            submission.get("student_id", ""),
+                            student_id,
                             submission["filename"],
                             drive_file_id,
                             drive_folder_id,
                             submission.get("submit_date", ""),
                             metadata=metadata,
                             task_pattern=task_pattern,
+                            # Denormalized student fields (Phase 3)
+                            student_furigana=student_furigana,
+                            student_group=student_group,
+                            student_status=student_status,
+                            student_company=student_company,
+                            student_office=student_office,
+                            student_service_type=student_service_type,
+                            student_serial_number=student_serial_number,
                         )
 
                         # Record in Google Sheets
@@ -402,14 +436,297 @@ def health_check(request):
     return {"status": "healthy", "service": "carewell-file-collector"}, 200
 
 
+def sync_students_from_sheets(request):
+    """
+    Admin endpoint for syncing student master data from Google Sheets
+
+    Expected request body:
+    {
+        "backfill": false  # Optional: Whether to backfill existing files with student data
+    }
+
+    Returns:
+    {
+        "status": "success",
+        "students_synced": 2000,
+        "students_created": 150,
+        "students_updated": 1850,
+        "files_backfilled": 4000,  # Only if backfill=true
+        "errors": []
+    }
+    """
+    try:
+        # Parse request
+        request_json = request.get_json(silent=True) or {}
+        backfill = request_json.get("backfill", False)
+
+        logger.info(
+            f"Starting student sync from Google Sheets (backfill={backfill})"
+        )
+
+        # Initialize services
+        sheets_service = SheetsService()
+        firestore_service = FirestoreService()
+
+        # Phase 1: Sync students from Google Sheets
+        spreadsheet_id = os.environ.get(
+            "STUDENT_SPREADSHEET_ID", "1AQ12-h3n_NmN2kWxi4Z_g354X0wmUyMKAPeAsXJwu_w"
+        )
+        sync_result = _sync_students(sheets_service, firestore_service, spreadsheet_id)
+
+        if sync_result.get("status") != "success":
+            return sync_result, 500
+
+        response = {
+            "status": "success",
+            "students_synced": sync_result["students_synced"],
+            "students_created": sync_result["students_created"],
+            "students_updated": sync_result["students_updated"],
+            "errors": sync_result.get("errors", []),
+        }
+
+        # Phase 2: Backfill existing files (optional)
+        if backfill:
+            logger.info("Starting backfill of existing files...")
+            backfill_result = _backfill_all_files(firestore_service)
+
+            response["files_backfilled"] = backfill_result.get("files_updated", 0)
+            response["files_skipped"] = backfill_result.get("files_skipped", 0)
+            response["backfill_errors"] = backfill_result.get("errors", [])
+
+        logger.info(f"Student sync completed: {response}")
+        return response, 200
+
+    except Exception as e:
+        logger.error(f"Error during student sync: {str(e)}", exc_info=True)
+        return {"status": "error", "error": str(e)}, 500
+
+
+def _sync_students(sheets_service, firestore_service, spreadsheet_id):
+    """
+    Sync student data from Google Sheets to Firestore students collection
+
+    Args:
+        sheets_service: SheetsService instance
+        firestore_service: FirestoreService instance
+        spreadsheet_id: Google Sheets spreadsheet ID
+
+    Returns:
+        Dictionary with sync results
+    """
+    try:
+        # Get student data from Google Sheets
+        logger.info(f"Reading student data from spreadsheet: {spreadsheet_id}")
+        students = sheets_service.get_student_data(spreadsheet_id)
+
+        if not students:
+            logger.warning("No student data found in spreadsheet")
+            return {
+                "status": "success",
+                "students_synced": 0,
+                "students_created": 0,
+                "students_updated": 0,
+                "errors": [],
+            }
+
+        logger.info(f"Found {len(students)} students in spreadsheet")
+
+        # Batch process students (500 at a time for Firestore batch limit)
+        created_count = 0
+        updated_count = 0
+        error_count = 0
+        errors = []
+
+        batch_size = 500
+        for i in range(0, len(students), batch_size):
+            batch = students[i : i + batch_size]
+            logger.info(
+                f"Processing student batch {i // batch_size + 1}: {len(batch)} students"
+            )
+
+            for student in batch:
+                try:
+                    # Check if student already exists
+                    student_exists = firestore_service.student_exists(
+                        student["student_id"]
+                    )
+
+                    # Create/update student
+                    success = firestore_service.create_student(student)
+
+                    if success:
+                        if student_exists:
+                            updated_count += 1
+                        else:
+                            created_count += 1
+                    else:
+                        error_count += 1
+                        errors.append(
+                            {
+                                "student_id": student["student_id"],
+                                "error": "Failed to create/update student",
+                            }
+                        )
+
+                except Exception as e:
+                    error_count += 1
+                    error_msg = f"Error syncing student {student.get('student_id', 'unknown')}: {str(e)}"
+                    logger.error(error_msg)
+                    errors.append(
+                        {"student_id": student.get("student_id"), "error": str(e)}
+                    )
+
+        logger.info(
+            f"Student sync completed: created={created_count}, updated={updated_count}, errors={error_count}"
+        )
+
+        return {
+            "status": "success",
+            "students_synced": created_count + updated_count,
+            "students_created": created_count,
+            "students_updated": updated_count,
+            "errors": errors[:100],  # Limit errors to first 100
+        }
+
+    except Exception as e:
+        logger.error(f"Error in _sync_students: {str(e)}", exc_info=True)
+        return {
+            "status": "error",
+            "error": str(e),
+            "students_synced": 0,
+            "students_created": 0,
+            "students_updated": 0,
+            "errors": [{"error": str(e)}],
+        }
+
+
+def _backfill_all_files(firestore_service):
+    """
+    Backfill existing file documents with denormalized student data
+
+    Args:
+        firestore_service: FirestoreService instance
+
+    Returns:
+        Dictionary with backfill results
+    """
+    try:
+        logger.info("Starting backfill of existing files with student data...")
+
+        # Get all students first
+        all_students = firestore_service.get_all_students()
+        if not all_students:
+            logger.warning("No students found in Firestore, skipping backfill")
+            return {
+                "status": "success",
+                "files_updated": 0,
+                "files_skipped": 0,
+                "errors": [],
+            }
+
+        # Create student lookup dictionary
+        student_lookup = {s["student_id"]: s for s in all_students}
+        logger.info(f"Loaded {len(student_lookup)} students for backfill")
+
+        updated_count = 0
+        skipped_count = 0
+        error_count = 0
+        errors = []
+
+        # Iterate through all class/task combinations
+        # NOTE: This is a simple implementation that scans all submissions
+        # For large datasets, consider using Firestore collection group queries
+        submissions_ref = firestore_service.db.collection("submissions")
+
+        for class_doc in submissions_ref.stream():
+            class_name = class_doc.id
+            logger.info(f"Processing class: {class_name}")
+
+            tasks_ref = submissions_ref.document(class_name).collection("tasks")
+
+            for task_doc in tasks_ref.stream():
+                task_id = task_doc.id
+                logger.info(f"Processing task: {class_name}/{task_id}")
+
+                files_ref = tasks_ref.document(task_id).collection("files")
+
+                for file_doc in files_ref.stream():
+                    try:
+                        file_data = file_doc.to_dict()
+                        student_id = file_data.get("student_id")
+
+                        if not student_id:
+                            logger.warning(f"File {file_doc.id} has no student_id, skipping")
+                            skipped_count += 1
+                            continue
+
+                        # Check if student data already exists in file
+                        if file_data.get("student_group"):
+                            # Already has denormalized data, skip
+                            skipped_count += 1
+                            continue
+
+                        # Get student data
+                        student = student_lookup.get(student_id)
+                        if not student:
+                            logger.warning(f"Student not found: {student_id}, skipping file {file_doc.id}")
+                            skipped_count += 1
+                            continue
+
+                        # Update file with denormalized student data
+                        update_data = {
+                            "student_furigana": student.get("furigana", ""),
+                            "student_group": student.get("group", "未分類"),
+                            "student_status": student.get("status", "active"),
+                            "student_company": student.get("company", ""),
+                            "student_office": student.get("office", ""),
+                            "student_service_type": student.get("service_type", ""),
+                            "student_serial_number": student.get("serial_number", 0),
+                        }
+
+                        file_doc.reference.update(update_data)
+                        updated_count += 1
+
+                        if updated_count % 100 == 0:
+                            logger.info(f"Backfilled {updated_count} files so far...")
+
+                    except Exception as e:
+                        error_count += 1
+                        error_msg = f"Error backfilling file {file_doc.id}: {str(e)}"
+                        logger.error(error_msg)
+                        errors.append({"file_id": file_doc.id, "error": str(e)})
+
+        logger.info(
+            f"Backfill completed: updated={updated_count}, skipped={skipped_count}, errors={error_count}"
+        )
+
+        return {
+            "status": "success",
+            "files_updated": updated_count,
+            "files_skipped": skipped_count,
+            "errors": errors[:100],  # Limit errors to first 100
+        }
+
+    except Exception as e:
+        logger.error(f"Error in _backfill_all_files: {str(e)}", exc_info=True)
+        return {
+            "status": "error",
+            "error": str(e),
+            "files_updated": 0,
+            "files_skipped": 0,
+            "errors": [{"error": str(e)}],
+        }
+
+
 def app(request):
     """
     Main entrypoint with routing
 
     Routes:
-    - POST /         → File collection (main)
-    - POST /cleanup  → Firestore cleanup (administrative)
-    - GET  /health   → Health check
+    - POST /                              → File collection (main)
+    - POST /cleanup                       → Firestore cleanup (administrative)
+    - POST /admin/sync-students-from-sheets → Student sync from Google Sheets (administrative)
+    - GET  /health                        → Health check
     """
     path = request.path
     method = request.method
@@ -418,6 +735,8 @@ def app(request):
 
     if path == "/cleanup" and method == "POST":
         return cleanup_firestore(request)
+    elif path == "/admin/sync-students-from-sheets" and method == "POST":
+        return sync_students_from_sheets(request)
     elif path == "/health" and method == "GET":
         return health_check(request)
     elif path == "/" and method == "POST":
@@ -425,5 +744,10 @@ def app(request):
     else:
         return {
             "error": f"Not found: {method} {path}",
-            "available_endpoints": ["POST /", "POST /cleanup", "GET /health"],
+            "available_endpoints": [
+                "POST /",
+                "POST /cleanup",
+                "POST /admin/sync-students-from-sheets",
+                "GET /health",
+            ],
         }, 404
