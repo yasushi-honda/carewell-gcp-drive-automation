@@ -20,7 +20,20 @@
 
 ---
 
-## 🗓️ タイムライン
+## 🗓️ タイムライン（全8フェーズ）
+
+| Phase | 日時 | 内容 | 状態 |
+|-------|------|------|------|
+| **A** | 2025-11-06 | 初期問題発見（Cloud Run timeout、Frame取得問題） | 40%成功 |
+| **B** | 2025-11-07 | 再遷移ロジック問題（STEP 1削除ミス） | 0%成功 |
+| **C** | 2025-11-08 00:00-00:30 | Iframe Context問題 | 一部成功 |
+| **D** | 2025-11-08 00:30-01:00 | パラメータ名誤り（Sid → log_id） | 改善 |
+| **E** | 2025-11-08 22:00-23:25 | 最適化の設計ミス（go_backスキップ） | 0.5%成功 |
+| **F** | 2025-11-08 23:40 | 正しい最適化実装（タイムアウト短縮） | 92-94%成功 |
+| **G** | 2025-11-09 08:16 | 最終検証（エラー再現性確認） | **100%成功** ✅ |
+| **H** | 2025-11-09 09:01 | 本番運用再開（Cloud Scheduler有効化） | **運用開始** ✅ |
+
+---
 
 ### 📅 Phase A: 初期問題発見（2025-11-06）
 
@@ -421,12 +434,91 @@ Phase G (2025-11-09 08:16):  完全解決 (100%) ✅
 
 ---
 
+### 📅 Phase H: 本番運用再開（2025-11-09 09:01 JST）
+
+**目的**:
+- 検証完了したシステムを本番運用に移行
+- Cloud Scheduler を再開し、定期実行を開始
+
+**再開判断の根拠**（ドキュメントドリブン）:
+
+| 判断基準 | 状態 | 根拠ドキュメント |
+|---------|------|-----------------|
+| ① 成功率100%達成 | ✅ 達成 | Phase G 検証結果（2025-11-09 08:16） |
+| ② エラー0件確認 | ✅ 確認 | Phase G: 4/4 files, 0 errors |
+| ③ 本番運用可能 | ✅ 可能 | `docs/incident-*.md` PRODUCTION READY評価 |
+
+**実施内容**:
+
+1. **Cloud Scheduler ステータス確認**
+   ```bash
+   gcloud scheduler jobs describe carewell-class01-task01 \
+     --location=asia-northeast1
+   ```
+   - 状態: PAUSED → ENABLED
+   - スケジュール: `0,30 * * * *`（毎時00分・30分）
+   - タイムアウト: 1500秒（25分）
+
+2. **再開コマンド実行**
+   ```bash
+   gcloud scheduler jobs resume carewell-class01-task01 \
+     --location=asia-northeast1
+   ```
+   - 実行時刻: 2025-11-09 09:01 JST
+   - 次回実行: 2025-11-09 09:30 JST
+
+3. **設定確認**
+   - Cloud Run Service: `carewell-file-collector`
+   - 最新Revision: `00195-k26` (commit `6e39cce`)
+   - 影響範囲: 全14ジョブ（`carewell-class*-task*`）
+
+**次回実行の監視方法**（Phase 1最適化ガイド準拠）:
+
+**Reference**: `docs/phase1-optimization-patterns.md` Lines 202-217
+
+```bash
+# 1. Phase 1成功確認
+gcloud logging read "textPayload=~'№01' AND textPayload=~'課題①'" --limit 10
+
+# 2. STEP 1 FAILEDログが連続していないか（最重要！）
+gcloud logging read "textPayload=~'\[STEP 1 FAILED\]'" --limit 10
+
+# 3. Phase 2（ダウンロード）が実行されているか
+gcloud logging read "textPayload=~'Downloading:'" --limit 20
+```
+
+**監視ポイント**:
+- ✅ 1人目の学生が成功（download_url取得）
+- ✅ **2人目の学生が成功**（最重要 - 状態引き継ぎ確認）
+- ✅ Phase 2（Downloading:）ログが出現
+- ✅ STEP 1 FAILEDログが連続していない
+
+**Dashboard確認**:
+- URL: https://carewell-automation.web.app/
+- 新規ファイルが追加されているか
+- エラーカウントが増えていないか
+
+**成果**:
+- ✅ Cloud Scheduler再開成功
+- ✅ 本番運用開始
+- ✅ 定期実行スケジュール有効化（30分間隔）
+- ✅ 全14ジョブに修正コード適用済み
+
+**ステータス**: ✅ **PRODUCTION OPERATIONAL**
+
+---
+
 ## 🚀 今後の展開
 
 ### 短期（1週間以内）
 
+- [x] Cloud Scheduler 再開（2025-11-09 09:01 完了）
+- [ ] **次回実行監視**（2025-11-09 09:30 JST）
+  - [ ] 1人目の学生が成功
+  - [ ] 2人目の学生が成功（最重要）
+  - [ ] Phase 2実行確認
+  - [ ] STEP 1 FAILED連続なし確認
 - [ ] 他のクラス・課題での動作確認
-- [ ] Cloud Scheduler の定期実行確認
 - [ ] Dashboard でのデータ確認
 - [ ] ユーザーフィードバック収集
 
@@ -498,18 +590,22 @@ Page 2+ 学生: 100/100 成功 (100%) ✅
 
 ## ✅ 結論
 
-**2025年11月6日から9日にかけての4日間、7つのフェーズを経て、Carewell File Collection Systemの重大な問題を完全に解決しました。**
+**2025年11月6日から9日にかけての4日間、8つのフェーズ（Phase A〜H）を経て、Carewell File Collection Systemの重大な問題を完全に解決し、本番運用を再開しました。**
 
-**最終状態**:
+**最終状態** (Phase H完了):
 - ✅ **100%成功率**達成
 - ✅ **83%処理時間削減**達成
 - ✅ **本番運用可能**な安定性確保
 - ✅ **包括的ドキュメント**整備完了
+- ✅ **Cloud Scheduler再開**（2025-11-09 09:01 JST）
+- ✅ **定期実行開始**（30分間隔、14ジョブ）
 
 **ゴール達成**: **YES** 🎉
 
+**運用状態**: ✅ **PRODUCTION OPERATIONAL**
+
 ---
 
-**最終更新**: 2025-11-09 08:30 JST
-**Status**: ✅ **MISSION ACCOMPLISHED**
-**Next**: 本番運用・継続監視
+**最終更新**: 2025-11-09 09:01 JST
+**Status**: ✅ **PRODUCTION OPERATIONAL** (Phase H完了)
+**Next**: 次回実行監視（09:30 JST）・継続運用
