@@ -3,19 +3,56 @@
     <!-- ページタイトル -->
     <h1 class="text-3xl font-bold text-gray-900 mb-6">学生一覧</h1>
 
-    <!-- 検索ボックス -->
+    <!-- 検索・フィルターエリア -->
     <div class="bg-white shadow-sm rounded-lg p-4 mb-6">
-      <div class="max-w-md">
-        <label for="search-query" class="block text-sm font-medium text-gray-700 mb-1">
-          検索
-        </label>
-        <input
-          id="search-query"
-          v-model="searchQuery"
-          type="text"
-          placeholder="氏名・ふりがなで検索"
-          class="block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm py-2 px-3 border"
-        />
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <!-- 検索ボックス -->
+        <div>
+          <label for="search-query" class="block text-sm font-medium text-gray-700 mb-1">
+            検索
+          </label>
+          <input
+            id="search-query"
+            v-model="searchQuery"
+            type="text"
+            placeholder="氏名・ふりがなで検索"
+            class="block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm py-2 px-3 border"
+          />
+        </div>
+
+        <!-- クラスフィルター -->
+        <div>
+          <label for="class-filter" class="block text-sm font-medium text-gray-700 mb-1">
+            クラス
+          </label>
+          <select
+            id="class-filter"
+            v-model="filterClass"
+            class="block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm py-2 px-3 border"
+          >
+            <option value="">すべて</option>
+            <option v-for="className in classList" :key="className" :value="className">
+              {{ className }}
+            </option>
+          </select>
+        </div>
+
+        <!-- グループフィルター -->
+        <div>
+          <label for="group-filter" class="block text-sm font-medium text-gray-700 mb-1">
+            グループ
+          </label>
+          <select
+            id="group-filter"
+            v-model="filterGroup"
+            class="block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm py-2 px-3 border"
+          >
+            <option value="">すべて</option>
+            <option v-for="group in groupList" :key="group" :value="group">
+              {{ group }}
+            </option>
+          </select>
+        </div>
       </div>
     </div>
 
@@ -69,6 +106,12 @@
                 scope="col"
                 class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
               >
+                クラス
+              </th>
+              <th
+                scope="col"
+                class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
+              >
                 グループ
               </th>
               <th
@@ -100,6 +143,9 @@
               </td>
               <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                 {{ student.furigana }}
+              </td>
+              <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                {{ student.class_name || '-' }}
               </td>
               <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                 {{ student.group }}
@@ -143,15 +189,54 @@ import ErrorAlert from '../components/ErrorAlert.vue';
 const router = useRouter();
 
 const searchQuery = ref('');
+const filterClass = ref('');
+const filterGroup = ref('');
 const sortOrder = ref<'asc' | 'desc' | null>(null);
 
 const { students, loading, error } = useStudents();
+
+// クラスリスト（ユニーク値）
+const classList = computed(() => {
+  const classes = students.value
+    .filter((s) => s.status === 'active' && s.class_name)
+    .map((s) => s.class_name)
+    .filter((v, i, a) => a.indexOf(v) === i)
+    .sort();
+  return classes;
+});
+
+// グループリスト（ユニーク値・フィルタリング後）
+const groupList = computed(() => {
+  let filtered = students.value.filter((s) => s.status === 'active');
+
+  // クラスフィルターが選択されている場合、それに基づいてグループを絞り込む
+  if (filterClass.value) {
+    filtered = filtered.filter((s) => s.class_name === filterClass.value);
+  }
+
+  const groups = filtered
+    .map((s) => s.group)
+    .filter((v) => v) // 空文字除外
+    .filter((v, i, a) => a.indexOf(v) === i)
+    .sort();
+  return groups;
+});
 
 // クライアント側でのフィルタリング
 const filteredStudents = computed(() => {
   return students.value.filter((student) => {
     // ステータスフィルター（アクティブな学生のみ表示）
     if (student.status !== 'active') {
+      return false;
+    }
+
+    // クラスフィルター
+    if (filterClass.value && student.class_name !== filterClass.value) {
+      return false;
+    }
+
+    // グループフィルター
+    if (filterGroup.value && student.group !== filterGroup.value) {
       return false;
     }
 
