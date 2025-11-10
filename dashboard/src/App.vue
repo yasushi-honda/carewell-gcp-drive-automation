@@ -45,5 +45,26 @@
 </template>
 
 <script setup lang="ts">
-import { RouterView } from 'vue-router'
+import { RouterView, useRoute } from 'vue-router'
+import { watch, onMounted } from 'vue'
+
+const route = useRoute()
+
+// グローバル管理者モード検出
+const checkAdminMode = () => {
+  if (route.query.admin === 'true') {
+    sessionStorage.setItem('adminMode', 'true')
+    console.log('[App.vue] Admin mode activated via URL parameter')
+  }
+}
+
+// 初期チェック
+onMounted(() => {
+  checkAdminMode()
+})
+
+// ルート変更を監視
+watch(() => route.query.admin, () => {
+  checkAdminMode()
+})
 </script>
