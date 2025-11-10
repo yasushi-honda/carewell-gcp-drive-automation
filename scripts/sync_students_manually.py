@@ -9,8 +9,8 @@ import sys
 # Add parent directory to path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
-from sheets_service import SheetsService
 from firestore_service import FirestoreService
+from sheets_service import SheetsService
 
 
 def main():
