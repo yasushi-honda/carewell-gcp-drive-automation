@@ -4,6 +4,7 @@
 import { ref, onMounted } from 'vue';
 import { collection, query, where, getDocs, Timestamp } from 'firebase/firestore';
 import { getDb } from '../config/firebase';
+import { convertToShortClassName } from '../config/classes';
 import type { Student } from '../types/models';
 
 export interface GroupStat {
@@ -23,10 +24,16 @@ export function useGroupStats(className: string) {
     try {
       const db = getDb();
 
+      // クラス名を短縮形に変換
+      // students コレクションは短縮形（"No1", "No2"など）を使用している
+      // 一方、submissions コレクションはフルネーム形式を使用
+      // Reference: docs/class-name-feature-implementation.md
+      const shortClassName = convertToShortClassName(className);
+
       // students コレクションから該当クラスの受講生を取得
       const q = query(
         collection(db, 'students'),
-        where('class_name', '==', className),
+        where('class_name', '==', shortClassName),
         where('status', '==', 'active')
       );
 

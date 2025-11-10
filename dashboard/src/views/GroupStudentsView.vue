@@ -145,6 +145,7 @@
 import { ref, computed } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { useStudents } from '../composables/useStudents';
+import { convertToShortClassName } from '../config/classes';
 import type { Student } from '../types/models';
 import Breadcrumb from '../components/Breadcrumb.vue';
 import LoadingSkeleton from '../components/LoadingSkeleton.vue';
@@ -156,6 +157,10 @@ const router = useRouter();
 const className = route.params.className as string;
 const taskId = route.params.taskId as string;
 const groupName = route.params.groupName as string;
+
+// クラス名を短縮形に変換（studentsコレクションとの一致のため）
+// Reference: docs/class-name-feature-implementation.md
+const shortClassName = convertToShortClassName(className);
 
 const searchQuery = ref('');
 const sortBy = ref<'furigana' | 'serial_number' | null>(null);
@@ -184,8 +189,8 @@ const filteredStudents = computed(() => {
       return false;
     }
 
-    // クラスフィルター
-    if (student.class_name !== className) {
+    // クラスフィルター（短縮形で比較）
+    if (student.class_name !== shortClassName) {
       return false;
     }
 
