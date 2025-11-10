@@ -671,6 +671,136 @@
 
 ---
 
+### 2025-11-10: Phase 2 全タスク完了 🎉
+
+**完了タスク数**: 8/8 (100%)
+
+**Phase 2実装完了内容**:
+
+**Task 12: 用語統一の実装**:
+- 全 .vue ファイルで「学生」→「受講生」に置換
+  - App.vue: ナビゲーションメニュー
+  - StudentsView.vue: ページタイトル、検索ボックス、テーブル、空状態
+  - StudentDetailView.vue: 戻るボタン、エラーメッセージ
+  - FileListView.vue: 検索プレースホルダー、コメント
+  - FileTable.vue: テーブルヘッダー
+  - TaskCard.vue: 統計ラベル
+- ⚠️ 注意: 変数名・型名は保持（student_id, Student, useStudents）
+- コミット: `0695730` - "feat: Unify terminology from 学生 to 受講生 in UI"
+
+**Task 13: 受講生テーブル拡張**:
+- StudentsView.vue に2列追加:
+  - **通し番号カラム**: `serial_number || '-'` 表示、ソート可能（▲▼⇅）
+  - **勤務先カラム**: `getWorkplace()` ヘルパー関数で `company - office` 形式表示
+- ソート機能強化:
+  - sortBy 型: `'furigana' | 'serial_number' | null`
+  - toggleSortSerialNumber() 関数実装
+  - 昇順・降順切り替え、3状態ソート（asc → desc → null）
+- コミット: `d107992` - "feat: Add serial number and workplace columns to student list"
+
+**Task 14: グループ一覧ビュー**:
+1. **useGroupStats.ts** (70行):
+   - 単一 Firestore クエリでコスト最適化
+   - `where('class_name', '==', className).where('status', '==', 'active')`
+   - クライアント側で Map 集計: `groupCounts.set(group, count + 1)`
+   - 日本語ソート: `localeCompare(b.group, 'ja')`
+   - エクスポート型: `GroupStat { group: string, studentCount: number }`
+
+2. **GroupCard.vue** (39行):
+   - カード形式UI: グループ名 + 受講生数
+   - クリックで `/class/.../task/.../group/.../students` へ遷移
+   - アクセシビリティ: `tabindex="0"`, `role="button"`, `aria-label`
+   - Enter キー対応
+
+3. **GroupListView.vue** (63行):
+   - グリッドレイアウト: `grid-cols-1 md:grid-cols-2 lg:grid-cols-3`
+   - Breadcrumb: ホーム → クラス → 課題 → グループ一覧
+   - Loading/Error/Empty 状態管理
+   - GroupCard をループ表示
+
+- コミット: `5abfe9e` - "feat: Implement group list view with statistics"
+
+**Task 15: ナビゲーション追加**:
+- TaskListView.vue 修正:
+  - TaskCard に「👥 受講生一覧」リンク追加
+  - absolute positioning（bottom-4 right-4）
+  - `@click.stop` でイベントバブリング防止
+  - 既存カードクリック動作は維持（非破壊的変更）
+- コミット: `d5d0517` - "feat: Add group list navigation link to task cards"
+
+**Task 16: グループ別受講生一覧**:
+1. **GroupStudentsView.vue** (250行):
+   - ルートパラメータ: `className`, `taskId`, `groupName`
+   - 3段フィルタリング computed:
+     1. `status === 'active'`
+     2. `class_name === className`
+     3. `group === groupName`
+   - 検索機能: name, furigana で部分一致（toLowerCase）
+   - ソート機能: furigana（日本語ロケール）, serial_number（数値）
+   - 全カラム表示: 通し番号、日介番号、氏名、ふりがな、勤務先、サービス種別
+   - getWorkplace() ヘルパー: company/office 組み合わせ処理
+   - Breadcrumb: 5階層（ホーム → クラス → 課題 → グループ一覧 → グループ）
+
+2. **router/index.ts** (+10行):
+   - `/class/:className/task/:taskId/groups` → GroupListView
+   - `/class/:className/task/:taskId/group/:groupName/students` → GroupStudentsView
+   - 遅延ロード: `component: () => import('../views/...')`
+
+- コミット: `83cff3a` - "feat: Implement group-filtered student list and routing"
+
+**新規ファイル**:
+- `dashboard/src/composables/useGroupStats.ts` (70行)
+- `dashboard/src/components/GroupCard.vue` (39行)
+- `dashboard/src/views/GroupListView.vue` (63行)
+- `dashboard/src/views/GroupStudentsView.vue` (250行)
+
+**修正ファイル**:
+- `dashboard/src/App.vue` (+1/-1)
+- `dashboard/src/views/StudentsView.vue` (+84/-7)
+- `dashboard/src/views/StudentDetailView.vue` (+3/-3)
+- `dashboard/src/views/FileListView.vue` (+4/-4)
+- `dashboard/src/views/TaskListView.vue` (+19/-9)
+- `dashboard/src/components/FileTable.vue` (+1/-1)
+- `dashboard/src/components/TaskCard.vue` (+1/-1)
+- `dashboard/src/router/index.ts` (+10/-0)
+
+**実装統計**:
+- コミット数: 6回（仕様書含む）
+- 新規ファイル: 4個
+- 変更ファイル: 8個
+- 追加行数: 600+ 行
+- 工数: 13-18時間（計画通り）
+
+**要件達成**:
+- ✅ R-16: グループ一覧表示（統計情報付き）
+- ✅ R-17: 受講生テーブル拡張（通し番号、勤務先、ソート）
+- ✅ R-18: グループ別受講生一覧（フィルタ、検索、ソート）
+
+**ユーザーフロー**:
+```
+クラス一覧
+  ↓
+課題一覧 → [👥 受講生一覧] → グループ一覧
+                                ↓
+                            グループカード選択
+                                ↓
+                        グループ別受講生一覧
+```
+
+**デプロイ**: GitHub Actions で自動デプロイ中
+- デプロイURL: https://carewell-automation.web.app/
+- ブランチ: `main` (直接プッシュ)
+- 作業ブランチ: `claude/student-group-views-011CUyggiPSDBmyK9abYJKuV` (同期済み)
+
+**技術的ハイライト**:
+- 🔥 Firestore コスト最適化: 単一クエリ + クライアント集計
+- ♿ アクセシビリティ: ARIA属性、キーボード操作対応
+- 📱 レスポンシブ: 3列グリッド（lg:3, md:2, sm:1）
+- 🔍 検索・ソート: 複数フィールド対応、3状態ソート
+- 🎯 非破壊的変更: 既存機能を維持しつつ拡張
+
+---
+
 ### Phase 1-5 完了状況（2025-10-11 ~ 2025-10-12）
 
 **完了タスク数**: 25/48 (52%)
@@ -722,75 +852,95 @@ dashboard/src/
 
 ### 実装タスク
 
-- [ ] 12. 用語統一の実装
-- [ ] 12.1 全Vueコンポーネントで「学生」→「受講生」に置換
+- [x] 12. 用語統一の実装
+- [x] 12.1 全Vueコンポーネントで「学生」→「受講生」に置換
   - dashboard/src/views/StudentsView.vue
   - dashboard/src/views/StudentDetailView.vue
+  - dashboard/src/views/FileListView.vue
+  - dashboard/src/components/FileTable.vue
+  - dashboard/src/components/TaskCard.vue
   - dashboard/src/App.vue（ナビゲーションメニュー）
-  - その他、「学生」を含む全.vueファイル
   - _Requirements: R-17_
   - _工数: 1-2時間_
+  - ✅ **完了日**: 2025-11-10
 
-- [ ] 13. 受講生テーブル既存カラム追加
-- [ ] 13.1 通し番号・勤務先カラムの追加
+- [x] 13. 受講生テーブル既存カラム追加
+- [x] 13.1 通し番号・勤務先カラムの追加
   - StudentsView.vue のテーブルに2列追加
   - serial_number: 既存データ使用
-  - 勤務先: `${student.company} - ${student.office}` 形式
+  - 勤務先: `${student.company} - ${student.office}` 形式（getWorkplace()ヘルパー関数実装）
   - _Requirements: R-17_
   - _工数: 1-2時間_
+  - ✅ **完了日**: 2025-11-10
 
-- [ ] 13.2 通し番号ソート機能の実装
-  - sortBy ref に 'serial_number' オプション追加
-  - ソート処理の実装
+- [x] 13.2 通し番号ソート機能の実装
+  - sortBy ref に 'serial_number' オプション追加（型: `'furigana' | 'serial_number' | null`）
+  - ソート処理の実装（toggleSortSerialNumber関数）
+  - ソートインジケーター（▲▼⇅）
   - _Requirements: R-17_
   - _工数: 1時間_
+  - ✅ **完了日**: 2025-11-10
 
-- [ ] 14. グループ一覧ビューの実装
-- [ ] 14.1 useGroupStats.ts composable 作成
+- [x] 14. グループ一覧ビューの実装
+- [x] 14.1 useGroupStats.ts composable 作成
   - 最小実装: 受講生数のみ取得
   - Firestore students コレクションから class_name でフィルタ
-  - グループごとにカウント
+  - グループごとにカウント（単一getDocs()クエリ + クライアント側集計）
+  - コスト最適化: サブコレクションスキャン不要
   - _Requirements: R-16_
   - _工数: 2-3時間_
+  - ✅ **完了日**: 2025-11-10
 
-- [ ] 14.2 GroupCard.vue コンポーネント作成
+- [x] 14.2 GroupCard.vue コンポーネント作成
   - グループ名、受講生数を表示
   - クリック → グループ別受講生一覧へ遷移
+  - アクセシビリティ対応（aria-label, tabindex, Enter key）
   - TaskCard.vue を参考にレスポンシブデザイン
   - _Requirements: R-16_
   - _工数: 1-2時間_
+  - ✅ **完了日**: 2025-11-10
 
-- [ ] 14.3 GroupListView.vue ページ作成
+- [x] 14.3 GroupListView.vue ページ作成
   - ルートパラメータ: className, taskId
   - useGroupStats でデータ取得
-  - グリッドレイアウトで GroupCard 表示
-  - Breadcrumb 統合
+  - グリッドレイアウトで GroupCard 表示（grid-cols-1 md:grid-cols-2 lg:grid-cols-3）
+  - Breadcrumb 統合（5階層対応）
+  - Loading/Error/Empty 状態管理
   - _Requirements: R-16_
   - _工数: 2-3時間_
+  - ✅ **完了日**: 2025-11-10
 
-- [ ] 15. TaskListView ナビゲーション追加
-- [ ] 15.1 課題カードに「受講生一覧」リンク追加
-  - TaskCard.vue または TaskListView.vue を修正
+- [x] 15. TaskListView ナビゲーション追加
+- [x] 15.1 課題カードに「受講生一覧」リンク追加
+  - TaskListView.vue を修正（TaskCard本体は維持）
   - 破壊的変更を避ける: カード全体のクリック動作維持
-  - リンクエリア（@click.stop）を追加
+  - absolute positioning + @click.stop でリンクエリア追加
+  - アイコン付きリンク（👥 受講生一覧）
   - _Requirements: R-16_
   - _工数: 1時間_
+  - ✅ **完了日**: 2025-11-10
 
-- [ ] 16. グループ別受講生一覧ビューの実装
-- [ ] 16.1 GroupStudentsView.vue コンポーネント作成
-  - StudentsView.vue を参考に新規作成（コピペではない）
+- [x] 16. グループ別受講生一覧ビューの実装
+- [x] 16.1 GroupStudentsView.vue コンポーネント作成
+  - StudentsView.vue を参考に新規作成（コピペではなく設計参照）
   - ルートパラメータ: className, taskId, groupName
-  - useStudents でデータ取得 → computed でフィルタリング
-  - 全カラム表示（通し番号、氏名、ふりがな、クラス、グループ、勤務先、サービス種別）
+  - useStudents でデータ取得 → 3段フィルタリング（status, class_name, group）
+  - 全カラム表示: 通し番号、日介番号、氏名、ふりがな、勤務先、サービス種別
+  - 検索機能: 氏名・ふりがなで部分一致検索
+  - ソート機能: 通し番号・ふりがな（昇順・降順）
+  - Breadcrumb: 5階層ナビゲーション
   - _Requirements: R-18_
   - _工数: 3-4時間_
+  - ✅ **完了日**: 2025-11-10
 
-- [ ] 16.2 ルーティング設定の追加
+- [x] 16.2 ルーティング設定の追加
   - dashboard/src/router/index.ts に2ルート追加
   - /class/:className/task/:taskId/groups → GroupListView
   - /class/:className/task/:taskId/group/:groupName/students → GroupStudentsView
+  - 遅延ロード（lazy import）で実装
   - _Requirements: R-16, R-18_
   - _工数: 30分_
+  - ✅ **完了日**: 2025-11-10
 
 ---
 
