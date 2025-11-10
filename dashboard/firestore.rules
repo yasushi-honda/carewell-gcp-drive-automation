@@ -1,6 +1,16 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
+    // Students collection: ステータス更新のみ許可
+    match /students/{studentId} {
+      allow read: if true;   // 誰でも読み取り可能
+      // ステータス更新のみ許可（status と last_updated フィールドのみ変更可能）
+      allow update: if true &&
+                       request.resource.data.diff(resource.data).affectedKeys()
+                         .hasOnly(['status', 'last_updated']);
+      allow create, delete: if false;  // 作成・削除は禁止
+    }
+
     // Phase 1: 全ユーザー読み取り許可、書き込み完全禁止
     // リンクを知っている人全員がアクセス可能
     match /{document=**} {
