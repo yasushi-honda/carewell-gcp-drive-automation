@@ -104,6 +104,24 @@
               </th>
               <th
                 scope="col"
+                class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 select-none"
+                @click="toggleSortSerialNumber"
+              >
+                <div class="flex items-center gap-2">
+                  <span>通し番号</span>
+                  <span class="text-xs" v-if="sortBy === 'serial_number' && sortOrder === 'asc'">▲</span>
+                  <span class="text-xs" v-else-if="sortBy === 'serial_number' && sortOrder === 'desc'">▼</span>
+                  <span class="text-xs text-gray-300" v-else>⇅</span>
+                </div>
+              </th>
+              <th
+                scope="col"
+                class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
+              >
+                勤務先
+              </th>
+              <th
+                scope="col"
                 class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
               >
                 クラス
@@ -143,6 +161,12 @@
               </td>
               <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                 {{ student.furigana }}
+              </td>
+              <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                {{ student.serial_number || '-' }}
+              </td>
+              <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                {{ getWorkplace(student) }}
               </td>
               <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                 {{ student.class_name || '-' }}
@@ -191,6 +215,7 @@ const router = useRouter();
 const searchQuery = ref('');
 const filterClass = ref('');
 const filterGroup = ref('');
+const sortBy = ref<'furigana' | 'serial_number' | null>(null);
 const sortOrder = ref<'asc' | 'desc' | null>(null);
 
 const { students, loading, error } = useStudents();
@@ -252,27 +277,72 @@ const filteredStudents = computed(() => {
   });
 });
 
-// ふりがなでソート
+// ソート処理
 const sortedStudents = computed(() => {
   const list = [...filteredStudents.value];
 
-  if (sortOrder.value === 'asc') {
-    return list.sort((a, b) => a.furigana.localeCompare(b.furigana, 'ja'));
-  } else if (sortOrder.value === 'desc') {
-    return list.sort((a, b) => b.furigana.localeCompare(a.furigana, 'ja'));
+  if (sortOrder.value === null) {
+    return list;
   }
 
-  return list;
+  return list.sort((a, b) => {
+    let compareResult = 0;
+
+    if (sortBy.value === 'serial_number') {
+      // 通し番号でソート（数値比較）
+      const aValue = a.serial_number || 0;
+      const bValue = b.serial_number || 0;
+      compareResult = aValue - bValue;
+    } else {
+      // ふりがなでソート（デフォルト）
+      compareResult = a.furigana.localeCompare(b.furigana, 'ja');
+    }
+
+    return sortOrder.value === 'asc' ? compareResult : -compareResult;
+  });
 });
 
 const toggleSort = () => {
-  if (sortOrder.value === null) {
+  // ふりがなソートの切り替え
+  if (sortBy.value !== null && sortBy.value !== 'furigana') {
+    // 別のカラムでソート中の場合、ふりがな昇順に切り替え
+    sortBy.value = null;
     sortOrder.value = 'asc';
+  } else if (sortOrder.value === null) {
+    sortOrder.value = 'asc';
+    sortBy.value = null;
   } else if (sortOrder.value === 'asc') {
     sortOrder.value = 'desc';
   } else {
     sortOrder.value = null;
   }
+};
+
+const toggleSortSerialNumber = () => {
+  // 通し番号ソートの切り替え
+  if (sortBy.value !== 'serial_number') {
+    // 通し番号でソートしていない場合、昇順に切り替え
+    sortBy.value = 'serial_number';
+    sortOrder.value = 'asc';
+  } else if (sortOrder.value === 'asc') {
+    sortOrder.value = 'desc';
+  } else {
+    // 降順の次はソート解除
+    sortBy.value = null;
+    sortOrder.value = null;
+  }
+};
+
+const getWorkplace = (student: any) => {
+  // 勤務先を「会社 - 事業所」形式で表示
+  if (student.company && student.office) {
+    return `${student.company} - ${student.office}`;
+  } else if (student.company) {
+    return student.company;
+  } else if (student.office) {
+    return student.office;
+  }
+  return '-';
 };
 
 const navigateToDetail = (studentId: string) => {
