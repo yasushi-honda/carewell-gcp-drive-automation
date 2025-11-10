@@ -184,6 +184,11 @@ onMounted(() => {
 // クライアント側でのフィルタリング
 const filteredStudents = computed(() => {
   return students.value.filter((student) => {
+    // ステータスフィルター（アクティブな学生のみ表示）
+    if (student.status !== 'active') {
+      return false;
+    }
+
     // グループフィルター
     if (selectedGroup.value && student.group !== selectedGroup.value) {
       return false;

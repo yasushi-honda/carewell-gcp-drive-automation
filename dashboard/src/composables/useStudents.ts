@@ -2,7 +2,7 @@
 // 学生データの取得とリアルタイム更新
 
 import { ref, onUnmounted, Ref } from 'vue';
-import { collection, query, where, orderBy, onSnapshot, Query, Timestamp } from 'firebase/firestore';
+import { collection, query, orderBy, onSnapshot, Query, Timestamp } from 'firebase/firestore';
 import { getDb } from '../config/firebase';
 import type { Student } from '../types/models';
 
@@ -35,22 +35,11 @@ export function useStudents(options: UseStudentsOptions = {}): UseStudentsReturn
   const db = getDb();
 
   // Firestore クエリの構築
+  // Note: where + orderBy の複合クエリは複合インデックスが必要になるため、
+  // シンプルなクエリにして、フィルタリングはクライアント側で行う
   let q: Query = collection(db, 'students');
 
-  // アクティブな学生のみ
-  q = query(q, where('status', '==', 'active'));
-
-  // グループフィルター
-  if (options.group) {
-    q = query(q, where('group', '==', options.group));
-  }
-
-  // サービス種別フィルター
-  if (options.serviceType) {
-    q = query(q, where('service_type', '==', options.serviceType));
-  }
-
-  // 学生番号で昇順ソート
+  // 学生番号で昇順ソート（単一フィールドソートのみ - インデックス不要）
   q = query(q, orderBy('student_number', 'asc'));
 
   // リアルタイム購読
