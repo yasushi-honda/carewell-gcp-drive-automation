@@ -18,7 +18,7 @@
           d="M10 19l-7-7m0 0l7-7m-7 7h18"
         />
       </svg>
-      受講生一覧に戻る
+      戻る
     </button>
 
     <!-- ローディング状態 -->
@@ -205,6 +205,8 @@ const toggleStatus = async () => {
 };
 
 const navigateBack = () => {
-  router.push('/students');
+  // ブラウザ履歴を使って前のページに戻る
+  // (グループページから来た場合はグループページに、受講生一覧から来た場合は受講生一覧に戻る)
+  router.back();
 };
 </script>
