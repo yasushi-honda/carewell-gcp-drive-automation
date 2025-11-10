@@ -962,3 +962,153 @@ gcloud logging read "textPayload=~'Added:.*-'" --limit 5
 - Revision: carewell-file-collector-00232-wj4（問題発生）, 00234-q22（修正後）
 - Commit bbd61ab（バグ導入 - go_back skip）
 - Commit 6e39cce（修正 - 30s timeout で go_back 統一）
+
+---
+
+## Incident #13: Firestore Index Missing After Phase 2 Deployment (2025-11-10)
+
+### 📅 発生日時
+2025-11-10 13:00 JST
+
+### 🚨 症状
+- Cloud Scheduler が25分でタイムアウト（DEADLINE_EXCEEDED）
+- ユーザー確認: 目視で取得対象は0件（すべて重複のはず）
+- 実際: 延々とファイルをダウンロードし続けている（無限ループ）
+- 重複チェックログ「Performing early duplicate check for 100 submissions」は出るが、「Duplicate detected」が一切出ない
+
+### 🔍 根本原因
+
+**Backend用のFirestoreインデックスが未定義**
+
+1. **不完全な `dashboard/firestore.indexes.json`**:
+   - 2025-11-04 Dashboard初期セットアップ時、`indexes: []` で作成
+   - Backend用の複合インデックスが定義されていない
+   - Backend用インデックスはFirestoreコンソールで手動作成（ドキュメント化されず）
+
+2. **Phase 2デプロイがトリガー**:
+   - 2025-11-10 13:00:42 JST、コミット `1ff3401` で `firestore.indexes.json` 更新
+   - GitHub Actions が `firebase deploy --only firestore` 自動実行
+   - `firebase deploy --only firestore` は**宣言的**なため、定義されていないインデックスを削除
+   - 手動作成したBackend用インデックスが削除された
+
+3. **重複チェッククエリが失敗**:
+   - `src/firestore_service.py:136-139` のクエリ:
+     ```python
+     docs = (
+         collection_ref.where("student_id", "==", student_id)
+         .where("submit_date", "==", submit_date)  # 複合インデックス必須
+         .limit(1)
+         .stream()
+     )
+     ```
+   - インデックスなし → 空の結果を返す
+   - すべてのファイルを「新規」と誤判定
+   - Page 1の100件を無限ダウンロード
+   - 25分でタイムアウト
+
+### ✅ 解決策
+
+**`dashboard/firestore.indexes.json` に Backend用複合インデックスを追加**:
+
+```json
+{
+  "indexes": [
+    {
+      "collectionGroup": "files",
+      "queryScope": "COLLECTION_GROUP",
+      "fields": [
+        {
+          "fieldPath": "student_id",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "submit_date",
+          "order": "ASCENDING"
+        }
+      ]
+    }
+  ],
+  "fieldOverrides": [...]
+}
+```
+
+**デプロイ**:
+
+```bash
+cd dashboard
+firebase deploy --only firestore:indexes --project carewell-native
+```
+
+インデックス作成完了まで数分かかる。完了後、次回のCloud Scheduler実行で正常動作確認。
+
+### 🎯 教訓
+
+#### 設計上の問題
+
+1. **Infrastructure as Code (IaC) の不徹底**:
+   - 手動作成したインデックスを `firestore.indexes.json` に記録していなかった
+   - 手動インデックスはドキュメント化されず、削除された際に気づけなかった
+
+2. **マルチサービスでのリソース共有**:
+   - Dashboard と Backend が同じ Firestore を共有
+   - インデックス定義は Dashboard側のみ（`dashboard/firestore.indexes.json`）
+   - Backend用のインデックスが考慮されていなかった
+
+3. **宣言的デプロイの副作用**:
+   - `firebase deploy --only firestore` は定義されたインデックスのみを保持
+   - 定義されていないインデックスは削除される
+   - この仕様を理解していなかった
+
+#### チェックリスト（今後の予防策）
+
+**インデックス追加時**:
+- [ ] Backend と Dashboard の**全て**のクエリパターンを確認
+- [ ] 複合クエリ（2つ以上の `==` 演算子）には複合インデックスが必要
+- [ ] `dashboard/firestore.indexes.json` にすべてのインデックスを定義
+- [ ] 手動作成したインデックスは**即座**に `firestore.indexes.json` に追記
+
+**Firestore デプロイ時**:
+- [ ] `firebase deploy --only firestore` は既存インデックスを削除する可能性を認識
+- [ ] デプロイ前に `firestore.indexes.json` の内容を確認
+- [ ] デプロイ後、Firestoreコンソールでインデックス一覧を確認
+- [ ] Cloud Run ログで「index required」エラーを監視
+
+**マルチサービス環境**:
+- [ ] Firestore を共有するサービスすべてのクエリパターンを把握
+- [ ] 各サービスのインデックス要件を統合した `firestore.indexes.json` を維持
+- [ ] インデックス変更時は**全サービス**への影響を検証
+
+### 📊 影響分析
+
+**タイムライン**:
+- 2025-11-10 12:30 JST: ✅ 最後の正常実行
+- 2025-11-10 13:00 JST: ❌ タイムアウト開始
+- 2025-11-10 13:30 JST: ❌ タイムアウト継続（30分ごとに再発）
+
+**データへの影響**:
+- ファイルの重複アップロードは発生していない（タイムアウトのため）
+- Firestoreデータの整合性は維持
+- 収集遅延が発生（約12時間の遅延）
+
+**コスト影響**:
+- Cloud Run 実行時間延長（25分 × 複数回実行）
+- Firestore読み取り増加（重複チェック失敗 → 再ダウンロード試行）
+- 推定追加コスト: $1-2（軽微）
+
+### 🔗 関連ドキュメント
+- Backend重複チェック実装: `src/firestore_service.py:105-157`
+- Backend呼び出し元: `src/playwright_automation.py:677-710`
+- Firestore設定: `.kiro/steering/firestore-critical-config.md`
+- 設計仕様: `.kiro/specs/firestore-schema-improvement/design.md` Lines 351-430
+- Firestore公式: https://firebase.google.com/docs/firestore/query-data/indexing
+
+### 🚨 緊急度評価
+- **重大度**: 🔴 High（本番システムが25分でタイムアウト）
+- **影響範囲**: 🔴 全クラス・全課題（重複チェック完全停止）
+- **修正難易度**: 🟢 Low（JSON追加のみ、5分で完了）
+- **再発リスク**: 🟡 Medium（IaC徹底で予防可能）
+
+### 過去のインシデントとの関連
+- Incident #1, #4, #10: ドキュメント確認なしのコード変更（パターン類似）
+- Incident #7: 複数箇所の設定見落とし（GitHub Actions + Cloud Run）
+- 今回: Infrastructure as Code の不徹底（手動設定 + 自動デプロイの齟齬）

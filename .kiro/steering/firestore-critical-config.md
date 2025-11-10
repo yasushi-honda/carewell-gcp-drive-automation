@@ -214,3 +214,116 @@ If unsure about Firestore configuration:
 2. Check past incident descriptions in this file
 3. Verify against the pre-commit checklist
 4. Ask the user for clarification if design docs are ambiguous
+
+---
+
+## Firestore Indexes Management
+
+### ⚠️ CRITICAL: All Indexes Must Be Defined in Code
+
+**Rule**: すべての Firestore インデックスは `dashboard/firestore.indexes.json` で管理する
+
+**Background**:
+- 2025-11-10にBackend用の手動作成インデックスが削除されるインシデント発生
+- `firebase deploy --only firestore` は宣言的デプロイのため、定義されていないインデックスを削除
+- Infrastructure as Code (IaC) を徹底し、手動作成を禁止
+
+### Required Indexes
+
+#### Backend: Early Duplicate Check (CRITICAL)
+
+**Query**: `src/firestore_service.py:136-139`
+```python
+collection_ref.where("student_id", "==", student_id)
+              .where("submit_date", "==", submit_date)
+```
+
+**Index Definition**:
+
+```json
+{
+  "collectionGroup": "files",
+  "queryScope": "COLLECTION_GROUP",
+  "fields": [
+    {"fieldPath": "student_id", "order": "ASCENDING"},
+    {"fieldPath": "submit_date", "order": "ASCENDING"}
+  ]
+}
+```
+
+- **Purpose**: 重複ファイル検出（student_id + submit_date で既存アップロードを検索）
+- **Impact if Missing**: すべてのファイルを「新規」と誤判定 → 無限ダウンロード → タイムアウト
+
+#### Dashboard: Student Detail File List
+
+**Query**: `dashboard/src/composables/useSubmissionFileList.ts`
+
+```typescript
+collectionGroup(db, 'files')
+  .where('student_id', '==', studentId)
+```
+
+**Index Definition**:
+
+```json
+{
+  "collectionGroup": "files",
+  "fieldPath": "student_id",
+  "indexes": [
+    {
+      "order": "ASCENDING",
+      "queryScope": "COLLECTION_GROUP"
+    }
+  ]
+}
+```
+
+- **Purpose**: 学生詳細ページで全課題の提出ファイルを取得
+- **Impact if Missing**: Dashboard学生詳細ページがエラー
+
+### Index Management Checklist
+
+**Before Adding New Query**:
+- [ ] 複合クエリ（2つ以上の `==`/`range`）か確認
+- [ ] 必要なインデックスを `dashboard/firestore.indexes.json` に定義
+- [ ] Backend と Dashboard の**両方**のクエリを考慮
+
+**Before Firestore Deploy**:
+- [ ] `dashboard/firestore.indexes.json` の内容を確認
+- [ ] Backend用インデックス（student_id + submit_date）が存在するか確認
+- [ ] Dashboard用インデックス（student_id single field）が存在するか確認
+
+**After Firestore Deploy**:
+- [ ] Firestoreコンソールでインデックス一覧を確認: https://console.firebase.google.com/project/YOUR_PROJECT/firestore/indexes
+- [ ] Cloud Run ログで「index required」エラーがないか監視
+- [ ] 次回のCloud Scheduler実行で正常動作を確認
+
+### Emergency Recovery (インデックス削除時)
+
+**症状**:
+- Cloud Scheduler が25分でタイムアウト
+- 「Duplicate detected」ログが出ない
+- Page 1で無限ループ
+
+**診断**:
+
+```bash
+# Cloud Run ログで index エラーを検索
+gcloud logging read "resource.type=cloud_run_revision AND
+  resource.labels.service_name=carewell-file-collector AND
+  (textPayload=~'index' OR textPayload=~'FAILED_PRECONDITION')" \
+  --limit 50 --format=json
+```
+
+**修正**:
+
+1. `dashboard/firestore.indexes.json` に必要なインデックスを追加
+2. `firebase deploy --only firestore:indexes --project carewell-native`
+3. インデックス作成完了（数分）を待つ
+4. 次回のScheduler実行で正常動作を確認
+
+### Reference
+
+- Incident Report: `docs/common-mistakes.md` Incident #13
+- Backend Implementation: `src/firestore_service.py:105-157`
+- Firestore Official Docs: https://firebase.google.com/docs/firestore/query-data/indexing
