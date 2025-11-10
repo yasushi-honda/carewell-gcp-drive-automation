@@ -55,15 +55,25 @@
       v-else
       class="space-y-4"
     >
-      <TaskCard
-        v-for="task in tasks"
-        :key="task.taskId"
-        :task-id="task.taskId"
-        :file-count="task.fileCount"
-        :student-count="task.studentCount"
-        :last-submit="task.lastSubmit"
-        @click="navigateToTask(task.taskId)"
-      />
+      <div v-for="task in tasks" :key="task.taskId" class="relative">
+        <TaskCard
+          :task-id="task.taskId"
+          :file-count="task.fileCount"
+          :student-count="task.studentCount"
+          :last-submit="task.lastSubmit"
+          @click="navigateToTask(task.taskId)"
+        />
+
+        <!-- 受講生一覧リンク -->
+        <div class="absolute bottom-4 right-4" @click.stop>
+          <router-link
+            :to="`/class/${className}/task/${task.taskId}/groups`"
+            class="inline-flex items-center px-3 py-1.5 text-sm font-medium text-blue-600 bg-blue-50 hover:bg-blue-100 rounded-md transition-colors"
+          >
+            👥 受講生一覧
+          </router-link>
+        </div>
+      </div>
     </div>
   </div>
 </template>
