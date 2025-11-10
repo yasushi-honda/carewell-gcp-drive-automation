@@ -22,7 +22,7 @@ Kiro-style Spec Driven Development implementation using claude code slash comman
 
 **必読ドキュメント**:
 1. **docs/troubleshooting.md** - トラブルシューティングフローチャート
-2. **docs/common-mistakes.md** - 過去12の重大インシデント詳細記録
+2. **docs/common-mistakes.md** - 過去13の重大インシデント詳細記録
 3. **このファイルの Common Mistakes セクション** - インシデント要約表
 
 ### 📖 ステップ3: 詳細を深掘りする（必要時）
@@ -283,6 +283,7 @@ Before committing changes to Firestore-related code:
 | 10 | Deleting Critical STEP 1 | 2025-11-07 | 50% 収集失敗 | ✅ コード削除前にドキュメントで目的を確認 |
 | 11 | Assuming Parameter Names | 2025-11-08 | Page 2+ 0% 成功 | ✅ DevTools で実際の HTML/パラメータを検証 |
 | 12 | Phase 1 go_back Skip | 2025-11-08 | 2人目以降失敗 | ✅ 必須処理をスキップせず、タイムアウト短縮で最適化 |
+| 13 | Firestore Index Missing | 2025-11-10 | 25分タイムアウト | ✅ **全インデックスを `firestore.indexes.json` で管理（IaC 徹底）** |
 
 ### 🚨 最重要パターン
 
@@ -298,6 +299,10 @@ Before committing changes to Firestore-related code:
 - インシデント #7（Cloud Scheduler + Cloud Run）
 - インシデント #7 Follow-up（手動設定 + GitHub Actions）
 - 教訓: **設定は2箇所以上に存在する可能性を常に確認**
+
+**パターン4: Infrastructure as Code (IaC) の不徹底**
+- インシデント #13（手動作成インデックス + 自動デプロイ）
+- 教訓: **手動インフラ変更は必ずコードに記録（"コードにないものは存在しない"）**
 
 **パターン4: デプロイ後の検証不足**
 - インシデント #8
