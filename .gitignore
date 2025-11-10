@@ -40,6 +40,10 @@ htmlcov/
 playwright-report/
 test-results/
 
+# Firebase
+firebase-debug.log
+firestore-debug.log
+
 # Dashboard (Node.js / Vue.js)
 dashboard/node_modules/
 dashboard/dist/
