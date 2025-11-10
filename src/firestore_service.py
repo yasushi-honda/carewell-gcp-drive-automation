@@ -448,6 +448,7 @@ class FirestoreService:
                 - service_type: サービス種別
                 - serial_number: Serial No.
                 - student_number: 受講生番号
+                - class_name: クラス
 
         Returns:
             True if successful, False otherwise (fail-open strategy)
@@ -470,6 +471,7 @@ class FirestoreService:
                 "service_type": student_data.get("service_type", ""),
                 "serial_number": student_data.get("serial_number", 0),
                 "student_number": student_data.get("student_number", ""),
+                "class_name": student_data.get("class_name", ""),
                 "created_at": firestore.SERVER_TIMESTAMP,
                 "last_updated": firestore.SERVER_TIMESTAMP,
             }
