@@ -3,52 +3,19 @@
     <!-- ページタイトル -->
     <h1 class="text-3xl font-bold text-gray-900 mb-6">学生一覧</h1>
 
-    <!-- フィルター UI -->
+    <!-- 検索ボックス -->
     <div class="bg-white shadow-sm rounded-lg p-4 mb-6">
-      <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <!-- グループフィルター -->
-        <div>
-          <label for="group-filter" class="block text-sm font-medium text-gray-700 mb-1">
-            グループ
-          </label>
-          <select
-            id="group-filter"
-            v-model="selectedGroup"
-            class="block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm py-2 px-3 border"
-          >
-            <option value="">全グループ</option>
-            <option v-for="g in groups" :key="g" :value="g">グループ {{ g }}</option>
-          </select>
-        </div>
-
-        <!-- サービス種別フィルター -->
-        <div>
-          <label for="service-type-filter" class="block text-sm font-medium text-gray-700 mb-1">
-            サービス種別
-          </label>
-          <select
-            id="service-type-filter"
-            v-model="selectedServiceType"
-            class="block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm py-2 px-3 border"
-          >
-            <option value="">全サービス種別</option>
-            <option v-for="st in serviceTypes" :key="st" :value="st">{{ st }}</option>
-          </select>
-        </div>
-
-        <!-- 検索ボックス -->
-        <div>
-          <label for="search-query" class="block text-sm font-medium text-gray-700 mb-1">
-            検索
-          </label>
-          <input
-            id="search-query"
-            v-model="searchQuery"
-            type="text"
-            placeholder="氏名・ふりがなで検索"
-            class="block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm py-2 px-3 border"
-          />
-        </div>
+      <div class="max-w-md">
+        <label for="search-query" class="block text-sm font-medium text-gray-700 mb-1">
+          検索
+        </label>
+        <input
+          id="search-query"
+          v-model="searchQuery"
+          type="text"
+          placeholder="氏名・ふりがなで検索"
+          class="block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm py-2 px-3 border"
+        />
       </div>
     </div>
 
@@ -78,7 +45,7 @@
                 scope="col"
                 class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
               >
-                学生番号
+                日介番号
               </th>
               <th
                 scope="col"
@@ -88,9 +55,15 @@
               </th>
               <th
                 scope="col"
-                class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
+                class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 select-none"
+                @click="toggleSort"
               >
-                ふりがな
+                <div class="flex items-center gap-2">
+                  <span>ふりがな</span>
+                  <span class="text-xs" v-if="sortOrder === 'asc'">▲</span>
+                  <span class="text-xs" v-else-if="sortOrder === 'desc'">▼</span>
+                  <span class="text-xs text-gray-300" v-else>⇅</span>
+                </div>
               </th>
               <th
                 scope="col"
@@ -108,7 +81,7 @@
           </thead>
           <tbody class="bg-white divide-y divide-gray-200">
             <tr
-              v-for="student in filteredStudents"
+              v-for="student in sortedStudents"
               :key="student.student_id"
               class="hover:bg-gray-50 cursor-pointer"
               @click="navigateToDetail(student.student_id)"
@@ -119,7 +92,7 @@
                   class="text-blue-600 hover:text-blue-800 font-medium"
                   @click.stop
                 >
-                  {{ student.student_number }}
+                  {{ student.student_id }}
                 </router-link>
               </td>
               <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
@@ -161,41 +134,24 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue';
+import { ref, computed } from 'vue';
 import { useRouter } from 'vue-router';
 import { useStudents } from '../composables/useStudents';
-import { useGroupList } from '../composables/useGroupList';
 import LoadingSkeleton from '../components/LoadingSkeleton.vue';
 import ErrorAlert from '../components/ErrorAlert.vue';
 
 const router = useRouter();
 
-const selectedGroup = ref('');
-const selectedServiceType = ref('');
 const searchQuery = ref('');
+const sortOrder = ref<'asc' | 'desc' | null>(null);
 
 const { students, loading, error } = useStudents();
-const { groups, serviceTypes, fetchLists } = useGroupList();
-
-onMounted(() => {
-  fetchLists();
-});
 
 // クライアント側でのフィルタリング
 const filteredStudents = computed(() => {
   return students.value.filter((student) => {
     // ステータスフィルター（アクティブな学生のみ表示）
     if (student.status !== 'active') {
-      return false;
-    }
-
-    // グループフィルター
-    if (selectedGroup.value && student.group !== selectedGroup.value) {
-      return false;
-    }
-
-    // サービス種別フィルター
-    if (selectedServiceType.value && student.service_type !== selectedServiceType.value) {
       return false;
     }
 
@@ -210,6 +166,29 @@ const filteredStudents = computed(() => {
     return true;
   });
 });
+
+// ふりがなでソート
+const sortedStudents = computed(() => {
+  const list = [...filteredStudents.value];
+
+  if (sortOrder.value === 'asc') {
+    return list.sort((a, b) => a.furigana.localeCompare(b.furigana, 'ja'));
+  } else if (sortOrder.value === 'desc') {
+    return list.sort((a, b) => b.furigana.localeCompare(a.furigana, 'ja'));
+  }
+
+  return list;
+});
+
+const toggleSort = () => {
+  if (sortOrder.value === null) {
+    sortOrder.value = 'asc';
+  } else if (sortOrder.value === 'asc') {
+    sortOrder.value = 'desc';
+  } else {
+    sortOrder.value = null;
+  }
+};
 
 const navigateToDetail = (studentId: string) => {
   router.push(`/students/${studentId}`);
