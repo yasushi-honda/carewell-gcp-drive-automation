@@ -38,82 +38,80 @@
       <!-- 基本情報カード -->
       <div
         class="shadow-sm rounded-lg p-6 mb-6 transition-colors"
-        :class="student.status === 'withdrawn' ? 'bg-gray-100' : 'bg-white'"
+        :class="student.status === 'withdrawn' ? 'bg-gray-50' : 'bg-white'"
       >
-        <h1 class="text-3xl font-bold text-gray-900 mb-6">{{ student.name }}</h1>
-
-        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          <!-- ふりがな -->
+        <!-- 名前とステータス -->
+        <div class="flex items-center justify-between mb-6 pb-4 border-b border-gray-200">
           <div>
-            <div class="text-sm font-semibold text-gray-600 mb-1">ふりがな</div>
-            <div class="text-gray-900">{{ student.furigana }}</div>
+            <h1 class="text-3xl font-bold text-gray-900 mb-1">{{ student.name }}</h1>
+            <p class="text-sm text-gray-500">{{ student.furigana }}</p>
           </div>
+          <div class="flex items-center gap-3">
+            <span
+              :class="student.status === 'active'
+                ? 'bg-green-100 text-green-800 border-green-200'
+                : 'bg-red-100 text-red-800 border-red-200'"
+              class="px-4 py-2 rounded-full text-sm font-semibold border"
+            >
+              {{ student.status === 'active' ? 'アクティブ' : '辞退' }}
+            </span>
+            <button
+              v-if="isAdmin"
+              @click="toggleStatus"
+              :disabled="updating"
+              class="px-4 py-2 text-sm font-medium rounded-md transition-colors shadow-sm"
+              :class="student.status === 'active'
+                ? 'bg-red-50 text-red-700 hover:bg-red-100 border border-red-200'
+                : 'bg-green-50 text-green-700 hover:bg-green-100 border border-green-200'"
+            >
+              {{ updating ? '更新中...' : (student.status === 'active' ? '辞退に変更' : 'アクティブに変更') }}
+            </button>
+          </div>
+        </div>
 
+        <!-- 基本情報 -->
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-6">
           <!-- 受講生番号 -->
-          <div>
-            <div class="text-sm font-semibold text-gray-600 mb-1">受講生番号</div>
-            <div class="text-gray-900">{{ student.student_number }}</div>
+          <div class="bg-gray-50 rounded-lg p-4 border border-gray-200">
+            <div class="text-xs font-medium text-gray-500 uppercase tracking-wider mb-2">受講生番号</div>
+            <div class="text-lg font-semibold text-gray-900">{{ student.student_number }}</div>
           </div>
 
           <!-- 日介番号 -->
-          <div>
-            <div class="text-sm font-semibold text-gray-600 mb-1">日介番号</div>
-            <div class="text-gray-900">{{ student.student_id }}</div>
+          <div class="bg-gray-50 rounded-lg p-4 border border-gray-200">
+            <div class="text-xs font-medium text-gray-500 uppercase tracking-wider mb-2">日介番号</div>
+            <div class="text-lg font-semibold text-gray-900">{{ student.student_id }}</div>
           </div>
 
           <!-- クラス -->
-          <div>
-            <div class="text-sm font-semibold text-gray-600 mb-1">クラス</div>
-            <div class="text-gray-900">{{ student.class_name || '-' }}</div>
+          <div class="bg-gray-50 rounded-lg p-4 border border-gray-200">
+            <div class="text-xs font-medium text-gray-500 uppercase tracking-wider mb-2">クラス</div>
+            <div class="text-lg font-semibold text-gray-900">{{ student.class_name || '-' }}</div>
           </div>
 
           <!-- グループ -->
-          <div>
-            <div class="text-sm font-semibold text-gray-600 mb-1">グループ</div>
-            <div class="text-gray-900">{{ student.group }}</div>
-          </div>
-
-          <!-- サービス種別 -->
-          <div class="md:col-span-2 lg:col-span-3">
-            <div class="text-sm font-semibold text-gray-600 mb-1">サービス種別</div>
-            <div class="text-gray-900">{{ student.service_type }}</div>
+          <div class="bg-gray-50 rounded-lg p-4 border border-gray-200">
+            <div class="text-xs font-medium text-gray-500 uppercase tracking-wider mb-2">グループ</div>
+            <div class="text-lg font-semibold text-gray-900">{{ student.group }}</div>
           </div>
 
           <!-- 会社 -->
-          <div>
-            <div class="text-sm font-semibold text-gray-600 mb-1">会社</div>
-            <div class="text-gray-900">{{ student.company || '-' }}</div>
+          <div class="bg-gray-50 rounded-lg p-4 border border-gray-200 md:col-span-2">
+            <div class="text-xs font-medium text-gray-500 uppercase tracking-wider mb-2">会社</div>
+            <div class="text-lg font-semibold text-gray-900">{{ student.company || '-' }}</div>
           </div>
 
           <!-- 事業所 -->
-          <div>
-            <div class="text-sm font-semibold text-gray-600 mb-1">事業所</div>
-            <div class="text-gray-900">{{ student.office || '-' }}</div>
+          <div class="bg-gray-50 rounded-lg p-4 border border-gray-200 md:col-span-2 lg:col-span-3">
+            <div class="text-xs font-medium text-gray-500 uppercase tracking-wider mb-2">事業所</div>
+            <div class="text-lg font-semibold text-gray-900">{{ student.office || '-' }}</div>
           </div>
+        </div>
 
-          <!-- ステータス -->
-          <div>
-            <div class="text-sm font-semibold text-gray-600 mb-1">ステータス</div>
-            <div class="flex items-center gap-3">
-              <span
-                :class="student.status === 'active' ? 'text-green-600' : 'text-red-600'"
-                class="font-medium"
-              >
-                {{ student.status === 'active' ? 'アクティブ' : '辞退' }}
-              </span>
-              <button
-                v-if="isAdmin"
-                @click="toggleStatus"
-                :disabled="updating"
-                class="px-3 py-1 text-sm font-medium rounded-md transition-colors"
-                :class="student.status === 'active'
-                  ? 'bg-red-50 text-red-700 hover:bg-red-100'
-                  : 'bg-green-50 text-green-700 hover:bg-green-100'"
-              >
-                {{ updating ? '更新中...' : (student.status === 'active' ? '辞退に変更' : 'アクティブに変更') }}
-              </button>
-            </div>
-          </div>
+        <!-- サービス種別 -->
+        <div class="bg-blue-50 rounded-lg p-4 border border-blue-200">
+          <div class="text-xs font-medium text-blue-700 uppercase tracking-wider mb-2">サービス種別</div>
+          <div class="text-sm text-gray-900 leading-relaxed">{{ student.service_type }}</div>
         </div>
       </div>
 
