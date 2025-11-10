@@ -89,6 +89,7 @@
                   {{ student.status === 'active' ? 'アクティブ' : '辞退' }}
                 </span>
                 <button
+                  v-if="route.query.admin === 'true'"
                   @click="toggleStatus"
                   :disabled="updating"
                   class="px-3 py-1 text-sm font-medium rounded-md transition-colors"
