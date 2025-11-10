@@ -56,9 +56,17 @@ const checkAdminMode = () => {
     sessionStorage.setItem('adminMode', 'true')
     console.log('[App.vue] Admin mode activated via URL parameter')
   } else if (route.path === '/' && !route.query.admin) {
-    // ホームページに ?admin パラメータなしでアクセスした場合、admin モードをクリア
-    sessionStorage.removeItem('adminMode')
-    console.log('[App.vue] Admin mode cleared (homepage access without ?admin=true)')
+    // サイト内遷移かどうかを判定
+    const isInternalNavigation = document.referrer &&
+      document.referrer.startsWith(window.location.origin)
+
+    if (!isInternalNavigation) {
+      // 外部からの直接アクセスの場合のみクリア
+      sessionStorage.removeItem('adminMode')
+      console.log('[App.vue] Admin mode cleared (external access to homepage)')
+    } else {
+      console.log('[App.vue] Admin mode preserved (internal navigation)')
+    }
   }
 }
 
