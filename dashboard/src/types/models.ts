@@ -113,6 +113,7 @@ export interface Student {
   service_type: string;     // サービス種別（例: "入所・居住系", "通所系"）
   serial_number: number;    // 通し番号（例: 14）
   student_number: string;   // 学生番号（例: "A014"）
+  class_name: string;       // クラス（例: "class01", "class02"）
   status: string;           // ステータス（例: "active"）
   created_at?: Date;        // 作成日時
   last_updated?: Date;      // 更新日時

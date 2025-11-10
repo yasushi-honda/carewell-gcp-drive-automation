@@ -267,11 +267,11 @@ class SheetsService:
             # Escape single quotes in sheet name for A1 notation
             escaped_name = sheet_name.replace("'", "''")
 
-            # Read A～J columns (all student master data)
+            # Read A～K columns (all student master data)
             result = (
                 self.service.spreadsheets()
                 .values()
-                .get(spreadsheetId=spreadsheet_id, range=f"'{escaped_name}'!A:J")
+                .get(spreadsheetId=spreadsheet_id, range=f"'{escaped_name}'!A:K")
                 .execute()
             )
 
@@ -293,13 +293,13 @@ class SheetsService:
                     logger.debug(f"Skipping empty row: {row_index}")
                     continue
 
-                # Handle rows with fewer than 10 columns (pad with empty strings)
-                while len(row) < 10:
+                # Handle rows with fewer than 11 columns (pad with empty strings)
+                while len(row) < 11:
                     row.append("")
 
                 # Extract student data (correct column mapping)
                 # A:氏名, B:ふりがな, C:日介番号, D:勤務先法人名称, E:勤務先名称,
-                # F:種別サービス, G:種別サービス（手動）, H:グループ, I:通し番号, J:受講生番号
+                # F:種別サービス, G:種別サービス（手動）, H:グループ, I:通し番号, J:受講生番号, K:クラス
                 student_data = {
                     "student_id": row[2].strip() if row[2] else "",  # C列: 日介番号
                     "furigana": row[1].strip() if row[1] else "",    # B列: ふりがな
@@ -312,6 +312,7 @@ class SheetsService:
                     "service_type": (row[6].strip() if row[6] else (row[5].strip() if row[5] else "")),
                     "serial_number": int(row[8]) if row[8] and row[8].isdigit() else 0,  # I列: 通し番号
                     "student_number": row[9].strip() if row[9] else "",  # J列: 受講生番号
+                    "class_name": row[10].strip() if row[10] else "",  # K列: クラス
                 }
 
                 # Validate required fields

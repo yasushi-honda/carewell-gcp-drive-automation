@@ -58,6 +58,7 @@ export function useStudents(options: UseStudentsOptions = {}): UseStudentsReturn
           service_type: data.service_type || '',
           serial_number: data.serial_number || 0,
           student_number: data.student_number || '',
+          class_name: data.class_name || '',
           status: data.status || 'active',
           // Firestore Timestamp を Date に変換
           created_at: data.created_at instanceof Timestamp ? data.created_at.toDate() : undefined,
