@@ -239,6 +239,47 @@ Carewell Dashboardは、講師がFirestoreに蓄積された学生の提出フ�
 
 ---
 
+### Requirement 16: グループ一覧表示機能
+
+**Objective:** As a 講師, I want 課題選択後にグループ一覧を確認できる, so that 各グループの受講生数を把握できる
+
+#### Acceptance Criteria
+
+1. WHEN 課題一覧で「受講生一覧」リンクがクリックされる THEN Dashboardは該当課題の全グループをカード形式で表示する
+2. WHEN グループカードがクリックされる THEN Dashboardは該当グループの受講生一覧画面へ遷移する
+3. WHERE グループ一覧画面 THE Dashboardは各グループの受講生数を表示する
+4. WHERE グループ一覧画面 THE Dashboardは現在選択中のクラス名と課題名をパンくずリストに表示する
+5. WHERE グループ一覧画面 THE DashboardはFirestoreから効率的にデータを取得する（読み取り数を最小化）
+
+---
+
+### Requirement 17: 受講生テーブル拡張機能
+
+**Objective:** As a 講師, I want 受講生一覧に詳細情報を表示できる, so that 提出状況を効率的に確認できる
+
+#### Acceptance Criteria
+
+1. WHERE 受講生一覧画面 THE Dashboardは通し番号カラムを表示する
+2. WHERE 受講生一覧画面 THE Dashboardは勤務先（法人名 - 事業所名）カラムを表示する
+3. WHERE 受講生一覧画面 THE Dashboardは通し番号でソート（昇順/降順）できる
+4. WHERE 全UI THE Dashboard表示文言は「学生」ではなく「受講生」に統一される
+5. WHERE ナビゲーションメニュー THE リンクテキストは「受講生一覧」と表示される
+
+---
+
+### Requirement 18: グループ別受講生一覧機能
+
+**Objective:** As a 講師, I want 特定課題・特定グループの受講生のみを表示できる, so that グループごとの状況を確認できる
+
+#### Acceptance Criteria
+
+1. WHEN グループカードがクリックされる THEN Dashboardは該当クラス・課題・グループでフィルタされた受講生一覧を表示する
+2. WHERE グループ別受講生一覧画面 THE Dashboardはパンくずリストでクラス→課題→グループ→受講生の階層を表示する
+3. WHERE グループ別受講生一覧画面 THE Dashboard既存のStudentsViewと同じカラム（通し番号、氏名、ふりがな、クラス、グループ、勤務先、サービス種別）を表示する
+4. WHERE グループ別受講生一覧画面 THE Dashboardは検索・ソート機能を提供する
+
+---
+
 ## 制約条件
 
 1. **既存システム依存**: Firestoreのデータ構造は既存システム（carewell-drive-automation）に依存する

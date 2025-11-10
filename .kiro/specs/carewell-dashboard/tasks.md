@@ -715,3 +715,101 @@ dashboard/src/
 - ⏳ レスポンシブデザイン最適化
 - ⏳ パフォーマンス最適化
 - ⏳ ユニット・統合・E2Eテスト
+
+---
+
+## Phase 2: グループビュー・受講生管理強化（2025-11-10）
+
+### 実装タスク
+
+- [ ] 12. 用語統一の実装
+- [ ] 12.1 全Vueコンポーネントで「学生」→「受講生」に置換
+  - dashboard/src/views/StudentsView.vue
+  - dashboard/src/views/StudentDetailView.vue
+  - dashboard/src/App.vue（ナビゲーションメニュー）
+  - その他、「学生」を含む全.vueファイル
+  - _Requirements: R-17_
+  - _工数: 1-2時間_
+
+- [ ] 13. 受講生テーブル既存カラム追加
+- [ ] 13.1 通し番号・勤務先カラムの追加
+  - StudentsView.vue のテーブルに2列追加
+  - serial_number: 既存データ使用
+  - 勤務先: `${student.company} - ${student.office}` 形式
+  - _Requirements: R-17_
+  - _工数: 1-2時間_
+
+- [ ] 13.2 通し番号ソート機能の実装
+  - sortBy ref に 'serial_number' オプション追加
+  - ソート処理の実装
+  - _Requirements: R-17_
+  - _工数: 1時間_
+
+- [ ] 14. グループ一覧ビューの実装
+- [ ] 14.1 useGroupStats.ts composable 作成
+  - 最小実装: 受講生数のみ取得
+  - Firestore students コレクションから class_name でフィルタ
+  - グループごとにカウント
+  - _Requirements: R-16_
+  - _工数: 2-3時間_
+
+- [ ] 14.2 GroupCard.vue コンポーネント作成
+  - グループ名、受講生数を表示
+  - クリック → グループ別受講生一覧へ遷移
+  - TaskCard.vue を参考にレスポンシブデザイン
+  - _Requirements: R-16_
+  - _工数: 1-2時間_
+
+- [ ] 14.3 GroupListView.vue ページ作成
+  - ルートパラメータ: className, taskId
+  - useGroupStats でデータ取得
+  - グリッドレイアウトで GroupCard 表示
+  - Breadcrumb 統合
+  - _Requirements: R-16_
+  - _工数: 2-3時間_
+
+- [ ] 15. TaskListView ナビゲーション追加
+- [ ] 15.1 課題カードに「受講生一覧」リンク追加
+  - TaskCard.vue または TaskListView.vue を修正
+  - 破壊的変更を避ける: カード全体のクリック動作維持
+  - リンクエリア（@click.stop）を追加
+  - _Requirements: R-16_
+  - _工数: 1時間_
+
+- [ ] 16. グループ別受講生一覧ビューの実装
+- [ ] 16.1 GroupStudentsView.vue コンポーネント作成
+  - StudentsView.vue を参考に新規作成（コピペではない）
+  - ルートパラメータ: className, taskId, groupName
+  - useStudents でデータ取得 → computed でフィルタリング
+  - 全カラム表示（通し番号、氏名、ふりがな、クラス、グループ、勤務先、サービス種別）
+  - _Requirements: R-18_
+  - _工数: 3-4時間_
+
+- [ ] 16.2 ルーティング設定の追加
+  - dashboard/src/router/index.ts に2ルート追加
+  - /class/:className/task/:taskId/groups → GroupListView
+  - /class/:className/task/:taskId/group/:groupName/students → GroupStudentsView
+  - _Requirements: R-16, R-18_
+  - _工数: 30分_
+
+---
+
+## Phase 2 要件カバレッジ
+
+| 要件ID | 要件概要 | 関連タスク |
+|--------|---------|-----------|
+| R-16 | グループ一覧表示 | 14.1, 14.2, 14.3, 15.1, 16.2 |
+| R-17 | 受講生テーブル拡張 | 12.1, 13.1, 13.2 |
+| R-18 | グループ別受講生一覧 | 16.1, 16.2 |
+
+---
+
+## Phase 2 実装順序
+
+1. **用語統一**（12.1） - 影響範囲が広いため最初に実施
+2. **受講生テーブル拡張**（13.1, 13.2） - 既存機能の強化
+3. **グループ一覧**（14.1, 14.2, 14.3） - 新規画面
+4. **ナビゲーション追加**（15.1） - 既存画面の修正
+5. **グループ別受講生一覧**（16.1, 16.2） - 新規画面
+
+合計工数: 13-18時間
