@@ -722,75 +722,84 @@ dashboard/src/
 
 ### 実装タスク
 
-- [ ] 12. 用語統一の実装
-- [ ] 12.1 全Vueコンポーネントで「学生」→「受講生」に置換
+- [x] 12. 用語統一の実装
+- [x] 12.1 全Vueコンポーネントで「学生」→「受講生」に置換
   - dashboard/src/views/StudentsView.vue
   - dashboard/src/views/StudentDetailView.vue
   - dashboard/src/App.vue（ナビゲーションメニュー）
   - その他、「学生」を含む全.vueファイル
   - _Requirements: R-17_
   - _工数: 1-2時間_
+  - ✅ **完了日**: 2025-11-10
 
-- [ ] 13. 受講生テーブル既存カラム追加
-- [ ] 13.1 通し番号・勤務先カラムの追加
+- [x] 13. 受講生テーブル既存カラム追加
+- [x] 13.1 通し番号・勤務先カラムの追加
   - StudentsView.vue のテーブルに2列追加
   - serial_number: 既存データ使用
   - 勤務先: `${student.company} - ${student.office}` 形式
   - _Requirements: R-17_
   - _工数: 1-2時間_
+  - ✅ **完了日**: 2025-11-10
 
-- [ ] 13.2 通し番号ソート機能の実装
+- [x] 13.2 通し番号ソート機能の実装
   - sortBy ref に 'serial_number' オプション追加
   - ソート処理の実装
   - _Requirements: R-17_
   - _工数: 1時間_
+  - ✅ **完了日**: 2025-11-10
 
-- [ ] 14. グループ一覧ビューの実装
-- [ ] 14.1 useGroupStats.ts composable 作成
+- [x] 14. グループ一覧ビューの実装
+- [x] 14.1 useGroupStats.ts composable 作成
   - 最小実装: 受講生数のみ取得
   - Firestore students コレクションから class_name でフィルタ
   - グループごとにカウント
   - _Requirements: R-16_
   - _工数: 2-3時間_
+  - ✅ **完了日**: 2025-11-10
 
-- [ ] 14.2 GroupCard.vue コンポーネント作成
+- [x] 14.2 GroupCard.vue コンポーネント作成
   - グループ名、受講生数を表示
   - クリック → グループ別受講生一覧へ遷移
   - TaskCard.vue を参考にレスポンシブデザイン
   - _Requirements: R-16_
   - _工数: 1-2時間_
+  - ✅ **完了日**: 2025-11-10
 
-- [ ] 14.3 GroupListView.vue ページ作成
+- [x] 14.3 GroupListView.vue ページ作成
   - ルートパラメータ: className, taskId
   - useGroupStats でデータ取得
   - グリッドレイアウトで GroupCard 表示
   - Breadcrumb 統合
   - _Requirements: R-16_
   - _工数: 2-3時間_
+  - ✅ **完了日**: 2025-11-10
 
-- [ ] 15. TaskListView ナビゲーション追加
-- [ ] 15.1 課題カードに「受講生一覧」リンク追加
+- [x] 15. TaskListView ナビゲーション追加
+- [x] 15.1 課題カードに「受講生一覧」リンク追加
   - TaskCard.vue または TaskListView.vue を修正
   - 破壊的変更を避ける: カード全体のクリック動作維持
   - リンクエリア（@click.stop）を追加
   - _Requirements: R-16_
   - _工数: 1時間_
+  - ✅ **完了日**: 2025-11-10
 
-- [ ] 16. グループ別受講生一覧ビューの実装
-- [ ] 16.1 GroupStudentsView.vue コンポーネント作成
+- [x] 16. グループ別受講生一覧ビューの実装
+- [x] 16.1 GroupStudentsView.vue コンポーネント作成
   - StudentsView.vue を参考に新規作成（コピペではない）
   - ルートパラメータ: className, taskId, groupName
   - useStudents でデータ取得 → computed でフィルタリング
   - 全カラム表示（通し番号、氏名、ふりがな、クラス、グループ、勤務先、サービス種別）
   - _Requirements: R-18_
   - _工数: 3-4時間_
+  - ✅ **完了日**: 2025-11-10
 
-- [ ] 16.2 ルーティング設定の追加
+- [x] 16.2 ルーティング設定の追加
   - dashboard/src/router/index.ts に2ルート追加
   - /class/:className/task/:taskId/groups → GroupListView
   - /class/:className/task/:taskId/group/:groupName/students → GroupStudentsView
   - _Requirements: R-16, R-18_
   - _工数: 30分_
+  - ✅ **完了日**: 2025-11-10
 
 ---
 
