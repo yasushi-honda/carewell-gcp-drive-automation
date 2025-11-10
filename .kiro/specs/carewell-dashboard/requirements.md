@@ -287,3 +287,111 @@ Carewell Dashboardは、講師がFirestoreに蓄積された学生の提出フ�
 3. **認証なし（Phase 1）**: リンクを知っている人全員がアクセス可能
 4. **短期運用**: 約1年間の運用期間を想定
 5. **小規模利用**: 月間1000アクセス未満を想定
+
+---
+
+## Future Enhancements (Phase 3候補)
+
+### 未実装機能（Phase 2でスコープ外とした機能）
+
+#### Enhancement 1: 提出状況・合否ステータス統計
+
+**Objective**: As a 講師, I want グループ一覧で各グループの提出状況・合否統計を確認できる, so that グループ全体の進捗を把握できる
+
+**Scope**:
+- グループカードに「提出済み/未提出」「合格/不合格」の統計を追加
+- GroupStats型に `submittedCount`, `passedCount`, `failedCount` フィールド追加
+- useGroupStats.tsでfilesコレクションとのJOINクエリ実装
+
+**Complexity**: Medium（Firestoreクエリ最適化が課題）
+
+**Estimated Effort**: 5-8時間
+
+---
+
+#### Enhancement 2: 受講生一覧の高度なフィルタリング
+
+**Objective**: As a 講師, I want 受講生一覧で提出状況・合否でフィルタできる, so that 未提出者や不合格者を素早く特定できる
+
+**Scope**:
+- フィルタUI追加: ドロップダウンまたはチェックボックス
+  - 提出状況: 全員/提出済み/未提出
+  - 合否状況: 全員/合格/不合格/未採点
+  - 在籍状況: 在籍中/退会済み
+- フィルタロジック実装: computed内での複合条件
+
+**Complexity**: Low
+
+**Estimated Effort**: 3-5時間
+
+---
+
+#### Enhancement 3: 受講生詳細モーダル化
+
+**Objective**: As a 講師, I want 受講生詳細をモーダルで表示できる, so that ページ遷移なしで詳細確認できる
+
+**Scope**:
+- StudentDetailView.vueをモーダルコンポーネントに変換
+- ルーティング戦略: `/students/:id` を modal=true パラメータで制御
+- Escape キー、背景クリックで閉じる動作
+
+**Complexity**: Medium（既存ページ遷移の破壊的変更の可能性）
+
+**Estimated Effort**: 4-6時間
+
+**Risk**: 既存のブックマークURL（/students/:id）が機能しなくなる可能性
+
+---
+
+#### Enhancement 4: グループ統計のリアルタイム更新
+
+**Objective**: As a 講師, I want グループ統計がリアルタイムに更新される, so that 最新の提出状況を常に確認できる
+
+**Scope**:
+- useGroupStats.tsで `getDocs()` → `onSnapshot()` に変更
+- リアルタイムリスナーのライフサイクル管理
+
+**Complexity**: Low
+
+**Estimated Effort**: 2-3時間
+
+**Trade-off**: Firestoreコスト増加（onSnapshot = continuous read）
+
+---
+
+#### Enhancement 5: サーバーサイド集計（Cloud Functions）
+
+**Objective**: As a system, I want グループ統計をサーバーサイドで事前集計する, so that クライアントの負荷とFirestoreコストを削減できる
+
+**Scope**:
+- Cloud Functionで定期集計（Firestore Trigger or Scheduled Function）
+- 集計結果を`group_stats/{className}/{taskId}`に保存
+- useGroupStats.tsを集計結果読み取りに変更
+
+**Complexity**: High（インフラ追加、デプロイパイプライン変更）
+
+**Estimated Effort**: 10-15時間
+
+**Benefit**: O(N) reads → O(M) reads (M = number of groups << N)
+
+---
+
+### 優先度評価
+
+| Enhancement | Priority | Value | Effort | ROI |
+|-------------|----------|-------|--------|-----|
+| E1: 提出状況・合否統計 | High | High | Medium | High |
+| E2: 高度なフィルタリング | Medium | Medium | Low | High |
+| E3: 詳細モーダル化 | Low | Low | Medium | Low |
+| E4: リアルタイム更新 | Low | Low | Low | Medium |
+| E5: サーバーサイド集計 | Low | High | High | Low |
+
+**推奨順序**: E2 → E1 → E4 → E5 → E3
+
+---
+
+### Phase 3実装検討時の注意事項
+
+1. **E1実装時**: Firestore複合クエリの制限に注意（インデックス作成必須）
+2. **E3実装時**: 既存URLの互換性維持（破壊的変更回避）
+3. **E5実装時**: GitHub Actions CI/CDにCloud Functions deployステップ追加必要

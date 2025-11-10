@@ -1588,6 +1588,249 @@ export const KNOWN_CLASSES = [
 
 ---
 
+---
+
+## Phase 2: Group View Architecture (2025-11-10)
+
+### Overview
+
+Phase 2では、グループ別の受講生管理機能を追加し、講師がクラス内のグループ単位で受講生を確認できるようにしました。既存の3段階ドリルダウン（クラス → 課題 → ファイル）に並行して、グループ経由のナビゲーションパス（クラス → 課題 → グループ → 受講生）を追加しました。
+
+### Component Architecture
+
+#### 1. GroupCard.vue (39 lines)
+
+**Purpose**: グループ統計を表示するカードコンポーネント
+
+**Design Decisions**:
+- TaskCard.vueと同じデザインパターンを踏襲（一貫性）
+- クリック可能カード全体（`cursor-pointer`、`@click`）
+- アクセシビリティ対応（`role="button"`, `tabindex="0"`, `aria-label`, Enter key対応）
+
+**Props**:
+```typescript
+interface Props {
+  className: string;
+  taskId: string;
+  group: string;
+  studentCount: number;
+}
+```
+**Navigation**: `/class/:className/task/:taskId/group/:group/students`
+
+#### 2. GroupListView.vue (63 lines)
+
+**Purpose**: グループ一覧を表示するページコンポーネント
+
+**Design Decisions**:
+- ClassListView.vueと同じレイアウトパターン（グリッドカード表示）
+- レスポンシブグリッド: `grid-cols-1 md:grid-cols-2 lg:grid-cols-3`
+- Breadcrumb統合: ホーム → クラス → 課題 → グループ一覧
+- Loading/Error/Empty 3状態管理
+
+**Route Parameters**:
+- `className`: フィルタリング対象のクラス名
+- `taskId`: パンくずリスト表示用（データフィルタリングには未使用）
+
+**State Management**:
+- `useGroupStats(className)` composable でデータ取得
+- グループリストは `groupStats.value` から取得
+
+#### 3. GroupStudentsView.vue (250 lines)
+
+**Purpose**: 特定グループの受講生一覧を表示するページコンポーネント
+
+**Design Decisions**:
+- StudentsView.vueの設計を参考（コピペではなく設計参照）
+- 3段フィルタリング: `status === 'active' && class_name === className && group === groupName`
+- 検索・ソート機能を完全実装（StudentsViewと同等）
+- 5階層Breadcrumb: ホーム → クラス → 課題 → グループ一覧 → {グループ名}グループ
+
+**Route Parameters**:
+```typescript
+const className = route.params.className as string;
+const taskId = route.params.taskId as string;
+const groupName = route.params.groupName as string;
+```
+
+**Filtering Logic**:
+```typescript
+const filteredStudents = computed(() => {
+  return students.value.filter((student) => {
+    if (student.status !== 'active') return false;
+    if (student.class_name !== className) return false;
+    if (student.group !== groupName) return false;
+    // 検索クエリによるフィルタリング
+    if (searchQuery.value) {
+      const query = searchQuery.value.toLowerCase();
+      return student.name.toLowerCase().includes(query) ||
+             student.furigana.toLowerCase().includes(query);
+    }
+    return true;
+  });
+});
+```
+
+**Sorting Logic**:
+- Dual-column sorting: furigana (Japanese locale), serial_number (numeric)
+- 3-state sort: null → asc → desc → null
+
+### Composable Architecture
+
+#### useGroupStats.ts (70 lines)
+
+**Purpose**: グループごとの受講生統計を取得するcomposable
+
+**Design Decisions**:
+
+**クライアント側集計を選択**:
+- **理由**: Firestoreコスト最適化
+- **比較**: サーバー側集計（N回のクエリ）vs クライアント側集計（1回のクエリ）
+- **トレードオフ**: ネットワーク転送量増加 vs クエリ回数削減
+- **判断**: 受講生数が少ない（< 100人/クラス）ため、クライアント側集計が有利
+
+**単一getDocs()クエリ**:
+```typescript
+const q = query(
+  collection(db, 'students'),
+  where('class_name', '==', className),
+  where('status', '==', 'active')
+);
+const snapshot = await getDocs(q);
+```
+- **コスト**: 1回のクエリ（N documents read）
+- **代替案**: グループごとにクエリ（M groups × 1 query = M reads）
+- **削減効果**: O(N) vs O(N + M) のクエリコスト
+
+**Map集計パターン**:
+```typescript
+const groupCounts = new Map<string, number>();
+snapshot.docs.forEach((doc) => {
+  const group = doc.data().group || '未分類';
+  groupCounts.set(group, (groupCounts.get(group) || 0) + 1);
+});
+```
+- **時間計算量**: O(N)
+- **空間計算量**: O(M) where M = number of groups
+
+**日本語ソート**:
+```typescript
+.sort((a, b) => a.group.localeCompare(b.group, 'ja'))
+```
+- **理由**: グループ名（「A」「B」「C」等）の自然な順序
+
+**Return Type**:
+```typescript
+export interface GroupStat {
+  group: string;
+  studentCount: number;
+}
+```
+- **Future Extensibility**: 提出状況統計（submitted, passed, failed）の追加が容易
+
+### Routing Architecture
+
+**New Routes**:
+```typescript
+{
+  path: '/class/:className/task/:taskId/groups',
+  name: 'GroupList',
+  component: () => import('../views/GroupListView.vue'),
+}
+{
+  path: '/class/:className/task/:taskId/group/:groupName/students',
+  name: 'GroupStudents',
+  component: () => import('../views/GroupStudentsView.vue'),
+}
+```
+
+**Design Decisions**:
+- RESTful URL構造（階層的、予測可能）
+- 遅延ロード（`() => import()`）によるコード分割
+- パラメータ命名: `groupName`（`group`ではなく、予約語回避）
+
+### Navigation Flow
+
+**Old Flow (Phase 1)**:
+```
+クラス一覧 → 課題一覧 → ファイル一覧
+```
+
+**New Flow (Phase 2)**:
+```
+クラス一覧
+    ↓
+課題一覧 ──┬→ ファイル一覧（既存）
+          │
+          └→ [👥 受講生一覧] → グループ一覧 → グループ別受講生一覧（新規）
+```
+
+**Non-Destructive Design**:
+- 既存のTaskCardクリック動作を完全に維持
+- 新しいリンクを `absolute positioning + @click.stop` で追加
+- 既存ユーザーのワークフローに影響なし
+
+### Performance Considerations
+
+**Firestore Reads**:
+- GroupListView: 1 query × N students (worst case: N = 全受講生数)
+- GroupStudentsView: 1 query × N students (フィルタリングはクライアント側)
+
+**Optimization Potential**:
+- Future: Firestore Indexで `(class_name, group)` 複合インデックス追加
+- Future: Server-side aggregation (Firebase Extensions or Cloud Functions)
+
+### Testing Strategy
+
+**Manual Testing Checklist (未実施)**:
+
+- [ ] グループ一覧表示（複数グループ、空グループ）
+- [ ] グループカードクリック→受講生一覧遷移
+- [ ] Breadcrumbナビゲーション（戻る動作）
+- [ ] 検索機能（氏名、ふりがな）
+- [ ] ソート機能（通し番号、ふりがな、3状態）
+- [ ] レスポンシブデザイン（モバイル、タブレット）
+- [ ] アクセシビリティ（キーボード操作、スクリーンリーダー）
+
+**E2E Test Coverage (未実装)**:
+- GroupListView: グループカード表示、クリック遷移
+- GroupStudentsView: フィルタリング、検索、ソート
+
+### Cost Analysis
+
+**Estimated Firestore Reads per Month**:
+- Assumption: 10 instructors × 5 classes × 10 accesses/month = 500 accesses
+- GroupListView: 500 accesses × 50 students/class = 25,000 reads
+- GroupStudentsView: 500 accesses × 50 students/class = 25,000 reads
+- Total: ~50,000 reads/month (~$0.001/1000 reads = $0.05/month)
+- **Within Budget**: Phase 1 budget ($1/month) is sufficient
+
+### Known Limitations
+
+**No Server-Side Aggregation**:
+- All grouping happens on client
+- Not scalable to 1000+ students per class
+
+**No Caching**:
+- Every page visit triggers full query
+- Future: Consider Vue Query or Pinia for caching
+
+**No Real-time Updates**:
+- Uses `getDocs()` (one-time read)
+- Future: Consider `onSnapshot()` for real-time
+
+### Related Documentation
+
+- **Requirements**: `.kiro/specs/carewell-dashboard/requirements.md` (R-16, R-17, R-18)
+- **Implementation**: `.kiro/specs/carewell-dashboard/tasks.md` (Task 12-16)
+- **Code**:
+  - `dashboard/src/composables/useGroupStats.ts`
+  - `dashboard/src/components/GroupCard.vue`
+  - `dashboard/src/views/GroupListView.vue`
+  - `dashboard/src/views/GroupStudentsView.vue`
+
+---
+
 ## Summary
 
 Carewell Dashboardは、Vue.js 3 + Firebase Hostingのサーバーレス構成により、講師が直感的にFirestoreデータを閲覧できる軽量SPAです。既存システムに一切影響を与えず、読み取り専用でデータを参照し、3段階ドリルダウンUIで必要な情報へ素早くアクセスできます。Phase 1では認証なしで迅速にリリースし、Phase 2で認証機能を追加する拡張性のある設計を採用しています。

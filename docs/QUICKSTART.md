@@ -35,6 +35,19 @@ Carewell Webサービスから学生の提出ファイルを自動取得し、Go
 - **実行頻度**: 毎時:00と:30 (30分間隔)
 - **対象URL**: https://jaccw-carewel.study.jp/
 
+### Dashboard Phase 2機能（2025-11-10追加）
+
+**グループビュー・受講生管理強化**:
+- グループ一覧表示: 課題ごとのグループ統計（受講生数）
+- グループ別受講生一覧: 特定グループの受講生をフィルタ表示
+- 受講生テーブル拡張: 通し番号、勤務先カラム、ソート機能
+- UI用語統一: 全UI表示を「学生」→「受講生」に統一
+
+**新規ユーザーフロー**:
+```
+クラス一覧 → 課題一覧 → [👥 受講生一覧] → グループ一覧 → グループ別受講生一覧
+```
+
 ---
 
 ## システムアーキテクチャ
@@ -122,9 +135,24 @@ erDiagram
         string drive_folder_id "Google Drive Folder ID"
     }
 
+    STUDENTS {
+        string student_id PK "例: 20250001"
+        string name "例: 山田太郎"
+        string furigana "例: やまだたろう"
+        number serial_number "通し番号"
+        string class_name "所属クラス"
+        string group "所属グループ"
+        string company "法人名"
+        string office "事業所名"
+        string service_type "サービス種別"
+        string status "active/inactive"
+    }
+
     SUBMISSIONS ||--o{ TASKS : "tasks サブコレクション"
     TASKS ||--o{ FILES : "files サブコレクション"
 ```
+
+**Phase 2追加**: `students` コレクションを使用したグループビュー機能
 
 ### パス構造
 
