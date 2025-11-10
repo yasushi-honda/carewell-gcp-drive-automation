@@ -71,7 +71,7 @@
     <div v-if="!loading && !error && files.length > 0" class="mb-6">
       <SearchBox
         v-model="searchQuery"
-        placeholder="学生名または学生IDで検索..."
+        placeholder="受講生名または受講生IDで検索..."
         @update:modelValue="setSearch"
       />
       <p v-if="searchQuery" class="mt-2 text-sm text-gray-600">
@@ -158,7 +158,7 @@ const breadcrumbItems = computed<BreadcrumbItem[]>(() => [
 ]);
 
 /**
- * 統計情報: 提出者総数（ユニークな学生ID数）
+ * 統計情報: 提出者総数（ユニークな受講生ID数）
  */
 const uniqueStudentCount = computed(() => {
   const uniqueIds = new Set(files.value.map((file) => file.student_id));

@@ -18,7 +18,7 @@
           d="M10 19l-7-7m0 0l7-7m-7 7h18"
         />
       </svg>
-      学生一覧に戻る
+      受講生一覧に戻る
     </button>
 
     <!-- ローディング状態 -->
@@ -27,13 +27,13 @@
       <LoadingSkeleton variant="card" />
     </div>
 
-    <!-- 学生が見つからない -->
+    <!-- 受講生が見つからない -->
     <ErrorAlert
       v-else-if="!student"
-      message="学生が見つかりませんでした"
+      message="受講生が見つかりませんでした"
     />
 
-    <!-- 学生情報 -->
+    <!-- 受講生情報 -->
     <div v-else>
       <!-- 基本情報カード -->
       <div class="bg-white shadow-sm rounded-lg p-6 mb-6">
@@ -46,7 +46,7 @@
               <span class="text-gray-900">{{ student.furigana }}</span>
             </div>
             <div class="flex">
-              <span class="font-semibold text-gray-700 w-40">学生番号:</span>
+              <span class="font-semibold text-gray-700 w-40">受講生番号:</span>
               <span class="text-gray-900">{{ student.student_number }}</span>
             </div>
             <div class="flex">

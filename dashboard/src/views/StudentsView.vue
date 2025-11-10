@@ -1,7 +1,7 @@
 <template>
   <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
     <!-- ページタイトル -->
-    <h1 class="text-3xl font-bold text-gray-900 mb-6">学生一覧</h1>
+    <h1 class="text-3xl font-bold text-gray-900 mb-6">受講生一覧</h1>
 
     <!-- 検索・フィルターエリア -->
     <div class="bg-white shadow-sm rounded-lg p-4 mb-6">
@@ -64,12 +64,12 @@
     <!-- エラー状態 -->
     <ErrorAlert v-else-if="error" :message="error" />
 
-    <!-- 学生一覧テーブル -->
+    <!-- 受講生一覧テーブル -->
     <div v-else class="bg-white shadow-sm rounded-lg overflow-hidden">
       <!-- テーブルヘッダー -->
       <div class="px-4 py-3 border-b border-gray-200 bg-gray-50">
         <p class="text-sm text-gray-700">
-          {{ filteredStudents.length }} 人の学生が見つかりました
+          {{ filteredStudents.length }} 人の受講生が見つかりました
         </p>
       </div>
 
@@ -172,7 +172,7 @@
               d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z"
             />
           </svg>
-          <p class="mt-2 text-sm text-gray-500">該当する学生が見つかりませんでした</p>
+          <p class="mt-2 text-sm text-gray-500">該当する受講生が見つかりませんでした</p>
         </div>
       </div>
     </div>
@@ -225,7 +225,7 @@ const groupList = computed(() => {
 // クライアント側でのフィルタリング
 const filteredStudents = computed(() => {
   return students.value.filter((student) => {
-    // ステータスフィルター（アクティブな学生のみ表示）
+    // ステータスフィルター（アクティブな受講生のみ表示）
     if (student.status !== 'active') {
       return false;
     }

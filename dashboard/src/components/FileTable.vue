@@ -11,7 +11,7 @@
               @click="$emit('sort', 'student_name')"
             >
               <div class="flex items-center">
-                学生名
+                受講生名
                 <svg
                   v-if="sortColumn === 'student_name'"
                   class="ml-2 h-4 w-4"
@@ -34,7 +34,7 @@
               scope="col"
               class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
             >
-              学生ID
+              受講生ID
             </th>
 
             <th
@@ -181,9 +181,9 @@
           @click="$emit('sort', 'student_name')"
           class="flex-1 inline-flex items-center justify-center px-3 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
           :aria-pressed="sortColumn === 'student_name'"
-          :aria-label="`学生名順でソート${sortColumn === 'student_name' ? (sortOrder === 'asc' ? '（昇順）' : '（降順）') : ''}`"
+          :aria-label="`受講生名順でソート${sortColumn === 'student_name' ? (sortOrder === 'asc' ? '（昇順）' : '（降順）') : ''}`"
         >
-          学生名順
+          受講生名順
           <svg
             v-if="sortColumn === 'student_name'"
             class="ml-1.5 h-4 w-4"
@@ -233,12 +233,12 @@
         :key="file.composite_key"
         class="bg-white rounded-lg shadow-md p-4 space-y-3"
       >
-        <!-- 学生名（大きく表示） -->
+        <!-- 受講生名（大きく表示） -->
         <h3 class="text-lg font-bold text-gray-900">
           {{ file.student_name }}
         </h3>
 
-        <!-- 学生ID -->
+        <!-- 受講生ID -->
         <div class="flex items-center text-sm text-gray-600">
           <svg
             class="h-4 w-4 text-gray-400 mr-2"
