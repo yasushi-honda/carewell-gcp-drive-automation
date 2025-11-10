@@ -54,6 +54,10 @@
               <span class="text-gray-900">{{ student.student_id }}</span>
             </div>
             <div class="flex">
+              <span class="font-semibold text-gray-700 w-40">クラス:</span>
+              <span class="text-gray-900">{{ student.class_name || '-' }}</span>
+            </div>
+            <div class="flex">
               <span class="font-semibold text-gray-700 w-40">グループ:</span>
               <span class="text-gray-900">{{ student.group }}</span>
             </div>
@@ -129,6 +133,7 @@ onMounted(async () => {
         service_type: data.service_type || '',
         serial_number: data.serial_number || 0,
         student_number: data.student_number || '',
+        class_name: data.class_name || '',
         status: data.status || 'active',
         created_at: data.created_at instanceof Timestamp ? data.created_at.toDate() : undefined,
         last_updated: data.last_updated instanceof Timestamp ? data.last_updated.toDate() : undefined,
