@@ -7,10 +7,11 @@ import os
 import sys
 
 # Add parent directory to path
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'src'))
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
 from sheets_service import SheetsService
 from firestore_service import FirestoreService
+
 
 def main():
     print("🔄 Starting manual student sync...")
@@ -42,40 +43,51 @@ def main():
     updated_count = 0
 
     for student in students:
-        student_id = student['student_id']
+        student_id = student["student_id"]
 
         # Check if student exists
-        existing = firestore_service.db.collection('students').document(student_id).get()
+        existing = (
+            firestore_service.db.collection("students").document(student_id).get()
+        )
 
         # Prepare student data
         student_data = {
-            'name': student['name'],
-            'furigana': student['furigana'],
-            'group': student['group'],
-            'company': student['company'],
-            'office': student['office'],
-            'service_type': student['service_type'],
-            'serial_number': student['serial_number'],
-            'student_number': student['student_number'],
-            'class_name': student['class_name'],  # K column
-            'status': student['status'],
+            "name": student["name"],
+            "furigana": student["furigana"],
+            "group": student["group"],
+            "company": student["company"],
+            "office": student["office"],
+            "service_type": student["service_type"],
+            "serial_number": student["serial_number"],
+            "student_number": student["student_number"],
+            "class_name": student["class_name"],  # K column
+            "status": student["status"],
         }
 
         if existing.exists:
             # Update existing student
-            firestore_service.db.collection('students').document(student_id).update(student_data)
+            firestore_service.db.collection("students").document(student_id).update(
+                student_data
+            )
             updated_count += 1
-            print(f"  ✏️  Updated: {student_id} - {student['name']} (class: {student['class_name']})")
+            print(
+                f"  ✏️  Updated: {student_id} - {student['name']} (class: {student['class_name']})"
+            )
         else:
             # Create new student
-            firestore_service.db.collection('students').document(student_id).set(student_data)
+            firestore_service.db.collection("students").document(student_id).set(
+                student_data
+            )
             created_count += 1
-            print(f"  ➕ Created: {student_id} - {student['name']} (class: {student['class_name']})")
+            print(
+                f"  ➕ Created: {student_id} - {student['name']} (class: {student['class_name']})"
+            )
 
     print(f"\n✅ Sync completed!")
     print(f"   Created: {created_count}")
     print(f"   Updated: {updated_count}")
     print(f"   Total: {len(students)}")
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     main()
