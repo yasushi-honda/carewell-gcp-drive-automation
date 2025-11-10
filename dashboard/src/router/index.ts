@@ -20,6 +20,17 @@ const router = createRouter({
       component: () => import('../views/FileListView.vue'),
       props: true,
     },
+    {
+      path: '/students',
+      name: 'students',
+      component: () => import('../views/StudentsView.vue'),
+    },
+    {
+      path: '/students/:id',
+      name: 'student-detail',
+      component: () => import('../views/StudentDetailView.vue'),
+      props: true,
+    },
   ],
 })
 

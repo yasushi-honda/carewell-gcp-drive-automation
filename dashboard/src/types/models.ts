@@ -31,6 +31,8 @@ export interface FileData {
   filename: string;
   submit_date: string;
   drive_file_id: string; // Google Drive file ID (URLは動的生成)
+  task_id?: string; // タスクID（例: "課題①"）
+  task_pattern?: string; // タスク表示名（例: "課題①業務分析"）
 
   /**
    * 合否情報（オプショナル）
@@ -42,6 +44,19 @@ export interface FileData {
     grading_status?: string; // "採点済み" | "未採点"
     log_no?: string; // ログ番号（文字列）
   };
+
+  /**
+   * 学生メタデータ（非正規化フィールド）
+   * 既存データには存在しない可能性があるためオプショナル
+   */
+  student_furigana?: string;         // ふりがな
+  student_group?: string;            // グループ
+  student_service_type?: string;     // サービス種別
+  student_number?: string;           // 学生番号（例: "A014"）
+  student_company?: string;          // 会社名
+  student_office?: string;           // 事業所名
+  student_status?: string;           // ステータス
+  student_serial_number?: number;    // 連番
 }
 
 /**
@@ -82,3 +97,23 @@ export type SortColumn = 'student_name' | 'submit_date';
  * ソート順序
  */
 export type SortOrder = 'asc' | 'desc';
+
+/**
+ * 学生情報（students コレクション）
+ *
+ * 受講生マスターデータ。Google Sheets「統合_受講者リスト」から同期される。
+ */
+export interface Student {
+  student_id: string;       // 日介番号（例: "N0102490"）
+  name: string;             // 氏名（例: "田谷　佳寿樹"）
+  furigana: string;         // ふりがな（例: "たや　かずき"）
+  group: string;            // グループ（例: "A", "B", "C"）
+  company: string;          // 勤務先法人名称
+  office: string;           // 勤務先名称（事業所）
+  service_type: string;     // サービス種別（例: "入所・居住系", "通所系"）
+  serial_number: number;    // 通し番号（例: 14）
+  student_number: string;   // 学生番号（例: "A014"）
+  status: string;           // ステータス（例: "active"）
+  created_at?: Date;        // 作成日時
+  last_updated?: Date;      // 更新日時
+}

@@ -10,9 +10,27 @@
 
     <header class="bg-white shadow">
       <div class="max-w-7xl mx-auto py-6 px-4 sm:px-6 lg:px-8">
-        <h1 class="text-3xl font-bold text-gray-900">
-          Carewell Dashboard
-        </h1>
+        <div class="flex items-center justify-between">
+          <h1 class="text-3xl font-bold text-gray-900">
+            Carewell Dashboard
+          </h1>
+          <nav class="flex space-x-4">
+            <router-link
+              to="/"
+              class="text-gray-700 hover:text-gray-900 px-3 py-2 rounded-md text-sm font-medium hover:bg-gray-100"
+              active-class="bg-gray-100 text-gray-900"
+            >
+              クラス一覧
+            </router-link>
+            <router-link
+              to="/students"
+              class="text-gray-700 hover:text-gray-900 px-3 py-2 rounded-md text-sm font-medium hover:bg-gray-100"
+              active-class="bg-gray-100 text-gray-900"
+            >
+              学生一覧
+            </router-link>
+          </nav>
+        </div>
       </div>
     </header>
 
