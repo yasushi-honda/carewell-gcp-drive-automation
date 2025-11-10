@@ -11,9 +11,11 @@
     <header class="bg-white shadow">
       <div class="max-w-7xl mx-auto py-6 px-4 sm:px-6 lg:px-8">
         <div class="flex items-center justify-between">
-          <h1 class="text-3xl font-bold text-gray-900">
-            Carewell Dashboard
-          </h1>
+          <router-link to="/" class="cursor-pointer">
+            <h1 class="text-3xl font-bold text-gray-900 hover:text-gray-700 transition-colors">
+              Carewell Dashboard
+            </h1>
+          </router-link>
           <nav class="flex space-x-4">
             <router-link
               to="/"
