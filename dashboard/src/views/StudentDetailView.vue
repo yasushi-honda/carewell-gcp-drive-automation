@@ -89,7 +89,7 @@
                   {{ student.status === 'active' ? 'アクティブ' : '辞退' }}
                 </span>
                 <button
-                  v-if="route.query.admin === 'true'"
+                  v-if="isAdmin"
                   @click="toggleStatus"
                   :disabled="updating"
                   class="px-3 py-1 text-sm font-medium rounded-md transition-colors"
@@ -115,7 +115,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue';
+import { ref, onMounted, computed } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { doc, getDoc, updateDoc, Timestamp } from 'firebase/firestore';
 import { getDb } from '../config/firebase';
@@ -131,6 +131,18 @@ const studentId = route.params.id as string;
 const student = ref<Student | null>(null);
 const loading = ref(true);
 const updating = ref(false);
+
+// 管理者モード判定（セッションストレージ使用）
+const isAdmin = computed(() => {
+  // URLパラメータをチェック
+  if (route.query.admin === 'true') {
+    // セッションストレージに保存
+    sessionStorage.setItem('adminMode', 'true');
+    return true;
+  }
+  // セッションストレージをチェック
+  return sessionStorage.getItem('adminMode') === 'true';
+});
 
 onMounted(async () => {
   try {
