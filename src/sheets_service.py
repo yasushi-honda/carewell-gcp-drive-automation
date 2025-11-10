@@ -302,16 +302,22 @@ class SheetsService:
                 # F:種別サービス, G:種別サービス（手動）, H:グループ, I:通し番号, J:受講生番号, K:クラス
                 student_data = {
                     "student_id": row[2].strip() if row[2] else "",  # C列: 日介番号
-                    "furigana": row[1].strip() if row[1] else "",    # B列: ふりがな
-                    "name": row[0].strip() if row[0] else "",        # A列: 氏名
+                    "furigana": row[1].strip() if row[1] else "",  # B列: ふりがな
+                    "name": row[0].strip() if row[0] else "",  # A列: 氏名
                     "group": row[7].strip() if row[7] else "未分類",  # H列: グループ
-                    "status": "active",                               # 固定値
-                    "company": row[3].strip() if row[3] else "",     # D列: 勤務先法人名称
-                    "office": row[4].strip() if row[4] else "",      # E列: 勤務先名称
+                    "status": "active",  # 固定値
+                    "company": row[3].strip() if row[3] else "",  # D列: 勤務先法人名称
+                    "office": row[4].strip() if row[4] else "",  # E列: 勤務先名称
                     # G列優先、空ならF列（手動→自動フォールバック）
-                    "service_type": (row[6].strip() if row[6] else (row[5].strip() if row[5] else "")),
-                    "serial_number": int(row[8]) if row[8] and row[8].isdigit() else 0,  # I列: 通し番号
-                    "student_number": row[9].strip() if row[9] else "",  # J列: 受講生番号
+                    "service_type": (
+                        row[6].strip() if row[6] else (row[5].strip() if row[5] else "")
+                    ),
+                    "serial_number": (
+                        int(row[8]) if row[8] and row[8].isdigit() else 0
+                    ),  # I列: 通し番号
+                    "student_number": (
+                        row[9].strip() if row[9] else ""
+                    ),  # J列: 受講生番号
                     "class_name": row[10].strip() if row[10] else "",  # K列: クラス
                 }
 

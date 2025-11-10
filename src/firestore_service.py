@@ -479,7 +479,9 @@ class FirestoreService:
             doc_ref = self.db.collection("students").document(student_id)
             doc_ref.set(doc_data, merge=True)
 
-            logger.info(f"Created/updated student: {student_id} - {student_data.get('name', '')}")
+            logger.info(
+                f"Created/updated student: {student_id} - {student_data.get('name', '')}"
+            )
             return True
 
         except Exception as e:
@@ -510,9 +512,7 @@ class FirestoreService:
                 return None
 
         except Exception as e:
-            logger.error(
-                f"Error getting student {student_id}: {e}", exc_info=True
-            )
+            logger.error(f"Error getting student {student_id}: {e}", exc_info=True)
             # Return None on error (fail-open strategy)
             return None
 
@@ -582,8 +582,6 @@ class FirestoreService:
             return students
 
         except Exception as e:
-            logger.error(
-                f"Error getting students by IDs: {e}", exc_info=True
-            )
+            logger.error(f"Error getting students by IDs: {e}", exc_info=True)
             # Return empty list on error (fail-open strategy)
             return []

@@ -251,7 +251,9 @@ def main(request):
                         metadata = {
                             "pass_status": submission.get("pass_status"),
                             "score": submission.get("score"),
-                            "grading_status": submission.get("status"),  # Renamed from "status" for clarity
+                            "grading_status": submission.get(
+                                "status"
+                            ),  # Renamed from "status" for clarity
                             "log_no": submission.get("log_no"),
                         }
                         # Remove None values to keep metadata clean
@@ -463,9 +465,7 @@ def sync_students_from_sheets(request):
         request_json = request.get_json(silent=True) or {}
         backfill = request_json.get("backfill", False)
 
-        logger.info(
-            f"Starting student sync from Google Sheets (backfill={backfill})"
-        )
+        logger.info(f"Starting student sync from Google Sheets (backfill={backfill})")
 
         # Initialize services
         sheets_service = SheetsService()
@@ -659,7 +659,9 @@ def _backfill_all_files(firestore_service):
                         student_id = file_data.get("student_id")
 
                         if not student_id:
-                            logger.warning(f"File {file_doc.id} has no student_id, skipping")
+                            logger.warning(
+                                f"File {file_doc.id} has no student_id, skipping"
+                            )
                             skipped_count += 1
                             continue
 
@@ -672,7 +674,9 @@ def _backfill_all_files(firestore_service):
                         # Get student data
                         student = student_lookup.get(student_id)
                         if not student:
-                            logger.warning(f"Student not found: {student_id}, skipping file {file_doc.id}")
+                            logger.warning(
+                                f"Student not found: {student_id}, skipping file {file_doc.id}"
+                            )
                             skipped_count += 1
                             continue
 
