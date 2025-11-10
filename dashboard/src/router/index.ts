@@ -31,6 +31,16 @@ const router = createRouter({
       component: () => import('../views/StudentDetailView.vue'),
       props: true,
     },
+    {
+      path: '/class/:className/task/:taskId/groups',
+      name: 'GroupList',
+      component: () => import('../views/GroupListView.vue'),
+    },
+    {
+      path: '/class/:className/task/:taskId/group/:groupName/students',
+      name: 'GroupStudents',
+      component: () => import('../views/GroupStudentsView.vue'),
+    },
   ],
 })
 
