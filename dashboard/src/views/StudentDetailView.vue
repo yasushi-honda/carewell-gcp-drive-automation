@@ -135,12 +135,19 @@ const isAdmin = ref(false);
 
 onMounted(async () => {
   // 管理者モード判定
+  console.log('[Admin Mode Debug] route.query.admin:', route.query.admin);
+  console.log('[Admin Mode Debug] sessionStorage.adminMode:', sessionStorage.getItem('adminMode'));
+
   if (route.query.admin === 'true') {
     sessionStorage.setItem('adminMode', 'true');
     isAdmin.value = true;
+    console.log('[Admin Mode Debug] Set admin mode from URL parameter');
   } else {
     isAdmin.value = sessionStorage.getItem('adminMode') === 'true';
+    console.log('[Admin Mode Debug] Admin mode from sessionStorage:', isAdmin.value);
   }
+
+  console.log('[Admin Mode Debug] Final isAdmin value:', isAdmin.value);
   try {
     const db = getDb();
     const docRef = doc(db, 'students', studentId);
