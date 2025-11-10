@@ -36,7 +36,10 @@
     <!-- 受講生情報 -->
     <div v-else>
       <!-- 基本情報カード -->
-      <div class="bg-white shadow-sm rounded-lg p-6 mb-6">
+      <div
+        class="shadow-sm rounded-lg p-6 mb-6 transition-colors"
+        :class="student.status === 'withdrawn' ? 'bg-gray-100' : 'bg-white'"
+      >
         <h1 class="text-3xl font-bold text-gray-900 mb-6">{{ student.name }}</h1>
 
         <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -76,14 +79,26 @@
               <span class="font-semibold text-gray-700 w-40">事業所:</span>
               <span class="text-gray-900">{{ student.office || '-' }}</span>
             </div>
-            <div class="flex">
+            <div class="flex items-center">
               <span class="font-semibold text-gray-700 w-40">ステータス:</span>
-              <span
-                :class="student.status === 'active' ? 'text-green-600' : 'text-gray-600'"
-                class="font-medium"
-              >
-                {{ student.status === 'active' ? 'アクティブ' : student.status }}
-              </span>
+              <div class="flex items-center gap-3">
+                <span
+                  :class="student.status === 'active' ? 'text-green-600' : 'text-red-600'"
+                  class="font-medium"
+                >
+                  {{ student.status === 'active' ? 'アクティブ' : '辞退' }}
+                </span>
+                <button
+                  @click="toggleStatus"
+                  :disabled="updating"
+                  class="px-3 py-1 text-sm font-medium rounded-md transition-colors"
+                  :class="student.status === 'active'
+                    ? 'bg-red-50 text-red-700 hover:bg-red-100'
+                    : 'bg-green-50 text-green-700 hover:bg-green-100'"
+                >
+                  {{ updating ? '更新中...' : (student.status === 'active' ? '辞退に変更' : 'アクティブに変更') }}
+                </button>
+              </div>
             </div>
           </div>
         </div>
@@ -101,7 +116,7 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
-import { doc, getDoc, Timestamp } from 'firebase/firestore';
+import { doc, getDoc, updateDoc, Timestamp } from 'firebase/firestore';
 import { getDb } from '../config/firebase';
 import type { Student } from '../types/models';
 import LoadingSkeleton from '../components/LoadingSkeleton.vue';
@@ -114,6 +129,7 @@ const studentId = route.params.id as string;
 
 const student = ref<Student | null>(null);
 const loading = ref(true);
+const updating = ref(false);
 
 onMounted(async () => {
   try {
@@ -145,6 +161,32 @@ onMounted(async () => {
     loading.value = false;
   }
 });
+
+/**
+ * ステータス切り替え（アクティブ ⇔ 辞退）
+ */
+const toggleStatus = async () => {
+  if (!student.value) return;
+
+  updating.value = true;
+  try {
+    const db = getDb();
+    const docRef = doc(db, 'students', studentId);
+    const newStatus = student.value.status === 'active' ? 'withdrawn' : 'active';
+
+    await updateDoc(docRef, {
+      status: newStatus,
+      last_updated: Timestamp.now()
+    });
+
+    student.value.status = newStatus;
+  } catch (err) {
+    console.error('Error updating student status:', err);
+    alert('ステータスの更新に失敗しました');
+  } finally {
+    updating.value = false;
+  }
+};
 
 const navigateBack = () => {
   router.push('/students');

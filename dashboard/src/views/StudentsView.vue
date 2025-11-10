@@ -144,7 +144,8 @@
             <tr
               v-for="student in sortedStudents"
               :key="student.student_id"
-              class="hover:bg-gray-50 cursor-pointer"
+              class="cursor-pointer transition-colors"
+              :class="student.status === 'withdrawn' ? 'bg-gray-100 hover:bg-gray-200 opacity-60' : 'hover:bg-gray-50'"
               @click="navigateToDetail(student.student_id)"
             >
               <td class="px-6 py-4 whitespace-nowrap">
@@ -250,11 +251,6 @@ const groupList = computed(() => {
 // クライアント側でのフィルタリング
 const filteredStudents = computed(() => {
   return students.value.filter((student) => {
-    // ステータスフィルター（アクティブな受講生のみ表示）
-    if (student.status !== 'active') {
-      return false;
-    }
-
     // クラスフィルター
     if (filterClass.value && student.class_name !== filterClass.value) {
       return false;

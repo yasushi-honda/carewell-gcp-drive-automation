@@ -98,7 +98,8 @@
             <tr
               v-for="student in filteredAndSortedStudents"
               :key="student.student_id"
-              class="hover:bg-gray-50 cursor-pointer"
+              class="cursor-pointer transition-colors"
+              :class="student.status === 'withdrawn' ? 'bg-gray-100 hover:bg-gray-200 opacity-60' : 'hover:bg-gray-50'"
               @click="navigateToDetail(student.student_id)"
             >
               <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
@@ -183,11 +184,6 @@ const getWorkplace = (student: Student): string => {
 // フィルタリング（クラス、グループ、検索クエリ）
 const filteredStudents = computed(() => {
   return students.value.filter((student) => {
-    // ステータスフィルター
-    if (student.status !== 'active') {
-      return false;
-    }
-
     // クラスフィルター（短縮形で比較）
     if (student.class_name !== shortClassName) {
       return false;
