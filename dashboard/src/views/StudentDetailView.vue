@@ -131,20 +131,16 @@ const studentId = route.params.id as string;
 const student = ref<Student | null>(null);
 const loading = ref(true);
 const updating = ref(false);
-
-// 管理者モード判定（セッションストレージ使用）
-const isAdmin = computed(() => {
-  // URLパラメータをチェック
-  if (route.query.admin === 'true') {
-    // セッションストレージに保存
-    sessionStorage.setItem('adminMode', 'true');
-    return true;
-  }
-  // セッションストレージをチェック
-  return sessionStorage.getItem('adminMode') === 'true';
-});
+const isAdmin = ref(false);
 
 onMounted(async () => {
+  // 管理者モード判定
+  if (route.query.admin === 'true') {
+    sessionStorage.setItem('adminMode', 'true');
+    isAdmin.value = true;
+  } else {
+    isAdmin.value = sessionStorage.getItem('adminMode') === 'true';
+  }
   try {
     const db = getDb();
     const docRef = doc(db, 'students', studentId);
