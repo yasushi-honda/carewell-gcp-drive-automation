@@ -55,6 +55,10 @@ const checkAdminMode = () => {
   if (route.query.admin === 'true') {
     sessionStorage.setItem('adminMode', 'true')
     console.log('[App.vue] Admin mode activated via URL parameter')
+  } else if (route.path === '/' && !route.query.admin) {
+    // ホームページに ?admin パラメータなしでアクセスした場合、admin モードをクリア
+    sessionStorage.removeItem('adminMode')
+    console.log('[App.vue] Admin mode cleared (homepage access without ?admin=true)')
   }
 }
 
