@@ -1,16 +1,9 @@
 {
-  "firestore": [
-    {
-      "database": "(default)",
-      "rules": "firestore.rules",
-      "indexes": "firestore.indexes.json"
-    },
-    {
-      "database": "carewell-native",
-      "rules": "firestore.rules",
-      "indexes": "firestore.indexes.json"
-    }
-  ],
+  "firestore": {
+    "database": "carewell-native",
+    "rules": "firestore.rules",
+    "indexes": "firestore.indexes.json"
+  },
   "hosting": {
     "site": "carewell-automation",
     "public": "dist",
