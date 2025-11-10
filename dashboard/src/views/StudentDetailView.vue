@@ -42,64 +42,76 @@
       >
         <h1 class="text-3xl font-bold text-gray-900 mb-6">{{ student.name }}</h1>
 
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-          <div class="space-y-3">
-            <div class="flex">
-              <span class="font-semibold text-gray-700 w-40">ふりがな:</span>
-              <span class="text-gray-900">{{ student.furigana }}</span>
-            </div>
-            <div class="flex">
-              <span class="font-semibold text-gray-700 w-40">受講生番号:</span>
-              <span class="text-gray-900">{{ student.student_number }}</span>
-            </div>
-            <div class="flex">
-              <span class="font-semibold text-gray-700 w-40">日介番号:</span>
-              <span class="text-gray-900">{{ student.student_id }}</span>
-            </div>
-            <div class="flex">
-              <span class="font-semibold text-gray-700 w-40">クラス:</span>
-              <span class="text-gray-900">{{ student.class_name || '-' }}</span>
-            </div>
-            <div class="flex">
-              <span class="font-semibold text-gray-700 w-40">グループ:</span>
-              <span class="text-gray-900">{{ student.group }}</span>
-            </div>
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          <!-- ふりがな -->
+          <div>
+            <div class="text-sm font-semibold text-gray-600 mb-1">ふりがな</div>
+            <div class="text-gray-900">{{ student.furigana }}</div>
           </div>
 
-          <div class="space-y-3">
-            <div class="flex">
-              <span class="font-semibold text-gray-700 w-40">サービス種別:</span>
-              <span class="text-gray-900">{{ student.service_type }}</span>
-            </div>
-            <div class="flex">
-              <span class="font-semibold text-gray-700 w-40">会社:</span>
-              <span class="text-gray-900">{{ student.company || '-' }}</span>
-            </div>
-            <div class="flex">
-              <span class="font-semibold text-gray-700 w-40">事業所:</span>
-              <span class="text-gray-900">{{ student.office || '-' }}</span>
-            </div>
-            <div class="flex items-center">
-              <span class="font-semibold text-gray-700 w-40">ステータス:</span>
-              <div class="flex items-center gap-3">
-                <span
-                  :class="student.status === 'active' ? 'text-green-600' : 'text-red-600'"
-                  class="font-medium"
-                >
-                  {{ student.status === 'active' ? 'アクティブ' : '辞退' }}
-                </span>
-                <button
-                  v-if="isAdmin"
-                  @click="toggleStatus"
-                  :disabled="updating"
-                  class="px-3 py-1 text-sm font-medium rounded-md transition-colors"
-                  :class="student.status === 'active'
-                    ? 'bg-red-50 text-red-700 hover:bg-red-100'
-                    : 'bg-green-50 text-green-700 hover:bg-green-100'"
-                >
-                  {{ updating ? '更新中...' : (student.status === 'active' ? '辞退に変更' : 'アクティブに変更') }}
-                </button>
-              </div>
+          <!-- 受講生番号 -->
+          <div>
+            <div class="text-sm font-semibold text-gray-600 mb-1">受講生番号</div>
+            <div class="text-gray-900">{{ student.student_number }}</div>
+          </div>
+
+          <!-- 日介番号 -->
+          <div>
+            <div class="text-sm font-semibold text-gray-600 mb-1">日介番号</div>
+            <div class="text-gray-900">{{ student.student_id }}</div>
+          </div>
+
+          <!-- クラス -->
+          <div>
+            <div class="text-sm font-semibold text-gray-600 mb-1">クラス</div>
+            <div class="text-gray-900">{{ student.class_name || '-' }}</div>
+          </div>
+
+          <!-- グループ -->
+          <div>
+            <div class="text-sm font-semibold text-gray-600 mb-1">グループ</div>
+            <div class="text-gray-900">{{ student.group }}</div>
+          </div>
+
+          <!-- サービス種別 -->
+          <div class="md:col-span-2 lg:col-span-3">
+            <div class="text-sm font-semibold text-gray-600 mb-1">サービス種別</div>
+            <div class="text-gray-900">{{ student.service_type }}</div>
+          </div>
+
+          <!-- 会社 -->
+          <div>
+            <div class="text-sm font-semibold text-gray-600 mb-1">会社</div>
+            <div class="text-gray-900">{{ student.company || '-' }}</div>
+          </div>
+
+          <!-- 事業所 -->
+          <div>
+            <div class="text-sm font-semibold text-gray-600 mb-1">事業所</div>
+            <div class="text-gray-900">{{ student.office || '-' }}</div>
+          </div>
+
+          <!-- ステータス -->
+          <div>
+            <div class="text-sm font-semibold text-gray-600 mb-1">ステータス</div>
+            <div class="flex items-center gap-3">
+              <span
+                :class="student.status === 'active' ? 'text-green-600' : 'text-red-600'"
+                class="font-medium"
+              >
+                {{ student.status === 'active' ? 'アクティブ' : '辞退' }}
+              </span>
+              <button
+                v-if="isAdmin"
+                @click="toggleStatus"
+                :disabled="updating"
+                class="px-3 py-1 text-sm font-medium rounded-md transition-colors"
+                :class="student.status === 'active'
+                  ? 'bg-red-50 text-red-700 hover:bg-red-100'
+                  : 'bg-green-50 text-green-700 hover:bg-green-100'"
+              >
+                {{ updating ? '更新中...' : (student.status === 'active' ? '辞退に変更' : 'アクティブに変更') }}
+              </button>
             </div>
           </div>
         </div>
