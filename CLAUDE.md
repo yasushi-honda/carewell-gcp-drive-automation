@@ -284,6 +284,7 @@ Before committing changes to Firestore-related code:
 | 11 | Assuming Parameter Names | 2025-11-08 | Page 2+ 0% 成功 | ✅ DevTools で実際の HTML/パラメータを検証 |
 | 12 | Phase 1 go_back Skip | 2025-11-08 | 2人目以降失敗 | ✅ 必須処理をスキップせず、タイムアウト短縮で最適化 |
 | 13 | Firestore Index Missing | 2025-11-10 | 25分タイムアウト | ✅ **全インデックスを `firestore.indexes.json` で管理（IaC 徹底）** |
+| 14 | Dashboard Class Display Confusion | 2025-11-18 | 誤解による作業 | ✅ **Dashboard の2つのクラス表示機能の違いを理解**（詳細: `docs/DASHBOARD_CLASS_DISPLAY.md`） |
 
 ### 🚨 最重要パターン
 
@@ -304,9 +305,14 @@ Before committing changes to Firestore-related code:
 - インシデント #13（手動作成インデックス + 自動デプロイ）
 - 教訓: **手動インフラ変更は必ずコードに記録（"コードにないものは存在しない"）**
 
-**パターン4: デプロイ後の検証不足**
+**パターン5: デプロイ後の検証不足**
 - インシデント #8
 - 教訓: **GitHub Actions 成功 ≠ 新コード実行中を忘れずに**
+
+**パターン6: 複数の類似機能の混同**
+- インシデント #14（Dashboard のクラス表示）
+- 教訓: **同じ「クラス表示」でも、データソースと更新方法が異なる場合がある**
+- 参照: `docs/DASHBOARD_CLASS_DISPLAY.md`
 
 **詳細な教訓・解決策・チェックリストは `docs/common-mistakes.md` を参照**
 

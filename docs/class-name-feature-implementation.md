@@ -745,6 +745,61 @@ https://console.firebase.google.com/u/0/project/carewell-automation/firestore/da
 
 ---
 
+## FAQ
+
+### Q1: `/admin/sync-students-from-sheets` を実行したら、Dashboard に新しいクラスが表示されますか？
+
+**A**: 部分的に表示されます。
+
+- ✅ **学生詳細ページ**: 自動的に反映されます
+- ✅ **グループページ**: 自動的に反映されます
+- ❌ **ホームページのクラス一覧カード**: 手動でコード更新が必要です
+
+詳細は `docs/DASHBOARD_CLASS_DISPLAY.md` を参照してください。
+
+---
+
+### Q2: 同期 API は何度実行しても安全ですか？
+
+**A**: はい、安全です。
+
+- `merge=True` による差分更新（既存フィールドは保持）
+- 冪等性があり、何度実行しても同じ結果
+- 手動で追加したカスタムフィールドは削除されない
+
+**動作詳細**:
+```python
+# src/firestore_service.py Line 480
+doc_ref.set(doc_data, merge=True)
+```
+
+---
+
+### Q3: Google Sheets から削除した学生は Firestore からも削除されますか？
+
+**A**: いいえ、削除されません。
+
+- Firestore のドキュメントはそのまま残ります
+- `status` フィールドも `"active"` のまま
+
+**削除が必要な場合**:
+- 手動で Firestore Console から削除
+- または `status` を `"inactive"` に変更
+
+---
+
+### Q4: 新しいクラスを Dashboard ホームページに追加するには？
+
+**A**: 以下の手順が必要です：
+
+1. `dashboard/src/config/classes.ts` の `KNOWN_CLASSES` 配列に追加
+2. `CLASS_NAME_MAPPING` にもマッピングを追加
+3. Git commit → Push → GitHub Actions で自動デプロイ
+
+詳細は `docs/DASHBOARD_CLASS_DISPLAY.md` - シナリオ1 を参照してください。
+
+---
+
 ## まとめ
 
 今回の実装により、以下を達成しました：
@@ -762,12 +817,20 @@ https://console.firebase.google.com/u/0/project/carewell-automation/firestore/da
 
 ### 今後の課題
 
-1. 自動同期機能の実装
+1. 自動同期機能の実装（Cloud Scheduler による定期実行）
 2. クラス管理画面の追加
 3. クラス別統計情報の表示
+
+### 重要な注意事項
+
+⚠️ **Dashboard のクラス表示は2つの異なる実装があります**:
+- **ホームページのクラス一覧カード**: `KNOWN_CLASSES` ハードコード（手動更新）
+- **学生詳細・グループページ**: Firestore から動的取得（自動更新）
+
+詳細は `docs/DASHBOARD_CLASS_DISPLAY.md` を必ず参照してください。
 
 ---
 
 **ドキュメント作成日**: 2025-11-10
-**最終更新日**: 2025-11-10
+**最終更新日**: 2025-11-18
 **作成者**: Claude Code AI Agent
