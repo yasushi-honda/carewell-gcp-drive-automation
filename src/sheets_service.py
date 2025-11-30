@@ -561,12 +561,14 @@ class SheetsService:
                     ignored = second
                     resolution = "first_occurrence"
 
-                duplicates.append({
-                    "student_id": student_id,
-                    "kept": kept,
-                    "ignored": ignored,
-                    "resolution": resolution,
-                })
+                duplicates.append(
+                    {
+                        "student_id": student_id,
+                        "kept": kept,
+                        "ignored": ignored,
+                        "resolution": resolution,
+                    }
+                )
 
             logger.info(f"Found {len(duplicates)} duplicate student_ids")
             return {"duplicates": duplicates, "class_urls": class_urls}
