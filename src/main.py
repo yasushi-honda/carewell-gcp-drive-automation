@@ -541,17 +541,17 @@ def get_duplicate_students(request):
         # Get duplicates
         duplicates = sheets_service.get_duplicate_students(spreadsheet_id)
 
-        response = _add_cors_headers({
+        response = {
             "status": "success",
             "duplicates": duplicates,
             "total_duplicates": len(duplicates),
-        })
+        }
 
-        return response, 200
+        return _add_cors_headers(response, 200)
 
     except Exception as e:
         logger.error(f"Error getting duplicate students: {str(e)}", exc_info=True)
-        return _add_cors_headers({"status": "error", "error": str(e)}), 500
+        return _add_cors_headers({"status": "error", "error": str(e)}, 500)
 
 
 def _sync_students(sheets_service, firestore_service, spreadsheet_id):
