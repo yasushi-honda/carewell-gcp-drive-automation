@@ -1,0 +1,282 @@
+---
+layout: default
+title: Carewell Automation Project
+---
+
+<style>
+  .doc-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    gap: 1rem;
+    margin: 2rem 0;
+  }
+  .doc-card {
+    background: #f6f8fa;
+    border: 1px solid #d0d7de;
+    border-radius: 6px;
+    padding: 1rem;
+  }
+  .doc-card h3 {
+    margin-top: 0;
+    color: #0969da;
+  }
+  .doc-card ul {
+    margin: 0;
+    padding-left: 1.2rem;
+  }
+  .doc-card a {
+    color: #0969da;
+    text-decoration: none;
+  }
+  .doc-card a:hover {
+    text-decoration: underline;
+  }
+  .status-badge {
+    display: inline-block;
+    padding: 0.25rem 0.5rem;
+    border-radius: 4px;
+    font-size: 0.8rem;
+    font-weight: 600;
+  }
+  .status-active {
+    background: #dafbe1;
+    color: #1a7f37;
+  }
+  .status-info {
+    background: #ddf4ff;
+    color: #0969da;
+  }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 1rem 0;
+  }
+  th, td {
+    border: 1px solid #d0d7de;
+    padding: 0.5rem;
+    text-align: left;
+  }
+  th {
+    background: #f6f8fa;
+  }
+  .mermaid {
+    background: white;
+    padding: 1rem;
+    border-radius: 6px;
+    margin: 1rem 0;
+  }
+</style>
+
+<script src="https://cdn.jsdelivr.net/npm/mermaid/dist/mermaid.min.js"></script>
+<script>mermaid.initialize({startOnLoad:true});</script>
+
+<h1>🏠 Carewell Automation Project</h1>
+
+<p><strong>プロジェクト全体の実績・経緯・システム構成をまとめたポータルページ</strong></p>
+
+<p>
+  <span class="status-badge status-active">✅ 本番運用中</span>
+  <span class="status-badge status-info">最終更新: 2025-11-30</span>
+</p>
+
+<hr>
+
+<h2>📋 プロジェクト概要</h2>
+
+<p><strong>Carewell File Automation System</strong></p>
+<p>Carewell Webサービスから学生の提出ファイルを自動取得し、Google Driveに保存、Firestoreにメタデータを記録。講師向けDashboardで提出状況を可視化。</p>
+
+<table>
+  <tr>
+    <th>サービス</th>
+    <th>URL</th>
+  </tr>
+  <tr>
+    <td><strong>Dashboard</strong></td>
+    <td><a href="https://carewell-automation.web.app/">https://carewell-automation.web.app/</a></td>
+  </tr>
+  <tr>
+    <td><strong>Dashboard (管理者)</strong></td>
+    <td><a href="https://carewell-automation.web.app/?admin=true">https://carewell-automation.web.app/?admin=true</a></td>
+  </tr>
+  <tr>
+    <td><strong>GitHub</strong></td>
+    <td><a href="https://github.com/yasushi-honda/carewell-gcp-drive-automation">Repository</a></td>
+  </tr>
+</table>
+
+<hr>
+
+<h2>📊 システム構成図</h2>
+
+<div class="mermaid">
+graph TB
+    subgraph "Data Sources"
+        GS[("Google Sheets<br/>統合_受講者リスト")]
+        CW["Carewell Web<br/>jaccw-carewel.study.jp"]
+    end
+
+    subgraph "Cloud Scheduler"
+        CS1["carewell-class*-task*<br/>毎時 :00, :30"]
+        CS4["carewell-student-sync-daily<br/>毎日 JST 02:00"]
+    end
+
+    subgraph "Cloud Run"
+        MAIN["main.py"]
+        PA["playwright_automation.py"]
+        FS["firestore_service.py"]
+        SS["sheets_service.py"]
+    end
+
+    subgraph "Storage"
+        GD[("Google Drive")]
+        FB[("Firestore")]
+    end
+
+    subgraph "Frontend"
+        VUE["Vue.js Dashboard"]
+    end
+
+    CS1 --> MAIN
+    CS4 --> MAIN
+    MAIN --> PA
+    MAIN --> SS
+    PA <--> CW
+    SS <--> GS
+    PA --> FS
+    FS --> GD
+    FS --> FB
+    VUE <--> FB
+</div>
+
+<hr>
+
+<h2>📁 ドキュメント一覧</h2>
+
+<div class="doc-grid">
+  <div class="doc-card">
+    <h3>🚀 クイックスタート</h3>
+    <ul>
+      <li><a href="QUICKSTART">QUICKSTART.md</a> - 5分ガイド</li>
+      <li><a href="QUICKSTART_FOR_NEW_AI">AI向けオンボーディング</a></li>
+    </ul>
+  </div>
+
+  <div class="doc-card">
+    <h3>📝 機能引き継ぎ</h3>
+    <ul>
+      <li><a href="STUDENT_SYNC_FEATURE_HANDOVER">受講生同期機能</a></li>
+      <li><a href="STUDENT_SYNC_AUTOMATION_HANDOVER">自動同期設定</a></li>
+      <li><a href="DASHBOARD_CLASS_DISPLAY">クラス表示機能</a></li>
+    </ul>
+  </div>
+
+  <div class="doc-card">
+    <h3>🔧 トラブルシューティング</h3>
+    <ul>
+      <li><a href="troubleshooting">問題解決フロー</a></li>
+      <li><a href="common-mistakes">過去インシデント</a></li>
+      <li><a href="EMERGENCY_RESPONSE">緊急対応ガイド</a></li>
+    </ul>
+  </div>
+
+  <div class="doc-card">
+    <h3>📐 設計・アーキテクチャ</h3>
+    <ul>
+      <li><a href="architecture-overview">システムアーキテクチャ</a></li>
+      <li><a href="PROJECT_TIMELINE">プロジェクトタイムライン</a></li>
+      <li><a href="design">設計方針</a></li>
+    </ul>
+  </div>
+</div>
+
+<hr>
+
+<h2>📅 開発タイムライン</h2>
+
+<div class="mermaid">
+gantt
+    title 開発タイムライン (2025年11月)
+    dateFormat YYYY-MM-DD
+
+    section Phase 1
+    Firestoreスキーマ改善    :done, 2025-11-04, 2d
+    Playwright修正          :done, 2025-11-05, 1d
+
+    section Phase 2
+    ページネーション対応     :done, 2025-11-06, 3d
+    go_back修正             :done, 2025-11-08, 1d
+
+    section Phase 3
+    Dashboard強化           :done, 2025-11-09, 2d
+
+    section Phase 4
+    受講生同期              :done, 2025-11-17, 2d
+    L列・手動同期           :done, 2025-11-30, 1d
+</div>
+
+<hr>
+
+<h2>🗂️ Firestore スキーマ</h2>
+
+<div class="mermaid">
+erDiagram
+    SUBMISSIONS ||--o{ TASKS : "tasks/"
+    TASKS ||--o{ FILES : "files/"
+
+    SUBMISSIONS {
+        string class_name PK
+    }
+
+    TASKS {
+        string task_id PK
+        string task_pattern
+        number file_count
+    }
+
+    FILES {
+        string composite_key PK
+        string student_id
+        string student_name
+        string filename
+    }
+
+    STUDENTS {
+        string student_id PK
+        string name
+        string class_name
+        string status
+    }
+</div>
+
+<h3>コレクションパス</h3>
+<pre>
+submissions/{class_name}/tasks/{task_id}/files/{composite_key}
+students/{student_id}
+</pre>
+
+<hr>
+
+<h2>⚙️ Cloud Scheduler</h2>
+
+<table>
+  <tr>
+    <th>ジョブ</th>
+    <th>スケジュール</th>
+    <th>機能</th>
+  </tr>
+  <tr>
+    <td>carewell-class*-task* (14ジョブ)</td>
+    <td>毎時 :00, :30</td>
+    <td>ファイル自動収集</td>
+  </tr>
+  <tr>
+    <td>carewell-student-sync-daily</td>
+    <td>毎日 JST 02:00</td>
+    <td>学生データ同期 + Backfill</td>
+  </tr>
+</table>
+
+<hr>
+
+<p><strong>メンテナー</strong>: Claude Code AI Agent</p>
