@@ -41,6 +41,9 @@ Kiro-style Spec Driven Development implementation using claude code slash comman
 - [ ] 問題発生時に最初にやることは？ → CLAUDE.md CRITICAL を読む
 - [ ] Cloud Run ログの確認コマンドは？ → `gcloud logging read ...`
 - [ ] Dashboard の URL は？ → `https://carewell-automation.web.app/`
+- [ ] 受講生同期の自動実行タイミングは？ → 毎日 JST 02:00
+- [ ] 手動同期ボタンの出し方は？ → `?admin=true` パラメータ付きでアクセス
+- [ ] 受講生を無効化する方法は？ → Google Sheets L列「無効」にチェック
 
 **次のステップ**: 実際の作業を開始する前に、必ず下記の「🚨 CRITICAL」セクションを読んでください。
 

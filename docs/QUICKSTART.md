@@ -48,6 +48,26 @@ Carewell Webサービスから学生の提出ファイルを自動取得し、Go
 クラス一覧 → 課題一覧 → [👥 受講生一覧] → グループ一覧 → グループ別受講生一覧
 ```
 
+### 受講生同期機能（2025-11-30追加）
+
+**Google Sheets ↔ Firestore 自動同期**:
+
+- **自動同期**: 毎日 JST 02:00 に `carewell-student-sync-daily` ジョブが実行
+- **手動同期**: Dashboard 管理者モード (`?admin=true`) で「データ同期」ボタン
+- **論理削除**: Google Sheets L列「無効」チェックボックス → `status: "inactive"`
+- **Backfill**: 受講生データ変更時、全ファイルの非正規化データも自動更新
+
+**データフロー**:
+```
+Google Sheets (統合_受講者リスト)
+    ↓ 毎日 JST 02:00 / 手動同期
+Firestore students/ コレクション
+    ↓ Backfill
+Firestore files/ 内の非正規化データ
+```
+
+詳細: [docs/STUDENT_SYNC_FEATURE_HANDOVER.md](STUDENT_SYNC_FEATURE_HANDOVER.md)
+
 ---
 
 ## システムアーキテクチャ
@@ -328,6 +348,6 @@ https://carewell-automation.web.app/
 
 ---
 
-**最終更新**: 2025/11/05
-**バージョン**: 1.0
+**最終更新**: 2025/11/30
+**バージョン**: 1.1
 **メンテナー**: Claude Code
