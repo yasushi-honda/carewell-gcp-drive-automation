@@ -299,7 +299,15 @@ class SheetsService:
                     row.append("")
 
                 # Check L列「無効」flag (checkbox returns "TRUE" or "FALSE" as string)
-                is_inactive = row[11].strip().upper() == "TRUE" if row[11] else False
+                l_column_value = row[11].strip() if row[11] else ""
+                is_inactive = l_column_value.upper() == "TRUE"
+
+                # Debug log for inactive students
+                if is_inactive:
+                    logger.info(
+                        f"Found INACTIVE student at row {row_index}: "
+                        f"name={row[0]}, student_id={row[2]}, L列値='{l_column_value}'"
+                    )
 
                 # Extract student data (correct column mapping)
                 # A:氏名, B:ふりがな, C:日介番号, D:勤務先法人名称, E:勤務先名称,
@@ -334,8 +342,11 @@ class SheetsService:
 
                 students.append(student_data)
 
+            # Count inactive students for summary
+            inactive_count = sum(1 for s in students if s.get("status") == "inactive")
             logger.info(
-                f"Successfully read {len(students)} student records from spreadsheet"
+                f"Successfully read {len(students)} student records from spreadsheet "
+                f"(active: {len(students) - inactive_count}, inactive: {inactive_count})"
             )
             return students
 
