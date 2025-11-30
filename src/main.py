@@ -725,6 +725,26 @@ def _backfill_all_files(firestore_service):
         }
 
 
+def _add_cors_headers(response_data, status_code=200):
+    """
+    Add CORS headers to response for browser requests
+
+    Args:
+        response_data: Response data (dict or tuple)
+        status_code: HTTP status code
+
+    Returns:
+        Tuple of (response_data, status_code, headers)
+    """
+    headers = {
+        "Access-Control-Allow-Origin": "https://carewell-automation.web.app",
+        "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+        "Access-Control-Allow-Headers": "Content-Type, Authorization",
+        "Access-Control-Max-Age": "3600",
+    }
+    return response_data, status_code, headers
+
+
 def app(request):
     """
     Main entrypoint with routing
@@ -734,16 +754,25 @@ def app(request):
     - POST /cleanup                       → Firestore cleanup (administrative)
     - POST /admin/sync-students-from-sheets → Student sync from Google Sheets (administrative)
     - GET  /health                        → Health check
+    - OPTIONS /*                          → CORS preflight
     """
     path = request.path
     method = request.method
 
     logger.info(f"Request: {method} {path}")
 
+    # Handle CORS preflight requests
+    if method == "OPTIONS":
+        return _add_cors_headers({}, 204)
+
     if path == "/cleanup" and method == "POST":
         return cleanup_firestore(request)
     elif path == "/admin/sync-students-from-sheets" and method == "POST":
-        return sync_students_from_sheets(request)
+        result = sync_students_from_sheets(request)
+        # Add CORS headers for browser requests
+        if isinstance(result, tuple):
+            return _add_cors_headers(result[0], result[1])
+        return _add_cors_headers(result, 200)
     elif path == "/health" and method == "GET":
         return health_check(request)
     elif path == "/" and method == "POST":
