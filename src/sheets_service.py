@@ -379,7 +379,8 @@ class SheetsService:
                     else:
                         logger.warning(
                             f"Duplicate student_id {sid} with same status '{existing['status']}': "
-                            f"keeping first occurrence (class={existing.get('class_name')})"
+                            f"keeping first occurrence (class={existing.get('class_name')}), "
+                            f"ignoring duplicate (class={student.get('class_name')})"
                         )
                 else:
                     student_map[sid] = student
