@@ -505,6 +505,55 @@ def sync_students_from_sheets(request):
         return {"status": "error", "error": str(e)}, 500
 
 
+def get_duplicate_students(request):
+    """
+    Admin endpoint for getting duplicate student_id information
+
+    Returns:
+    {
+        "status": "success",
+        "duplicates": [
+            {
+                "student_id": "N9903499",
+                "name": "山田太郎",
+                "kept_class": "No3",
+                "kept_status": "active",
+                "ignored_class": "No5",
+                "ignored_status": "inactive",
+                "resolution": "active_inactive"
+            },
+            ...
+        ],
+        "total_duplicates": 23
+    }
+    """
+    try:
+        logger.info("Getting duplicate student information from Google Sheets")
+
+        # Initialize service
+        sheets_service = SheetsService()
+
+        # Get spreadsheet ID
+        spreadsheet_id = os.environ.get(
+            "STUDENT_SPREADSHEET_ID", "1AQ12-h3n_NmN2kWxi4Z_g354X0wmUyMKAPeAsXJwu_w"
+        )
+
+        # Get duplicates
+        duplicates = sheets_service.get_duplicate_students(spreadsheet_id)
+
+        response = _add_cors_headers({
+            "status": "success",
+            "duplicates": duplicates,
+            "total_duplicates": len(duplicates),
+        })
+
+        return response, 200
+
+    except Exception as e:
+        logger.error(f"Error getting duplicate students: {str(e)}", exc_info=True)
+        return _add_cors_headers({"status": "error", "error": str(e)}), 500
+
+
 def _sync_students(sheets_service, firestore_service, spreadsheet_id):
     """
     Sync student data from Google Sheets to Firestore students collection
@@ -753,6 +802,7 @@ def app(request):
     - POST /                              → File collection (main)
     - POST /cleanup                       → Firestore cleanup (administrative)
     - POST /admin/sync-students-from-sheets → Student sync from Google Sheets (administrative)
+    - GET  /admin/duplicate-students      → Get duplicate student_id info (administrative)
     - GET  /health                        → Health check
     - OPTIONS /*                          → CORS preflight
     """
@@ -773,6 +823,8 @@ def app(request):
         if isinstance(result, tuple):
             return _add_cors_headers(result[0], result[1])
         return _add_cors_headers(result, 200)
+    elif path == "/admin/duplicate-students" and method == "GET":
+        return get_duplicate_students(request)
     elif path == "/health" and method == "GET":
         return health_check(request)
     elif path == "/" and method == "POST":
@@ -784,6 +836,7 @@ def app(request):
                 "POST /",
                 "POST /cleanup",
                 "POST /admin/sync-students-from-sheets",
+                "GET /admin/duplicate-students",
                 "GET /health",
             ],
         }, 404

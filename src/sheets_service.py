@@ -407,6 +407,121 @@ class SheetsService:
             # Return empty list on error (fail-open strategy)
             return []
 
+    def get_duplicate_students(
+        self, spreadsheet_id: str, sheet_name: str = "統合_受講者リスト"
+    ) -> List[dict]:
+        """
+        Get duplicate student_id information from Google Sheets
+
+        Args:
+            spreadsheet_id: Google Sheets spreadsheet ID
+            sheet_name: Sheet name (default: "統合_受講者リスト")
+
+        Returns:
+            List of duplicate student information:
+            - student_id: 日介番号
+            - name: 氏名
+            - kept_class: 保持されるクラス
+            - kept_status: 保持される側のステータス
+            - ignored_class: 無視されるクラス (= 無効化すべきクラス)
+            - ignored_status: 無視される側のステータス
+            - resolution: 解決方法 ('active_inactive' or 'first_occurrence')
+        """
+        try:
+            logger.info(
+                f"Reading duplicate student data from spreadsheet: {spreadsheet_id}"
+            )
+
+            # Escape single quotes in sheet name for A1 notation
+            escaped_name = sheet_name.replace("'", "''")
+
+            # Read A～L columns
+            result = (
+                self.service.spreadsheets()
+                .values()
+                .get(spreadsheetId=spreadsheet_id, range=f"'{escaped_name}'!A:L")
+                .execute()
+            )
+
+            values = result.get("values", [])
+
+            if not values:
+                return []
+
+            # Skip header row
+            data_rows = values[1:]
+
+            # Track all occurrences of each student_id
+            student_occurrences = {}
+
+            for row_index, row in enumerate(data_rows, start=2):
+                if not any(row):
+                    continue
+
+                while len(row) < 12:
+                    row.append("")
+
+                student_id = row[2].strip() if row[2] else ""
+                if not student_id:
+                    continue
+
+                name = row[0].strip() if row[0] else ""
+                class_name = row[10].strip() if row[10] else ""
+                l_column = row[11].strip().upper() if row[11] else ""
+                status = "inactive" if l_column == "TRUE" else "active"
+
+                if student_id not in student_occurrences:
+                    student_occurrences[student_id] = []
+
+                student_occurrences[student_id].append({
+                    "name": name,
+                    "class": class_name,
+                    "status": status,
+                    "row": row_index,
+                })
+
+            # Find duplicates and determine resolution
+            duplicates = []
+
+            for student_id, occurrences in student_occurrences.items():
+                if len(occurrences) < 2:
+                    continue
+
+                # Determine which one is kept
+                first = occurrences[0]
+                second = occurrences[1]
+
+                # Resolution logic matches get_student_data()
+                if first["status"] == "inactive" and second["status"] == "active":
+                    kept = second
+                    ignored = first
+                    resolution = "active_inactive"
+                elif first["status"] == "active" and second["status"] == "inactive":
+                    kept = first
+                    ignored = second
+                    resolution = "active_inactive"
+                else:
+                    kept = first
+                    ignored = second
+                    resolution = "first_occurrence"
+
+                duplicates.append({
+                    "student_id": student_id,
+                    "name": kept["name"],
+                    "kept_class": kept["class"],
+                    "kept_status": kept["status"],
+                    "ignored_class": ignored["class"],
+                    "ignored_status": ignored["status"],
+                    "resolution": resolution,
+                })
+
+            logger.info(f"Found {len(duplicates)} duplicate student_ids")
+            return duplicates
+
+        except Exception as e:
+            logger.error(f"Error getting duplicate students: {e}", exc_info=True)
+            return []
+
     def get_stats(self, spreadsheet_id: str, sheet_name: str = "Sheet1") -> dict:
         """
         Get statistics from spreadsheet

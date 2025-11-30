@@ -41,6 +41,11 @@ const router = createRouter({
       name: 'GroupStudents',
       component: () => import('../views/GroupStudentsView.vue'),
     },
+    {
+      path: '/admin/duplicates',
+      name: 'duplicates',
+      component: () => import('../views/DuplicatesView.vue'),
+    },
   ],
 })
 

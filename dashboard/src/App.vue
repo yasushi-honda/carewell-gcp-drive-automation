@@ -80,6 +80,15 @@
               >
                 受講生一覧
               </router-link>
+              <!-- 管理者モード: 重複一覧 -->
+              <router-link
+                v-if="isAdmin"
+                to="/admin/duplicates"
+                class="text-red-600 hover:text-red-800 px-3 py-2 rounded-md text-sm font-medium hover:bg-red-50"
+                active-class="bg-red-50 text-red-800"
+              >
+                重複一覧
+              </router-link>
             </nav>
           </div>
         </div>
