@@ -342,13 +342,62 @@ class SheetsService:
 
                 students.append(student_data)
 
+            # Handle duplicate student_ids: prioritize 'active' over 'inactive'
+            # When the same student_id appears multiple times (e.g., in different classes),
+            # keep the 'active' one and discard the 'inactive' one
+            student_map = {}
+            duplicates_resolved = 0
+
+            for student in students:
+                sid = student["student_id"]
+                if sid in student_map:
+                    existing = student_map[sid]
+                    # If existing is inactive and new is active, replace
+                    if (
+                        existing["status"] == "inactive"
+                        and student["status"] == "active"
+                    ):
+                        logger.info(
+                            f"Duplicate student_id {sid}: replacing inactive "
+                            f"(row with class={existing.get('class_name')}) with active "
+                            f"(row with class={student.get('class_name')})"
+                        )
+                        student_map[sid] = student
+                        duplicates_resolved += 1
+                    # If existing is active and new is inactive, keep existing
+                    elif (
+                        existing["status"] == "active"
+                        and student["status"] == "inactive"
+                    ):
+                        logger.info(
+                            f"Duplicate student_id {sid}: keeping active "
+                            f"(row with class={existing.get('class_name')}), "
+                            f"ignoring inactive (row with class={student.get('class_name')})"
+                        )
+                        duplicates_resolved += 1
+                    # Both same status - keep first one (or could merge)
+                    else:
+                        logger.warning(
+                            f"Duplicate student_id {sid} with same status '{existing['status']}': "
+                            f"keeping first occurrence (class={existing.get('class_name')})"
+                        )
+                else:
+                    student_map[sid] = student
+
+            # Convert back to list
+            deduplicated_students = list(student_map.values())
+
             # Count inactive students for summary
-            inactive_count = sum(1 for s in students if s.get("status") == "inactive")
-            logger.info(
-                f"Successfully read {len(students)} student records from spreadsheet "
-                f"(active: {len(students) - inactive_count}, inactive: {inactive_count})"
+            inactive_count = sum(
+                1 for s in deduplicated_students if s.get("status") == "inactive"
             )
-            return students
+            logger.info(
+                f"Successfully read {len(students)} student records from spreadsheet, "
+                f"deduplicated to {len(deduplicated_students)} "
+                f"(active: {len(deduplicated_students) - inactive_count}, inactive: {inactive_count}, "
+                f"duplicates resolved: {duplicates_resolved})"
+            )
+            return deduplicated_students
 
         except Exception as e:
             logger.error(
