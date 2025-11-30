@@ -612,6 +612,11 @@ def _backfill_all_files(firestore_service):
 
     Returns:
         Dictionary with backfill results
+
+    Note:
+        This function ALWAYS updates all files with the latest student data,
+        ensuring consistency between students/ and files/ collections.
+        Previously existing data is overwritten with current master data.
     """
     try:
         logger.info("Starting backfill of existing files with student data...")
@@ -665,12 +670,6 @@ def _backfill_all_files(firestore_service):
                             skipped_count += 1
                             continue
 
-                        # Check if student data already exists in file
-                        if file_data.get("student_group"):
-                            # Already has denormalized data, skip
-                            skipped_count += 1
-                            continue
-
                         # Get student data
                         student = student_lookup.get(student_id)
                         if not student:
@@ -680,7 +679,7 @@ def _backfill_all_files(firestore_service):
                             skipped_count += 1
                             continue
 
-                        # Update file with denormalized student data
+                        # Update file with denormalized student data (always overwrite)
                         update_data = {
                             "student_furigana": student.get("furigana", ""),
                             "student_group": student.get("group", "未分類"),

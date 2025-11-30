@@ -10,6 +10,13 @@
 
 Google Sheets の学生データを毎日自動的に Firestore に同期する Cloud Scheduler Job を実装しました。
 
+### 同期の仕組み
+
+1. **Phase 1: 学生マスター同期** - Google Sheets → `students/` コレクション
+2. **Phase 2: ファイル Backfill** - `students/` → `files/` 内の非正規化データ更新
+
+これにより、**学生マスターの変更（氏名、グループ、ステータス等）が過去・現在・未来の全ファイルに反映**されます。
+
 ### 自動化の効果
 
 | 項目 | 従来（手動） | 現在（自動） |
@@ -32,6 +39,8 @@ Google Sheets の学生データを毎日自動的に Firestore に同期する 
 **実行頻度**: 毎日
 
 **エンドポイント**: `POST https://carewell-file-collector-imczapxkba-an.a.run.app/admin/sync-students-from-sheets`
+
+**リクエストボディ**: `{"backfill": true}`
 
 **認証**: OIDC (`carewell-automation-sa@carewell-automation.iam.gserviceaccount.com`)
 
