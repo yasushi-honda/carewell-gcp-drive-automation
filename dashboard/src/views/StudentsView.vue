@@ -15,7 +15,7 @@
             id="search-query"
             v-model="searchQuery"
             type="text"
-            placeholder="氏名・ふりがなで検索"
+            placeholder="氏名・ふりがな・日介番号で検索"
             class="block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm py-2 px-3 border"
           />
         </div>
@@ -266,12 +266,13 @@ const filteredStudents = computed(() => {
       return false;
     }
 
-    // 検索クエリ
+    // 検索クエリ（氏名、ふりがな、日介番号で検索）
     if (searchQuery.value) {
       const query = searchQuery.value.toLowerCase();
       const matchName = student.name.toLowerCase().includes(query);
       const matchFurigana = student.furigana.toLowerCase().includes(query);
-      return matchName || matchFurigana;
+      const matchStudentId = student.student_id.toLowerCase().includes(query);
+      return matchName || matchFurigana || matchStudentId;
     }
 
     return true;
