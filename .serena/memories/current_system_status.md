@@ -1,6 +1,6 @@
 # Current System Status
 
-**最終更新**: 2025-11-06 20:00 JST
+**最終更新**: 2025-11-30 13:15 JST
 
 ## ⚠️ 一時停止中の Cloud Scheduler
 
@@ -74,11 +74,24 @@ gcloud scheduler jobs describe carewell-class01-task01 --location=asia-northeast
 
 ## 🟢 正常稼働中のサービス
 
-### その他の Cloud Scheduler ジョブ
-- carewell-class01-task02
-- carewell-class02-task01
-- carewell-class02-task02
-- （その他12ジョブ）
+### Cloud Scheduler ジョブ
+
+#### carewell-student-sync-daily (学生データ同期)
+**ステータス**: ✅ **ENABLED (稼働中)**
+
+- **スケジュール**: 毎日 JST 02:00
+- **機能**: Google Sheets → Firestore 学生データ同期 + Backfill
+- **リクエストボディ**: `{"backfill": true}`
+- **最終更新**: 2025-11-30
+
+**新機能 (2025-11-30追加)**:
+- L列「無効」チェックボックス対応 → `status: "inactive"`
+- 全ファイル Backfill (スキップ条件削除)
+- Dashboard 手動同期ボタン (`?admin=true`)
+
+#### その他のジョブ
+- carewell-class01-task01 〜 carewell-class02-task02
+- （全14ジョブ）
 
 すべて正常稼働中
 
