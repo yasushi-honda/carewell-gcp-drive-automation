@@ -288,6 +288,29 @@ gcloud scheduler jobs delete carewell-student-sync-daily --location=asia-northea
 
 ---
 
+### 受講生を無効化する場合（論理削除）
+
+**手順**:
+
+1. **Google Sheets を更新**:
+   - スプレッドシート `1AQ12-h3n_NmN2kWxi4Z_g354X0wmUyMKAPeAsXJwu_w` を開く
+   - 「統合_受講者リスト」シートの L 列「無効」のチェックボックスにチェックを入れる
+
+2. **自動同期を待つ** (次回の JST 02:00)
+   - または手動実行で即座に反映
+
+3. **結果**:
+   - Firestore `students/{student_id}` の `status` フィールドが `"inactive"` に更新される
+   - Dashboard では引き続き表示される（フィルタリングは別途実装が必要）
+
+**注意事項**:
+
+- L列がチェックされている = `status: "inactive"`
+- L列がチェックされていない（または空） = `status: "active"`
+- レコードを削除してもFirestoreからは削除されない（論理削除のみ対応）
+
+---
+
 ### 誤ったデータを同期してしまった場合
 
 **ロールバック手順**:

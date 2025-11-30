@@ -258,6 +258,7 @@ class SheetsService:
             - Skips header row (row 1)
             - Handles empty rows gracefully
             - Returns empty list on error (fail-open strategy)
+            - L列「無効」チェックボックスがTRUEの場合、statusは"inactive"
         """
         try:
             logger.info(
@@ -267,11 +268,11 @@ class SheetsService:
             # Escape single quotes in sheet name for A1 notation
             escaped_name = sheet_name.replace("'", "''")
 
-            # Read A～K columns (all student master data)
+            # Read A～L columns (all student master data including 無効 flag)
             result = (
                 self.service.spreadsheets()
                 .values()
-                .get(spreadsheetId=spreadsheet_id, range=f"'{escaped_name}'!A:K")
+                .get(spreadsheetId=spreadsheet_id, range=f"'{escaped_name}'!A:L")
                 .execute()
             )
 
@@ -293,19 +294,24 @@ class SheetsService:
                     logger.debug(f"Skipping empty row: {row_index}")
                     continue
 
-                # Handle rows with fewer than 11 columns (pad with empty strings)
-                while len(row) < 11:
+                # Handle rows with fewer than 12 columns (pad with empty strings)
+                while len(row) < 12:
                     row.append("")
+
+                # Check L列「無効」flag (checkbox returns "TRUE" or "FALSE" as string)
+                is_inactive = (
+                    row[11].strip().upper() == "TRUE" if row[11] else False
+                )
 
                 # Extract student data (correct column mapping)
                 # A:氏名, B:ふりがな, C:日介番号, D:勤務先法人名称, E:勤務先名称,
-                # F:種別サービス, G:種別サービス（手動）, H:グループ, I:通し番号, J:受講生番号, K:クラス
+                # F:種別サービス, G:種別サービス（手動）, H:グループ, I:通し番号, J:受講生番号, K:クラス, L:無効
                 student_data = {
                     "student_id": row[2].strip() if row[2] else "",  # C列: 日介番号
                     "furigana": row[1].strip() if row[1] else "",  # B列: ふりがな
                     "name": row[0].strip() if row[0] else "",  # A列: 氏名
                     "group": row[7].strip() if row[7] else "未分類",  # H列: グループ
-                    "status": "active",  # 固定値
+                    "status": "inactive" if is_inactive else "active",  # L列に基づく
                     "company": row[3].strip() if row[3] else "",  # D列: 勤務先法人名称
                     "office": row[4].strip() if row[4] else "",  # E列: 勤務先名称
                     # G列優先、空ならF列（手動→自動フォールバック）
