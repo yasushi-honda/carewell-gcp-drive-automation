@@ -299,9 +299,7 @@ class SheetsService:
                     row.append("")
 
                 # Check L列「無効」flag (checkbox returns "TRUE" or "FALSE" as string)
-                is_inactive = (
-                    row[11].strip().upper() == "TRUE" if row[11] else False
-                )
+                is_inactive = row[11].strip().upper() == "TRUE" if row[11] else False
 
                 # Extract student data (correct column mapping)
                 # A:氏名, B:ふりがな, C:日介番号, D:勤務先法人名称, E:勤務先名称,
