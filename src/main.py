@@ -538,13 +538,14 @@ def get_duplicate_students(request):
             "STUDENT_SPREADSHEET_ID", "1AQ12-h3n_NmN2kWxi4Z_g354X0wmUyMKAPeAsXJwu_w"
         )
 
-        # Get duplicates
-        duplicates = sheets_service.get_duplicate_students(spreadsheet_id)
+        # Get duplicates (now returns dict with duplicates and class_urls)
+        result = sheets_service.get_duplicate_students(spreadsheet_id)
 
         response = {
             "status": "success",
-            "duplicates": duplicates,
-            "total_duplicates": len(duplicates),
+            "duplicates": result.get("duplicates", []),
+            "class_urls": result.get("class_urls", {}),
+            "total_duplicates": len(result.get("duplicates", [])),
         }
 
         return _add_cors_headers(response, 200)

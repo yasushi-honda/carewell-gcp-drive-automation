@@ -407,30 +407,73 @@ class SheetsService:
             # Return empty list on error (fail-open strategy)
             return []
 
+    def get_class_spreadsheet_urls(
+        self, spreadsheet_id: str, sheet_name: str = "設定"
+    ) -> dict:
+        """
+        Get class number to spreadsheet URL mapping from settings sheet
+
+        Args:
+            spreadsheet_id: Google Sheets spreadsheet ID
+            sheet_name: Sheet name (default: "設定")
+
+        Returns:
+            Dictionary mapping class number (e.g., "No1") to spreadsheet URL
+        """
+        try:
+            logger.info(f"Reading class spreadsheet URLs from settings sheet")
+
+            # Read C and E columns from settings sheet (C: class number, E: URL)
+            result = (
+                self.service.spreadsheets()
+                .values()
+                .get(spreadsheetId=spreadsheet_id, range=f"'{sheet_name}'!C2:E20")
+                .execute()
+            )
+
+            values = result.get("values", [])
+            class_urls = {}
+
+            for row in values:
+                if len(row) >= 3 and row[0]:
+                    # C column is class number (1, 2, 3...), E column is URL
+                    class_num = row[0].strip()
+                    url = row[2].strip() if len(row) > 2 and row[2] else ""
+
+                    if class_num and url:
+                        # Convert "1" to "No1" format
+                        class_key = f"No{class_num}"
+                        class_urls[class_key] = url
+
+            logger.info(f"Found {len(class_urls)} class spreadsheet URLs")
+            return class_urls
+
+        except Exception as e:
+            logger.error(f"Error getting class spreadsheet URLs: {e}", exc_info=True)
+            return {}
+
     def get_duplicate_students(
         self, spreadsheet_id: str, sheet_name: str = "統合_受講者リスト"
-    ) -> List[dict]:
+    ) -> dict:
         """
-        Get duplicate student_id information from Google Sheets
+        Get duplicate student_id information from Google Sheets with full details
 
         Args:
             spreadsheet_id: Google Sheets spreadsheet ID
             sheet_name: Sheet name (default: "統合_受講者リスト")
 
         Returns:
-            List of duplicate student information:
-            - student_id: 日介番号
-            - name: 氏名
-            - kept_class: 保持されるクラス
-            - kept_status: 保持される側のステータス
-            - ignored_class: 無視されるクラス (= 無効化すべきクラス)
-            - ignored_status: 無視される側のステータス
-            - resolution: 解決方法 ('active_inactive' or 'first_occurrence')
+            Dictionary containing:
+            - duplicates: List of duplicate student information with full details
+            - class_urls: Mapping of class number to spreadsheet URL
         """
         try:
             logger.info(
                 f"Reading duplicate student data from spreadsheet: {spreadsheet_id}"
             )
+
+            # Get class spreadsheet URLs first
+            class_urls = self.get_class_spreadsheet_urls(spreadsheet_id)
 
             # Escape single quotes in sheet name for A1 notation
             escaped_name = sheet_name.replace("'", "''")
@@ -446,12 +489,12 @@ class SheetsService:
             values = result.get("values", [])
 
             if not values:
-                return []
+                return {"duplicates": [], "class_urls": class_urls}
 
             # Skip header row
             data_rows = values[1:]
 
-            # Track all occurrences of each student_id
+            # Track all occurrences of each student_id with full details
             student_occurrences = {}
 
             for row_index, row in enumerate(data_rows, start=2):
@@ -465,20 +508,33 @@ class SheetsService:
                 if not student_id:
                     continue
 
-                name = row[0].strip() if row[0] else ""
-                class_name = row[10].strip() if row[10] else ""
+                # Extract all fields for comparison
+                # A:氏名, B:ふりがな, C:日介番号, D:勤務先法人名称, E:勤務先名称,
+                # F:種別サービス, G:種別サービス（手動）, H:グループ, I:通し番号,
+                # J:受講生番号, K:クラス, L:無効
                 l_column = row[11].strip().upper() if row[11] else ""
-                status = "inactive" if l_column == "TRUE" else "active"
+
+                student_data = {
+                    "name": row[0].strip() if row[0] else "",
+                    "furigana": row[1].strip() if row[1] else "",
+                    "student_id": student_id,
+                    "company": row[3].strip() if row[3] else "",
+                    "office": row[4].strip() if row[4] else "",
+                    "service_type": (
+                        row[6].strip() if row[6] else (row[5].strip() if row[5] else "")
+                    ),
+                    "group": row[7].strip() if row[7] else "",
+                    "serial_number": row[8].strip() if row[8] else "",
+                    "student_number": row[9].strip() if row[9] else "",
+                    "class_name": row[10].strip() if row[10] else "",
+                    "status": "inactive" if l_column == "TRUE" else "active",
+                    "row": row_index,
+                }
 
                 if student_id not in student_occurrences:
                     student_occurrences[student_id] = []
 
-                student_occurrences[student_id].append({
-                    "name": name,
-                    "class": class_name,
-                    "status": status,
-                    "row": row_index,
-                })
+                student_occurrences[student_id].append(student_data)
 
             # Find duplicates and determine resolution
             duplicates = []
@@ -507,20 +563,17 @@ class SheetsService:
 
                 duplicates.append({
                     "student_id": student_id,
-                    "name": kept["name"],
-                    "kept_class": kept["class"],
-                    "kept_status": kept["status"],
-                    "ignored_class": ignored["class"],
-                    "ignored_status": ignored["status"],
+                    "kept": kept,
+                    "ignored": ignored,
                     "resolution": resolution,
                 })
 
             logger.info(f"Found {len(duplicates)} duplicate student_ids")
-            return duplicates
+            return {"duplicates": duplicates, "class_urls": class_urls}
 
         except Exception as e:
             logger.error(f"Error getting duplicate students: {e}", exc_info=True)
-            return []
+            return {"duplicates": [], "class_urls": {}}
 
     def get_stats(self, spreadsheet_id: str, sheet_name: str = "Sheet1") -> dict:
         """
