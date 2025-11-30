@@ -306,7 +306,7 @@ gcloud scheduler jobs delete carewell-student-sync-daily --location=asia-northea
    - 「統合_受講者リスト」シートの L 列「無効」のチェックボックスにチェックを入れる
 
 2. **自動同期を待つ** (次回の JST 02:00)
-   - または手動実行で即座に反映
+   - または Dashboard から手動同期（下記参照）
 
 3. **結果**:
    - Firestore `students/{student_id}` の `status` フィールドが `"inactive"` に更新される
@@ -320,6 +320,30 @@ gcloud scheduler jobs delete carewell-student-sync-daily --location=asia-northea
 
 ---
 
+### Dashboard から手動同期する場合
+
+**手順**:
+
+1. **管理者モードでアクセス**:
+   - `https://carewell-automation.web.app/?admin=true` を開く
+
+2. **同期ボタンをクリック**:
+   - ヘッダー右上に緑色の「データ同期」ボタンが表示される
+   - クリックすると同期処理が開始される
+   - 処理中はスピナーが表示され、「同期中...」と表示される
+
+3. **完了を確認**:
+   - 成功時: 緑色のトースト通知で同期件数が表示される
+   - 失敗時: 赤色のトースト通知でエラーメッセージが表示される
+
+**注意事項**:
+
+- 同期処理には数十秒〜数分かかる場合があります
+- 処理中はボタンが無効化されるため、連続クリックの心配はありません
+- 同期は `students/` と全 `files/` ドキュメントの両方を更新します
+
+---
+
 ### 誤ったデータを同期してしまった場合
 
 **ロールバック手順**:
@@ -328,12 +352,16 @@ gcloud scheduler jobs delete carewell-student-sync-daily --location=asia-northea
    - 誤ったデータを正しいデータに修正
 
 2. **手動で即座に再同期**:
+   - Dashboard から「データ同期」ボタンをクリック
+   - または CLI から実行:
+
    ```bash
    TOKEN=$(gcloud auth print-identity-token)
    curl -X POST \
      "https://carewell-file-collector-imczapxkba-an.a.run.app/admin/sync-students-from-sheets" \
      -H "Authorization: Bearer $TOKEN" \
-     -H "Content-Type: application/json"
+     -H "Content-Type: application/json" \
+     -d '{"backfill": true}'
    ```
 
 3. **Dashboard で確認**:
