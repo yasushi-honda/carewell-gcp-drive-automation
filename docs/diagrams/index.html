@@ -1,0 +1,158 @@
+---
+layout: default
+title: 図表一覧 - Carewell Automation
+---
+
+<style>
+  .diagram-nav {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 1.5rem;
+    margin: 2rem 0;
+  }
+  .diagram-card {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    border-radius: 12px;
+    padding: 1.5rem;
+    color: white;
+    text-decoration: none;
+    transition: transform 0.2s, box-shadow 0.2s;
+    display: block;
+  }
+  .diagram-card:hover {
+    transform: translateY(-4px);
+    box-shadow: 0 8px 25px rgba(0,0,0,0.2);
+  }
+  .diagram-card.wbs { background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%); }
+  .diagram-card.gantt { background: linear-gradient(135deg, #fc4a1a 0%, #f7b733 100%); }
+  .diagram-card.arch { background: linear-gradient(135deg, #4776E6 0%, #8E54E9 100%); }
+  .diagram-card.er { background: linear-gradient(135deg, #ee0979 0%, #ff6a00 100%); }
+  .diagram-card.flow { background: linear-gradient(135deg, #00c6ff 0%, #0072ff 100%); }
+
+  .diagram-card h3 {
+    margin: 0 0 0.5rem 0;
+    font-size: 1.3rem;
+  }
+  .diagram-card p {
+    margin: 0;
+    opacity: 0.9;
+    font-size: 0.9rem;
+  }
+  .diagram-card .icon {
+    font-size: 2rem;
+    margin-bottom: 0.5rem;
+  }
+
+  .back-link {
+    display: inline-block;
+    margin-bottom: 1rem;
+    color: #0969da;
+    text-decoration: none;
+  }
+  .back-link:hover {
+    text-decoration: underline;
+  }
+
+  .mobile-notice {
+    background: #ddf4ff;
+    border: 1px solid #54aeff;
+    border-radius: 6px;
+    padding: 1rem;
+    margin: 1rem 0;
+  }
+
+  @media (max-width: 600px) {
+    .diagram-nav {
+      grid-template-columns: 1fr;
+    }
+    .diagram-card {
+      padding: 1.2rem;
+    }
+    .diagram-card h3 {
+      font-size: 1.1rem;
+    }
+  }
+</style>
+
+<a href="../" class="back-link">&larr; ポータルに戻る</a>
+
+<h1>図表一覧</h1>
+<p>プロジェクトのビジュアルドキュメント</p>
+
+<div class="mobile-notice">
+  <strong>📱 モバイル対応:</strong> 全ページがレスポンシブ対応しています。横スクロールで大きな図も閲覧可能です。
+</div>
+
+<div class="diagram-nav">
+  <a href="wbs" class="diagram-card wbs">
+    <div class="icon">📊</div>
+    <h3>WBS（作業分解図）</h3>
+    <p>プロジェクト全体の作業構成を階層的に表示</p>
+  </a>
+
+  <a href="gantt" class="diagram-card gantt">
+    <div class="icon">📅</div>
+    <h3>ガントチャート</h3>
+    <p>開発タイムライン・マイルストーン・スケジュール</p>
+  </a>
+
+  <a href="architecture" class="diagram-card arch">
+    <div class="icon">🏗️</div>
+    <h3>システム構成図</h3>
+    <p>全体アーキテクチャ・コンポーネント・データフロー</p>
+  </a>
+
+  <a href="er-diagram" class="diagram-card er">
+    <div class="icon">🗄️</div>
+    <h3>ER図（データ設計）</h3>
+    <p>Firestoreスキーマ・コレクション構造・フィールド定義</p>
+  </a>
+
+  <a href="flowcharts" class="diagram-card flow">
+    <div class="icon">🔄</div>
+    <h3>フロー図</h3>
+    <p>ファイル収集・受講生同期・CI/CD等の処理フロー</p>
+  </a>
+</div>
+
+<h2>クイックリファレンス</h2>
+
+<table>
+  <tr>
+    <th>項目</th>
+    <th>内容</th>
+  </tr>
+  <tr>
+    <td><strong>Dashboard URL</strong></td>
+    <td><a href="https://carewell-automation.web.app/">carewell-automation.web.app</a></td>
+  </tr>
+  <tr>
+    <td><strong>管理者モード</strong></td>
+    <td><a href="https://carewell-automation.web.app/?admin=true">?admin=true</a></td>
+  </tr>
+  <tr>
+    <td><strong>GitHub</strong></td>
+    <td><a href="https://github.com/yasushi-honda/carewell-gcp-drive-automation">Repository</a></td>
+  </tr>
+  <tr>
+    <td><strong>Firestoreデータベース</strong></td>
+    <td><code>carewell-native</code></td>
+  </tr>
+  <tr>
+    <td><strong>Cloud Runサービス</strong></td>
+    <td><code>carewell-file-collector</code></td>
+  </tr>
+</table>
+
+<h2>ドキュメントリンク</h2>
+
+<ul>
+  <li><a href="../QUICKSTART">クイックスタート（5分ガイド）</a></li>
+  <li><a href="../QUICKSTART_FOR_NEW_AI">AI向けオンボーディング</a></li>
+  <li><a href="../troubleshooting">トラブルシューティング</a></li>
+  <li><a href="../common-mistakes">過去インシデント一覧</a></li>
+  <li><a href="../EMERGENCY_RESPONSE">緊急対応ガイド</a></li>
+</ul>
+
+<hr>
+<p><strong>最終更新:</strong> 2025-11-30 | <strong>メンテナー:</strong> Claude Code AI Agent</p>

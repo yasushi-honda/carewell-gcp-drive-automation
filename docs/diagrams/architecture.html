@@ -1,0 +1,279 @@
+---
+layout: default
+title: システム構成図
+---
+
+<style>
+  .diagram-container {
+    background: white;
+    padding: 1rem;
+    border-radius: 8px;
+    margin: 1rem 0;
+    overflow-x: auto;
+  }
+  .mermaid {
+    display: flex;
+    justify-content: center;
+  }
+  .back-link {
+    display: inline-block;
+    margin-bottom: 1rem;
+    color: #0969da;
+    text-decoration: none;
+  }
+  .back-link:hover {
+    text-decoration: underline;
+  }
+  .section-title {
+    border-bottom: 2px solid #0969da;
+    padding-bottom: 0.5rem;
+    margin-top: 2rem;
+  }
+  .component-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 1rem 0;
+  }
+  .component-table th, .component-table td {
+    border: 1px solid #d0d7de;
+    padding: 0.5rem;
+    text-align: left;
+  }
+  .component-table th {
+    background: #f6f8fa;
+  }
+  @media (max-width: 768px) {
+    .diagram-container {
+      padding: 0.5rem;
+    }
+  }
+</style>
+
+<script src="https://cdn.jsdelivr.net/npm/mermaid/dist/mermaid.min.js"></script>
+<script>
+  mermaid.initialize({
+    startOnLoad: true,
+    theme: 'default',
+    flowchart: {
+      useMaxWidth: true,
+      htmlLabels: true,
+      curve: 'basis'
+    }
+  });
+</script>
+
+<a href="../" class="back-link">&larr; ポータルに戻る</a>
+
+<h1>システム構成図</h1>
+<p>Carewell File Automation System のアーキテクチャ</p>
+
+<h2 class="section-title">1. 全体システム構成</h2>
+
+<div class="diagram-container">
+<div class="mermaid">
+graph TB
+    subgraph "外部データソース"
+        GS[("Google Sheets<br/>統合_受講者リスト<br/>1AQ12-h3n_...")]
+        CW["Carewell Web<br/>jaccw-carewel.study.jp"]
+    end
+
+    subgraph "Cloud Scheduler"
+        CS1["ファイル収集ジョブ<br/>14ジョブ × 毎時2回"]
+        CS2["受講生同期ジョブ<br/>毎日 JST 02:00"]
+    end
+
+    subgraph "Cloud Run (carewell-file-collector)"
+        MAIN["main.py<br/>Flask Application"]
+        PA["playwright_automation.py<br/>Webスクレイピング"]
+        FS["firestore_service.py<br/>Firestore操作"]
+        SS["sheets_service.py<br/>Sheets API"]
+        DS["drive_service.py<br/>Drive API"]
+    end
+
+    subgraph "Google Cloud Storage"
+        GD[("Google Drive<br/>Carewell_提出ファイル")]
+        FB[("Firestore<br/>carewell-native")]
+    end
+
+    subgraph "Firebase Hosting"
+        VUE["Vue.js Dashboard<br/>carewell-automation.web.app"]
+    end
+
+    subgraph "開発・運用"
+        GH["GitHub Actions<br/>CI/CD"]
+        AR["Artifact Registry<br/>Docker Image"]
+    end
+
+    CS1 -->|HTTP POST| MAIN
+    CS2 -->|HTTP POST| MAIN
+    MAIN --> PA
+    MAIN --> SS
+    PA <-->|Playwright| CW
+    SS <-->|Sheets API| GS
+    PA --> FS
+    PA --> DS
+    FS -->|Firestore API| FB
+    DS -->|Drive API| GD
+    VUE <-->|Firestore SDK| FB
+
+    GH -->|Build & Push| AR
+    AR -->|Deploy| MAIN
+
+    style GS fill:#34a853,color:#fff
+    style CW fill:#4285f4,color:#fff
+    style MAIN fill:#0969da,color:#fff
+    style FB fill:#ff9800,color:#fff
+    style GD fill:#4285f4,color:#fff
+    style VUE fill:#42b883,color:#fff
+</div>
+</div>
+
+<h2 class="section-title">2. コンポーネント詳細</h2>
+
+<table class="component-table">
+  <tr>
+    <th>コンポーネント</th>
+    <th>技術</th>
+    <th>役割</th>
+  </tr>
+  <tr>
+    <td><strong>Cloud Run</strong></td>
+    <td>Python 3.11 + Flask</td>
+    <td>バックエンドAPI、ファイル収集処理</td>
+  </tr>
+  <tr>
+    <td><strong>Playwright</strong></td>
+    <td>Chromium (Headless)</td>
+    <td>Carewell Webスクレイピング</td>
+  </tr>
+  <tr>
+    <td><strong>Firestore</strong></td>
+    <td>Native Mode (carewell-native)</td>
+    <td>メタデータ永続化</td>
+  </tr>
+  <tr>
+    <td><strong>Google Drive</strong></td>
+    <td>Drive API v3</td>
+    <td>ファイル保存</td>
+  </tr>
+  <tr>
+    <td><strong>Google Sheets</strong></td>
+    <td>Sheets API v4</td>
+    <td>受講生マスタデータ</td>
+  </tr>
+  <tr>
+    <td><strong>Dashboard</strong></td>
+    <td>Vue.js 3 + Vite</td>
+    <td>提出状況可視化</td>
+  </tr>
+  <tr>
+    <td><strong>CI/CD</strong></td>
+    <td>GitHub Actions</td>
+    <td>テスト・デプロイ自動化</td>
+  </tr>
+</table>
+
+<h2 class="section-title">3. データフロー詳細</h2>
+
+<div class="diagram-container">
+<div class="mermaid">
+sequenceDiagram
+    participant CS as Cloud Scheduler
+    participant CR as Cloud Run
+    participant CW as Carewell Web
+    participant GD as Google Drive
+    participant FS as Firestore
+    participant DB as Dashboard
+
+    Note over CS,DB: ファイル収集フロー (毎時)
+    CS->>CR: POST /collect-files
+    CR->>CW: Playwright ログイン
+    CW-->>CR: セッション確立
+    CR->>CW: ファイル一覧取得
+    CW-->>CR: HTML (学生・ファイル情報)
+    loop 各ファイル
+        CR->>CW: ダウンロード
+        CW-->>CR: ファイルバイナリ
+        CR->>GD: アップロード
+        GD-->>CR: file_id
+        CR->>FS: メタデータ保存
+    end
+    CR-->>CS: 200 OK (結果)
+    DB->>FS: データ取得
+    FS-->>DB: 最新データ表示
+</div>
+</div>
+
+<h2 class="section-title">4. 受講生同期フロー</h2>
+
+<div class="diagram-container">
+<div class="mermaid">
+sequenceDiagram
+    participant CS as Cloud Scheduler
+    participant CR as Cloud Run
+    participant GS as Google Sheets
+    participant FS as Firestore
+
+    Note over CS,FS: 受講生同期フロー (毎日 JST 02:00)
+    CS->>CR: POST /admin/sync-students-from-sheets
+    CR->>GS: 全シート読み込み
+    GS-->>CR: 受講生データ (全クラス)
+
+    Note over CR: 重複チェック
+    CR->>CR: student_id 重複検出
+    CR->>CR: 最初の出現を active に
+
+    loop 各受講生
+        CR->>FS: students/{student_id} upsert
+    end
+
+    Note over CR,FS: Backfill処理
+    CR->>FS: 全files取得
+    loop student_idが一致するfile
+        CR->>FS: 非正規化データ更新
+    end
+
+    CR-->>CS: 200 OK (同期結果)
+</div>
+</div>
+
+<h2 class="section-title">5. ネットワーク構成</h2>
+
+<div class="diagram-container">
+<div class="mermaid">
+graph LR
+    subgraph "Public Internet"
+        USER["講師<br/>(ブラウザ)"]
+        CW["Carewell Web"]
+    end
+
+    subgraph "Google Cloud (asia-northeast1)"
+        subgraph "Cloud Run"
+            CR["carewell-file-collector<br/>タイムアウト: 900秒"]
+        end
+        subgraph "Storage"
+            FS[("Firestore<br/>carewell-native")]
+            GD[("Google Drive")]
+        end
+        CS["Cloud Scheduler"]
+    end
+
+    subgraph "Firebase"
+        FH["Hosting<br/>carewell-automation.web.app"]
+    end
+
+    USER -->|HTTPS| FH
+    FH -->|Firestore SDK| FS
+    CS -->|HTTPS + OIDC| CR
+    CR -->|Playwright| CW
+    CR -->|gRPC| FS
+    CR -->|REST API| GD
+
+    style CR fill:#0969da,color:#fff
+    style FS fill:#ff9800,color:#fff
+    style FH fill:#42b883,color:#fff
+</div>
+</div>
+
+<hr>
+<p><a href="wbs">WBSを見る →</a> | <a href="gantt">ガントチャートを見る →</a> | <a href="flowcharts">フロー図を見る →</a></p>

@@ -1,0 +1,307 @@
+---
+layout: default
+title: フロー図 - 処理フロー
+---
+
+<style>
+  .diagram-container {
+    background: white;
+    padding: 1rem;
+    border-radius: 8px;
+    margin: 1rem 0;
+    overflow-x: auto;
+  }
+  .mermaid {
+    display: flex;
+    justify-content: center;
+  }
+  .back-link {
+    display: inline-block;
+    margin-bottom: 1rem;
+    color: #0969da;
+    text-decoration: none;
+  }
+  .back-link:hover {
+    text-decoration: underline;
+  }
+  .section-title {
+    border-bottom: 2px solid #0969da;
+    padding-bottom: 0.5rem;
+    margin-top: 2rem;
+  }
+  .flow-description {
+    background: #f6f8fa;
+    padding: 1rem;
+    border-radius: 6px;
+    margin: 1rem 0;
+  }
+  @media (max-width: 768px) {
+    .diagram-container {
+      padding: 0.5rem;
+    }
+  }
+</style>
+
+<script src="https://cdn.jsdelivr.net/npm/mermaid/dist/mermaid.min.js"></script>
+<script>
+  mermaid.initialize({
+    startOnLoad: true,
+    theme: 'default',
+    flowchart: {
+      useMaxWidth: true,
+      htmlLabels: true,
+      curve: 'basis'
+    }
+  });
+</script>
+
+<a href="../" class="back-link">&larr; ポータルに戻る</a>
+
+<h1>フロー図 - 処理フロー</h1>
+<p>各機能の処理フローを可視化</p>
+
+<h2 class="section-title">1. ファイル収集フロー（メインフロー）</h2>
+
+<div class="flow-description">
+<strong>トリガー:</strong> Cloud Scheduler (毎時 :00, :30)<br>
+<strong>エンドポイント:</strong> POST /collect-files<br>
+<strong>処理時間:</strong> 最大15分（タイムアウト: 900秒）
+</div>
+
+<div class="diagram-container">
+<div class="mermaid">
+flowchart TD
+    START([Cloud Scheduler<br/>トリガー]) --> INIT[初期化<br/>Playwright起動]
+    INIT --> LOGIN{ログイン<br/>成功?}
+
+    LOGIN -->|失敗| ERR1[エラーログ出力]
+    ERR1 --> END1([終了 - 失敗])
+
+    LOGIN -->|成功| NAV[課題ページ<br/>へ遷移]
+    NAV --> PARSE[ファイル一覧<br/>パース]
+
+    PARSE --> LOOP{次の<br/>ファイル?}
+    LOOP -->|なし| NEXT_PAGE{次の<br/>ページ?}
+
+    LOOP -->|あり| DUP_CHECK{重複<br/>チェック}
+    DUP_CHECK -->|重複| SKIP[スキップ]
+    SKIP --> LOOP
+
+    DUP_CHECK -->|新規| DOWNLOAD[ファイル<br/>ダウンロード]
+    DOWNLOAD --> UPLOAD[Google Drive<br/>アップロード]
+    UPLOAD --> RECORD[Firestore<br/>記録]
+    RECORD --> LOOP
+
+    NEXT_PAGE -->|あり| PAGE_NAV[ページ<br/>遷移]
+    PAGE_NAV --> PARSE
+
+    NEXT_PAGE -->|なし| GOBACK[go_back<br/>課題一覧へ]
+    GOBACK --> RESULT[結果サマリー<br/>生成]
+    RESULT --> END2([終了 - 成功])
+
+    style START fill:#34a853,color:#fff
+    style END1 fill:#ea4335,color:#fff
+    style END2 fill:#34a853,color:#fff
+    style DUP_CHECK fill:#ff9800,color:#fff
+</div>
+</div>
+
+<h2 class="section-title">2. 受講生同期フロー</h2>
+
+<div class="flow-description">
+<strong>トリガー:</strong> Cloud Scheduler (毎日 JST 02:00) または 手動<br>
+<strong>エンドポイント:</strong> POST /admin/sync-students-from-sheets<br>
+<strong>データソース:</strong> Google Sheets「統合_受講者リスト」
+</div>
+
+<div class="diagram-container">
+<div class="mermaid">
+flowchart TD
+    START([Cloud Scheduler<br/>または手動]) --> INIT[初期化<br/>Sheets API]
+
+    INIT --> READ_SETTINGS[設定シート読込<br/>クラス一覧取得]
+    READ_SETTINGS --> LOOP_CLASS{次の<br/>クラス?}
+
+    LOOP_CLASS -->|あり| READ_SHEET[シート読込<br/>受講生データ]
+    READ_SHEET --> CHECK_L{L列<br/>チェック?}
+
+    CHECK_L -->|チェックあり| SET_INACTIVE[status =<br/>'inactive']
+    CHECK_L -->|チェックなし| SET_ACTIVE[status =<br/>'active']
+
+    SET_INACTIVE --> DUP_CHECK{student_id<br/>重複?}
+    SET_ACTIVE --> DUP_CHECK
+
+    DUP_CHECK -->|初出| UPSERT[Firestore<br/>upsert]
+    DUP_CHECK -->|重複| LOG_DUP[重複ログ<br/>記録]
+    LOG_DUP --> UPSERT
+
+    UPSERT --> LOOP_CLASS
+
+    LOOP_CLASS -->|なし| BACKFILL_CHECK{backfill<br/>= true?}
+
+    BACKFILL_CHECK -->|No| RESULT[結果サマリー]
+    BACKFILL_CHECK -->|Yes| BACKFILL[files/<br/>非正規化更新]
+    BACKFILL --> RESULT
+
+    RESULT --> END([終了])
+
+    style START fill:#34a853,color:#fff
+    style END fill:#34a853,color:#fff
+    style CHECK_L fill:#ff9800,color:#fff
+    style DUP_CHECK fill:#9c27b0,color:#fff
+</div>
+</div>
+
+<h2 class="section-title">3. Playwright ページネーションフロー</h2>
+
+<div class="flow-description">
+<strong>対象:</strong> ASP.NET WebFormsのページネーション<br>
+<strong>特記:</strong> ViewState/EventValidation対応必須
+</div>
+
+<div class="diagram-container">
+<div class="mermaid">
+flowchart TD
+    START([ファイル一覧<br/>ページ]) --> GET_PAGINATION[ページネーション<br/>要素取得]
+
+    GET_PAGINATION --> HAS_NEXT{次ページ<br/>あり?}
+
+    HAS_NEXT -->|なし| END1([現在ページ<br/>で終了])
+
+    HAS_NEXT -->|あり| GET_HIDDEN[ViewState<br/>取得]
+    GET_HIDDEN --> GET_TARGET[EventTarget<br/>生成]
+    GET_TARGET --> CLICK[次ページ<br/>クリック]
+
+    CLICK --> WAIT_NAV[ページ遷移<br/>待機]
+    WAIT_NAV --> VERIFY{URL変化<br/>確認?}
+
+    VERIFY -->|変化なし| RETRY{リトライ<br/>回数?}
+    RETRY -->|上限| ERR[エラー出力]
+    ERR --> END2([終了 - 失敗])
+
+    RETRY -->|残あり| WAIT_MORE[追加待機<br/>500ms]
+    WAIT_MORE --> VERIFY
+
+    VERIFY -->|変化あり| UPDATE_FRAME[Frame参照<br/>更新]
+    UPDATE_FRAME --> PARSE[新ページ<br/>パース]
+    PARSE --> PROCESS[ファイル処理]
+    PROCESS --> GET_PAGINATION
+
+    style START fill:#4285f4,color:#fff
+    style END1 fill:#34a853,color:#fff
+    style END2 fill:#ea4335,color:#fff
+    style GET_HIDDEN fill:#ff9800,color:#fff
+</div>
+</div>
+
+<h2 class="section-title">4. エラーハンドリングフロー</h2>
+
+<div class="diagram-container">
+<div class="mermaid">
+flowchart TD
+    ERR([エラー発生]) --> TYPE{エラー<br/>種別}
+
+    TYPE -->|Timeout| TIMEOUT[タイムアウト<br/>処理]
+    TIMEOUT --> GOBACK1[go_back<br/>実行]
+    GOBACK1 --> LOG1[ログ出力]
+
+    TYPE -->|Network| NETWORK[ネットワーク<br/>エラー]
+    NETWORK --> RETRY1{リトライ<br/>可能?}
+    RETRY1 -->|Yes| WAIT[待機後<br/>リトライ]
+    WAIT --> CONTINUE([処理継続])
+    RETRY1 -->|No| GOBACK2[go_back<br/>実行]
+    GOBACK2 --> LOG2[ログ出力]
+
+    TYPE -->|Frame| FRAME[Frame<br/>参照エラー]
+    FRAME --> REFRESH[Frame参照<br/>再取得]
+    REFRESH --> CONTINUE
+
+    TYPE -->|Auth| AUTH[認証<br/>エラー]
+    AUTH --> RELOGIN[再ログイン<br/>試行]
+    RELOGIN --> CONTINUE
+
+    LOG1 --> NEXT[次の学生<br/>へ進む]
+    LOG2 --> NEXT
+
+    style ERR fill:#ea4335,color:#fff
+    style CONTINUE fill:#34a853,color:#fff
+    style GOBACK1 fill:#ff9800,color:#fff
+    style GOBACK2 fill:#ff9800,color:#fff
+</div>
+</div>
+
+<h2 class="section-title">5. CI/CD パイプラインフロー</h2>
+
+<div class="diagram-container">
+<div class="mermaid">
+flowchart LR
+    subgraph "GitHub"
+        PUSH[git push<br/>main]
+    end
+
+    subgraph "GitHub Actions"
+        TEST[Run Tests]
+        BUILD[Build Docker<br/>Image]
+        DEPLOY_CR[Deploy to<br/>Cloud Run]
+        DEPLOY_FB[Deploy to<br/>Firebase]
+    end
+
+    subgraph "Google Cloud"
+        AR[(Artifact<br/>Registry)]
+        CR[Cloud Run]
+    end
+
+    subgraph "Firebase"
+        FH[Firebase<br/>Hosting]
+    end
+
+    PUSH --> TEST
+    TEST -->|成功| BUILD
+    BUILD --> AR
+    AR --> DEPLOY_CR
+    DEPLOY_CR --> CR
+
+    PUSH --> DEPLOY_FB
+    DEPLOY_FB --> FH
+
+    style PUSH fill:#24292f,color:#fff
+    style CR fill:#0969da,color:#fff
+    style FH fill:#ff9800,color:#fff
+</div>
+</div>
+
+<h2 class="section-title">6. Dashboard データ取得フロー</h2>
+
+<div class="diagram-container">
+<div class="mermaid">
+flowchart TD
+    USER([ユーザー<br/>アクセス]) --> LOAD[Dashboard<br/>読み込み]
+
+    LOAD --> CHECK_ADMIN{admin=true<br/>パラメータ?}
+    CHECK_ADMIN -->|Yes| SET_ADMIN[管理者モード<br/>有効化]
+    CHECK_ADMIN -->|No| NORMAL[通常モード]
+
+    SET_ADMIN --> FETCH_CLASSES
+    NORMAL --> FETCH_CLASSES[クラス一覧<br/>取得]
+
+    FETCH_CLASSES --> RENDER_CLASSES[クラス一覧<br/>表示]
+    RENDER_CLASSES --> SELECT_CLASS{クラス<br/>選択?}
+
+    SELECT_CLASS -->|Yes| FETCH_TASKS[課題一覧<br/>取得]
+    FETCH_TASKS --> RENDER_TASKS[課題一覧<br/>表示]
+
+    RENDER_TASKS --> SELECT_TASK{課題<br/>選択?}
+    SELECT_TASK -->|Yes| FETCH_FILES[ファイル一覧<br/>取得]
+    FETCH_FILES --> RENDER_FILES[ファイル一覧<br/>表示]
+
+    RENDER_FILES --> CLICK_DRIVE{Drive<br/>リンク?}
+    CLICK_DRIVE -->|Yes| OPEN_DRIVE[Google Drive<br/>で開く]
+
+    style USER fill:#4285f4,color:#fff
+    style SET_ADMIN fill:#ea4335,color:#fff
+    style OPEN_DRIVE fill:#34a853,color:#fff
+</div>
+</div>
+
+<hr>
+<p><a href="wbs">WBSを見る →</a> | <a href="gantt">ガントチャートを見る →</a> | <a href="er-diagram">ER図を見る →</a></p>

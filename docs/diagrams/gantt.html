@@ -1,0 +1,221 @@
+---
+layout: default
+title: ガントチャート - 開発タイムライン
+---
+
+<style>
+  .diagram-container {
+    background: white;
+    padding: 1rem;
+    border-radius: 8px;
+    margin: 1rem 0;
+    overflow-x: auto;
+  }
+  .mermaid {
+    display: flex;
+    justify-content: center;
+  }
+  .back-link {
+    display: inline-block;
+    margin-bottom: 1rem;
+    color: #0969da;
+    text-decoration: none;
+  }
+  .back-link:hover {
+    text-decoration: underline;
+  }
+  .section-title {
+    border-bottom: 2px solid #0969da;
+    padding-bottom: 0.5rem;
+    margin-top: 2rem;
+  }
+  .milestone-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 1rem 0;
+  }
+  .milestone-table th, .milestone-table td {
+    border: 1px solid #d0d7de;
+    padding: 0.5rem;
+    text-align: left;
+  }
+  .milestone-table th {
+    background: #f6f8fa;
+  }
+  .done { color: #1a7f37; }
+  .active { color: #0969da; }
+  @media (max-width: 768px) {
+    .diagram-container {
+      padding: 0.5rem;
+    }
+  }
+</style>
+
+<script src="https://cdn.jsdelivr.net/npm/mermaid/dist/mermaid.min.js"></script>
+<script>
+  mermaid.initialize({
+    startOnLoad: true,
+    theme: 'default',
+    gantt: {
+      titleTopMargin: 25,
+      barHeight: 20,
+      barGap: 4,
+      topPadding: 50,
+      leftPadding: 75,
+      gridLineStartPadding: 35,
+      fontSize: 11,
+      numberSectionStyles: 4
+    }
+  });
+</script>
+
+<a href="../" class="back-link">&larr; ポータルに戻る</a>
+
+<h1>ガントチャート - 開発タイムライン</h1>
+<p>プロジェクト全体の開発スケジュール</p>
+
+<h2 class="section-title">1. 2025年11月 開発フェーズ</h2>
+
+<div class="diagram-container">
+<div class="mermaid">
+gantt
+    title Carewell Automation 開発タイムライン (2025年11月)
+    dateFormat YYYY-MM-DD
+    axisFormat %m/%d
+
+    section Phase 1: 基盤整備
+    Firestoreスキーマ改善      :done, p1a, 2025-11-04, 2d
+    Playwright修正            :done, p1b, 2025-11-05, 1d
+    Cloud Run設定             :done, p1c, 2025-11-05, 1d
+
+    section Phase 2: ページネーション
+    ページネーション分析       :done, p2a, 2025-11-06, 1d
+    ViewState対応            :done, p2b, 2025-11-06, 2d
+    go_back修正              :done, p2c, 2025-11-08, 1d
+    タイムアウト調整          :done, p2d, 2025-11-08, 1d
+
+    section Phase 3: Dashboard強化
+    管理者機能追加            :done, p3a, 2025-11-09, 1d
+    Firestore Index対応       :done, p3b, 2025-11-10, 1d
+    Favicon実装              :done, p3c, 2025-11-11, 1d
+
+    section Phase 4: 受講生機能
+    受講生同期設計            :done, p4a, 2025-11-17, 1d
+    Sheets連携実装           :done, p4b, 2025-11-18, 1d
+    自動同期Scheduler        :done, p4c, 2025-11-18, 1d
+
+    section Phase 5: 最新機能
+    L列論理削除              :done, p5a, 2025-11-30, 1d
+    手動同期ボタン           :done, p5b, 2025-11-30, 1d
+    重複一覧機能             :done, p5c, 2025-11-30, 1d
+    ドキュメント整備          :active, p5d, 2025-11-30, 1d
+</div>
+</div>
+
+<h2 class="section-title">2. マイルストーン一覧</h2>
+
+<table class="milestone-table">
+  <tr>
+    <th>日付</th>
+    <th>マイルストーン</th>
+    <th>成果物</th>
+    <th>状況</th>
+  </tr>
+  <tr>
+    <td>2025-11-04</td>
+    <td>Firestoreスキーマ改善</td>
+    <td>新スキーマ: submissions/{class}/tasks/{task}/files/</td>
+    <td class="done">✅ 完了</td>
+  </tr>
+  <tr>
+    <td>2025-11-05</td>
+    <td>Playwright基盤完成</td>
+    <td>ログイン・ファイル取得自動化</td>
+    <td class="done">✅ 完了</td>
+  </tr>
+  <tr>
+    <td>2025-11-08</td>
+    <td>ページネーション対応</td>
+    <td>全ページファイル収集可能</td>
+    <td class="done">✅ 完了</td>
+  </tr>
+  <tr>
+    <td>2025-11-10</td>
+    <td>Dashboard v1.0</td>
+    <td>管理者機能・検索・ソート</td>
+    <td class="done">✅ 完了</td>
+  </tr>
+  <tr>
+    <td>2025-11-18</td>
+    <td>受講生同期機能</td>
+    <td>Google Sheets ↔ Firestore自動同期</td>
+    <td class="done">✅ 完了</td>
+  </tr>
+  <tr>
+    <td>2025-11-30</td>
+    <td>論理削除・重複管理</td>
+    <td>L列対応、重複一覧ページ</td>
+    <td class="done">✅ 完了</td>
+  </tr>
+  <tr>
+    <td>2025-11-30</td>
+    <td>ドキュメント整備</td>
+    <td>WBS/ガントチャート/フロー図</td>
+    <td class="active">🔄 進行中</td>
+  </tr>
+</table>
+
+<h2 class="section-title">3. 月別サマリー</h2>
+
+<div class="diagram-container">
+<div class="mermaid">
+gantt
+    title 月別開発サマリー
+    dateFormat YYYY-MM
+    axisFormat %Y/%m
+
+    section 初期開発
+    プロジェクト開始・基盤構築  :done, 2025-10, 30d
+
+    section 本格開発
+    Firestoreスキーマ・Playwright :done, 2025-11, 10d
+    Dashboard開発              :done, after 2025-11, 10d
+    受講生管理機能             :done, after 2025-11, 10d
+
+    section 運用フェーズ
+    本番運用開始              :active, 2025-12, 30d
+</div>
+</div>
+
+<h2 class="section-title">4. Cloud Scheduler 運用スケジュール</h2>
+
+<table class="milestone-table">
+  <tr>
+    <th>ジョブ種別</th>
+    <th>スケジュール</th>
+    <th>説明</th>
+  </tr>
+  <tr>
+    <td>carewell-class01-task01</td>
+    <td>毎時 :00, :30</td>
+    <td>クラス01 課題① ファイル収集</td>
+  </tr>
+  <tr>
+    <td>carewell-class01-task02</td>
+    <td>毎時 :05, :35</td>
+    <td>クラス01 課題② ファイル収集</td>
+  </tr>
+  <tr>
+    <td>... (計14ジョブ)</td>
+    <td>5分間隔で分散</td>
+    <td>全クラス・課題をカバー</td>
+  </tr>
+  <tr>
+    <td>carewell-student-sync-daily</td>
+    <td>毎日 JST 02:00</td>
+    <td>受講生データ同期 + Backfill</td>
+  </tr>
+</table>
+
+<hr>
+<p><a href="wbs">WBSを見る →</a> | <a href="flowcharts">フロー図を見る →</a> | <a href="er-diagram">ER図を見る →</a></p>

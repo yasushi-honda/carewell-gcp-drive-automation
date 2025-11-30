@@ -1,0 +1,409 @@
+---
+layout: default
+title: ER図 - データ設計
+---
+
+<style>
+  .diagram-container {
+    background: white;
+    padding: 1rem;
+    border-radius: 8px;
+    margin: 1rem 0;
+    overflow-x: auto;
+  }
+  .mermaid {
+    display: flex;
+    justify-content: center;
+  }
+  .back-link {
+    display: inline-block;
+    margin-bottom: 1rem;
+    color: #0969da;
+    text-decoration: none;
+  }
+  .back-link:hover {
+    text-decoration: underline;
+  }
+  .section-title {
+    border-bottom: 2px solid #0969da;
+    padding-bottom: 0.5rem;
+    margin-top: 2rem;
+  }
+  .schema-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 1rem 0;
+  }
+  .schema-table th, .schema-table td {
+    border: 1px solid #d0d7de;
+    padding: 0.5rem;
+    text-align: left;
+    font-size: 0.9rem;
+  }
+  .schema-table th {
+    background: #f6f8fa;
+  }
+  .field-pk { color: #cf222e; font-weight: bold; }
+  .field-fk { color: #8250df; }
+  .field-required { color: #1a7f37; }
+  code {
+    background: #f6f8fa;
+    padding: 0.1rem 0.3rem;
+    border-radius: 3px;
+    font-size: 0.85rem;
+  }
+  @media (max-width: 768px) {
+    .diagram-container {
+      padding: 0.5rem;
+    }
+    .schema-table {
+      font-size: 0.8rem;
+    }
+  }
+</style>
+
+<script src="https://cdn.jsdelivr.net/npm/mermaid/dist/mermaid.min.js"></script>
+<script>
+  mermaid.initialize({
+    startOnLoad: true,
+    theme: 'default',
+    er: {
+      useMaxWidth: true
+    }
+  });
+</script>
+
+<a href="../" class="back-link">&larr; ポータルに戻る</a>
+
+<h1>ER図 - データ設計</h1>
+<p>Firestore コレクション構造とリレーション</p>
+
+<h2 class="section-title">1. 全体ER図</h2>
+
+<div class="diagram-container">
+<div class="mermaid">
+erDiagram
+    SUBMISSIONS ||--o{ TASKS : "contains"
+    TASKS ||--o{ FILES : "contains"
+    STUDENTS ||--o{ FILES : "references"
+
+    SUBMISSIONS {
+        string class_name PK "クラス名 (例: No1)"
+        timestamp created_at "作成日時"
+        timestamp last_updated "最終更新日時"
+    }
+
+    TASKS {
+        string task_id PK "課題ID (例: 課題①)"
+        string task_pattern "表示名"
+        number file_count "ファイル数"
+        timestamp created_at "作成日時"
+        timestamp last_updated "最終更新日時"
+    }
+
+    FILES {
+        string composite_key PK "student_id_filename"
+        string student_id FK "日介番号"
+        string student_name "受講生名"
+        string filename "ファイル名"
+        string drive_file_id "Drive ID"
+        string drive_folder_id "フォルダID"
+        string submit_date "提出日"
+        string grading_info "採点情報"
+        timestamp uploaded_at "アップロード日時"
+    }
+
+    STUDENTS {
+        string student_id PK "日介番号 (例: N3304966)"
+        string name "氏名"
+        string furigana "ふりがな"
+        string class_name "クラス名"
+        string company "会社名"
+        string office "事業所名"
+        string service_type "サービス種別"
+        string group "グループ"
+        string serial_number "通し番号"
+        string student_number "受講番号"
+        string status "状態 (active/inactive)"
+        timestamp created_at "作成日時"
+        timestamp updated_at "更新日時"
+    }
+</div>
+</div>
+
+<h2 class="section-title">2. コレクションパス構造</h2>
+
+<div class="diagram-container">
+<div class="mermaid">
+graph TD
+    ROOT["Firestore (carewell-native)"]
+
+    ROOT --> SUB["submissions/"]
+    SUB --> CLASS["🗂 {class_name}<br/>(例: No1, No2...)"]
+    CLASS --> TASKS["tasks/"]
+    TASKS --> TASK["📋 {task_id}<br/>(例: 課題①, 課題②)"]
+    TASK --> FILES["files/"]
+    FILES --> FILE["📄 {composite_key}<br/>(例: N3304966_report.pdf)"]
+
+    ROOT --> STU["students/"]
+    STU --> STUDENT["👤 {student_id}<br/>(例: N3304966)"]
+
+    style ROOT fill:#ff9800,color:#fff
+    style CLASS fill:#4285f4,color:#fff
+    style TASK fill:#34a853,color:#fff
+    style FILE fill:#ea4335,color:#fff
+    style STUDENT fill:#9c27b0,color:#fff
+</div>
+</div>
+
+<h2 class="section-title">3. スキーマ詳細</h2>
+
+<h3>3.1 submissions/{class_name}</h3>
+<table class="schema-table">
+  <tr>
+    <th>フィールド</th>
+    <th>型</th>
+    <th>説明</th>
+    <th>例</th>
+  </tr>
+  <tr>
+    <td><span class="field-pk">class_name</span></td>
+    <td>string (Document ID)</td>
+    <td>クラス名（PK）</td>
+    <td><code>No1</code></td>
+  </tr>
+  <tr>
+    <td>created_at</td>
+    <td>timestamp</td>
+    <td>作成日時</td>
+    <td><code>2025-11-04T10:00:00Z</code></td>
+  </tr>
+  <tr>
+    <td>last_updated</td>
+    <td>timestamp</td>
+    <td>最終更新日時</td>
+    <td><code>2025-11-30T08:00:00Z</code></td>
+  </tr>
+</table>
+
+<h3>3.2 submissions/{class_name}/tasks/{task_id}</h3>
+<table class="schema-table">
+  <tr>
+    <th>フィールド</th>
+    <th>型</th>
+    <th>説明</th>
+    <th>例</th>
+  </tr>
+  <tr>
+    <td><span class="field-pk">task_id</span></td>
+    <td>string (Document ID)</td>
+    <td>課題ID（PK）</td>
+    <td><code>課題①</code></td>
+  </tr>
+  <tr>
+    <td><span class="field-required">task_pattern</span></td>
+    <td>string</td>
+    <td>課題表示名</td>
+    <td><code>課題①業務分析　※～11/3〆切</code></td>
+  </tr>
+  <tr>
+    <td><span class="field-required">file_count</span></td>
+    <td>number</td>
+    <td>ファイル数（Atomic Increment）</td>
+    <td><code>150</code></td>
+  </tr>
+  <tr>
+    <td>created_at</td>
+    <td>timestamp</td>
+    <td>作成日時</td>
+    <td><code>2025-11-04T10:00:00Z</code></td>
+  </tr>
+  <tr>
+    <td>last_updated</td>
+    <td>timestamp</td>
+    <td>最終更新日時</td>
+    <td><code>2025-11-30T08:00:00Z</code></td>
+  </tr>
+</table>
+
+<h3>3.3 submissions/{class_name}/tasks/{task_id}/files/{composite_key}</h3>
+<table class="schema-table">
+  <tr>
+    <th>フィールド</th>
+    <th>型</th>
+    <th>説明</th>
+    <th>例</th>
+  </tr>
+  <tr>
+    <td><span class="field-pk">composite_key</span></td>
+    <td>string (Document ID)</td>
+    <td>student_id + filename</td>
+    <td><code>N3304966_業務分析.pdf</code></td>
+  </tr>
+  <tr>
+    <td><span class="field-fk">student_id</span></td>
+    <td>string</td>
+    <td>日介番号（FK → students）</td>
+    <td><code>N3304966</code></td>
+  </tr>
+  <tr>
+    <td><span class="field-required">student_name</span></td>
+    <td>string</td>
+    <td>受講生名（非正規化）</td>
+    <td><code>河原 剛次</code></td>
+  </tr>
+  <tr>
+    <td><span class="field-required">filename</span></td>
+    <td>string</td>
+    <td>ファイル名</td>
+    <td><code>業務分析.pdf</code></td>
+  </tr>
+  <tr>
+    <td><span class="field-required">drive_file_id</span></td>
+    <td>string</td>
+    <td>Google Drive ファイルID</td>
+    <td><code>1abc123...</code></td>
+  </tr>
+  <tr>
+    <td>drive_folder_id</td>
+    <td>string</td>
+    <td>Google Drive フォルダID</td>
+    <td><code>1xyz789...</code></td>
+  </tr>
+  <tr>
+    <td>submit_date</td>
+    <td>string</td>
+    <td>提出日</td>
+    <td><code>2025/11/01</code></td>
+  </tr>
+  <tr>
+    <td>grading_info</td>
+    <td>string</td>
+    <td>採点情報</td>
+    <td><code>合格</code></td>
+  </tr>
+  <tr>
+    <td>uploaded_at</td>
+    <td>timestamp</td>
+    <td>アップロード日時</td>
+    <td><code>2025-11-04T10:30:00Z</code></td>
+  </tr>
+</table>
+
+<h3>3.4 students/{student_id}</h3>
+<table class="schema-table">
+  <tr>
+    <th>フィールド</th>
+    <th>型</th>
+    <th>説明</th>
+    <th>例</th>
+  </tr>
+  <tr>
+    <td><span class="field-pk">student_id</span></td>
+    <td>string (Document ID)</td>
+    <td>日介番号（PK）</td>
+    <td><code>N3304966</code></td>
+  </tr>
+  <tr>
+    <td><span class="field-required">name</span></td>
+    <td>string</td>
+    <td>氏名</td>
+    <td><code>河原 剛次</code></td>
+  </tr>
+  <tr>
+    <td>furigana</td>
+    <td>string</td>
+    <td>ふりがな</td>
+    <td><code>かわはら ごうじ</code></td>
+  </tr>
+  <tr>
+    <td><span class="field-required">class_name</span></td>
+    <td>string</td>
+    <td>クラス名</td>
+    <td><code>No1</code></td>
+  </tr>
+  <tr>
+    <td>company</td>
+    <td>string</td>
+    <td>会社名</td>
+    <td><code>株式会社ABC</code></td>
+  </tr>
+  <tr>
+    <td>office</td>
+    <td>string</td>
+    <td>事業所名</td>
+    <td><code>東京支店</code></td>
+  </tr>
+  <tr>
+    <td>service_type</td>
+    <td>string</td>
+    <td>サービス種別</td>
+    <td><code>入所・居住系</code></td>
+  </tr>
+  <tr>
+    <td>group</td>
+    <td>string</td>
+    <td>グループ</td>
+    <td><code>A</code></td>
+  </tr>
+  <tr>
+    <td>serial_number</td>
+    <td>string</td>
+    <td>通し番号</td>
+    <td><code>005</code></td>
+  </tr>
+  <tr>
+    <td>student_number</td>
+    <td>string</td>
+    <td>受講番号</td>
+    <td><code>A005</code></td>
+  </tr>
+  <tr>
+    <td><span class="field-required">status</span></td>
+    <td>string</td>
+    <td>状態</td>
+    <td><code>active</code> / <code>inactive</code></td>
+  </tr>
+  <tr>
+    <td>created_at</td>
+    <td>timestamp</td>
+    <td>作成日時</td>
+    <td><code>2025-11-18T02:00:00Z</code></td>
+  </tr>
+  <tr>
+    <td>updated_at</td>
+    <td>timestamp</td>
+    <td>更新日時</td>
+    <td><code>2025-11-30T02:00:00Z</code></td>
+  </tr>
+</table>
+
+<h2 class="section-title">4. インデックス定義</h2>
+
+<p>ファイル: <code>firestore.indexes.json</code></p>
+
+<table class="schema-table">
+  <tr>
+    <th>コレクション</th>
+    <th>フィールド</th>
+    <th>用途</th>
+  </tr>
+  <tr>
+    <td>files (collectionGroup)</td>
+    <td>student_id ASC, uploaded_at DESC</td>
+    <td>受講生別ファイル一覧</td>
+  </tr>
+  <tr>
+    <td>students</td>
+    <td>class_name ASC, name ASC</td>
+    <td>クラス別受講生一覧</td>
+  </tr>
+  <tr>
+    <td>students</td>
+    <td>status ASC, class_name ASC</td>
+    <td>有効受講生フィルタ</td>
+  </tr>
+</table>
+
+<hr>
+<p><a href="wbs">WBSを見る →</a> | <a href="gantt">ガントチャートを見る →</a> | <a href="flowcharts">フロー図を見る →</a></p>

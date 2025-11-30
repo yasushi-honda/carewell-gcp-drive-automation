@@ -1,0 +1,242 @@
+---
+layout: default
+title: WBS - 作業分解構成図
+---
+
+<style>
+  .diagram-container {
+    background: white;
+    padding: 1rem;
+    border-radius: 8px;
+    margin: 1rem 0;
+    overflow-x: auto;
+  }
+  .mermaid {
+    display: flex;
+    justify-content: center;
+  }
+  .back-link {
+    display: inline-block;
+    margin-bottom: 1rem;
+    color: #0969da;
+    text-decoration: none;
+  }
+  .back-link:hover {
+    text-decoration: underline;
+  }
+  .section-title {
+    border-bottom: 2px solid #0969da;
+    padding-bottom: 0.5rem;
+    margin-top: 2rem;
+  }
+  @media (max-width: 768px) {
+    .diagram-container {
+      padding: 0.5rem;
+    }
+    .mermaid {
+      font-size: 12px;
+    }
+  }
+</style>
+
+<script src="https://cdn.jsdelivr.net/npm/mermaid/dist/mermaid.min.js"></script>
+<script>
+  mermaid.initialize({
+    startOnLoad: true,
+    theme: 'default',
+    flowchart: {
+      useMaxWidth: true,
+      htmlLabels: true
+    }
+  });
+</script>
+
+<a href="../" class="back-link">&larr; ポータルに戻る</a>
+
+<h1>WBS - 作業分解構成図</h1>
+<p>Carewell File Automation System の全体作業構成</p>
+
+<h2 class="section-title">1. プロジェクト全体WBS</h2>
+
+<div class="diagram-container">
+<div class="mermaid">
+graph TD
+    ROOT["Carewell File<br/>Automation System"]
+
+    ROOT --> A["1. インフラ構築"]
+    ROOT --> B["2. バックエンド開発"]
+    ROOT --> C["3. フロントエンド開発"]
+    ROOT --> D["4. 運用・保守"]
+
+    A --> A1["1.1 GCPプロジェクト設定"]
+    A --> A2["1.2 Cloud Run構築"]
+    A --> A3["1.3 Firestore設定"]
+    A --> A4["1.4 Cloud Scheduler設定"]
+    A --> A5["1.5 CI/CD構築"]
+
+    B --> B1["2.1 Playwright自動化"]
+    B --> B2["2.2 Firestore連携"]
+    B --> B3["2.3 Google Drive連携"]
+    B --> B4["2.4 Google Sheets連携"]
+    B --> B5["2.5 API開発"]
+
+    C --> C1["3.1 Vue.js Dashboard"]
+    C --> C2["3.2 クラス・課題一覧"]
+    C --> C3["3.3 受講生管理"]
+    C --> C4["3.4 管理者機能"]
+
+    D --> D1["4.1 監視・ログ"]
+    D --> D2["4.2 トラブルシューティング"]
+    D --> D3["4.3 ドキュメント整備"]
+
+    style ROOT fill:#1a7f37,color:#fff
+    style A fill:#0969da,color:#fff
+    style B fill:#0969da,color:#fff
+    style C fill:#0969da,color:#fff
+    style D fill:#0969da,color:#fff
+</div>
+</div>
+
+<h2 class="section-title">2. バックエンド詳細WBS</h2>
+
+<div class="diagram-container">
+<div class="mermaid">
+graph TD
+    B["2. バックエンド開発"]
+
+    B --> B1["2.1 Playwright自動化"]
+    B1 --> B1a["ログイン処理"]
+    B1 --> B1b["ページネーション"]
+    B1 --> B1c["ファイルダウンロード"]
+    B1 --> B1d["エラーハンドリング"]
+
+    B --> B2["2.2 Firestore連携"]
+    B2 --> B2a["スキーマ設計"]
+    B2 --> B2b["CRUD操作"]
+    B2 --> B2c["重複チェック"]
+    B2 --> B2d["インデックス管理"]
+
+    B --> B3["2.3 Google Drive連携"]
+    B3 --> B3a["フォルダ構成"]
+    B3 --> B3b["ファイルアップロード"]
+    B3 --> B3c["メタデータ管理"]
+
+    B --> B4["2.4 Google Sheets連携"]
+    B4 --> B4a["受講生データ読込"]
+    B4 --> B4b["重複検出"]
+    B4 --> B4c["設定シート参照"]
+
+    B --> B5["2.5 API開発"]
+    B5 --> B5a["ファイル収集API"]
+    B5 --> B5b["受講生同期API"]
+    B5 --> B5c["管理者API"]
+
+    style B fill:#0969da,color:#fff
+</div>
+</div>
+
+<h2 class="section-title">3. 機能別WBS</h2>
+
+<div class="diagram-container">
+<div class="mermaid">
+graph LR
+    subgraph "ファイル収集機能"
+        FC1["Cloud Scheduler<br/>トリガー"]
+        FC2["Carewell<br/>ログイン"]
+        FC3["ファイル一覧<br/>取得"]
+        FC4["ダウンロード<br/>& アップロード"]
+        FC5["Firestore<br/>記録"]
+        FC1 --> FC2 --> FC3 --> FC4 --> FC5
+    end
+
+    subgraph "受講生同期機能"
+        SS1["定期実行<br/>JST 02:00"]
+        SS2["Sheets<br/>読込"]
+        SS3["重複<br/>チェック"]
+        SS4["Firestore<br/>更新"]
+        SS5["Backfill<br/>実行"]
+        SS1 --> SS2 --> SS3 --> SS4 --> SS5
+    end
+
+    subgraph "Dashboard機能"
+        DB1["クラス<br/>一覧"]
+        DB2["課題<br/>一覧"]
+        DB3["ファイル<br/>一覧"]
+        DB4["受講生<br/>管理"]
+        DB1 --> DB2 --> DB3
+        DB1 --> DB4
+    end
+</div>
+</div>
+
+<h2 class="section-title">4. 完了状況サマリー</h2>
+
+<table>
+  <tr>
+    <th>カテゴリ</th>
+    <th>項目</th>
+    <th>状況</th>
+  </tr>
+  <tr>
+    <td rowspan="5">インフラ</td>
+    <td>GCPプロジェクト設定</td>
+    <td style="color: green;">✅ 完了</td>
+  </tr>
+  <tr>
+    <td>Cloud Run構築</td>
+    <td style="color: green;">✅ 完了</td>
+  </tr>
+  <tr>
+    <td>Firestore設定</td>
+    <td style="color: green;">✅ 完了</td>
+  </tr>
+  <tr>
+    <td>Cloud Scheduler (14+1ジョブ)</td>
+    <td style="color: green;">✅ 完了</td>
+  </tr>
+  <tr>
+    <td>GitHub Actions CI/CD</td>
+    <td style="color: green;">✅ 完了</td>
+  </tr>
+  <tr>
+    <td rowspan="5">バックエンド</td>
+    <td>Playwright自動化</td>
+    <td style="color: green;">✅ 完了</td>
+  </tr>
+  <tr>
+    <td>Firestore連携</td>
+    <td style="color: green;">✅ 完了</td>
+  </tr>
+  <tr>
+    <td>Google Drive連携</td>
+    <td style="color: green;">✅ 完了</td>
+  </tr>
+  <tr>
+    <td>Google Sheets連携</td>
+    <td style="color: green;">✅ 完了</td>
+  </tr>
+  <tr>
+    <td>API開発</td>
+    <td style="color: green;">✅ 完了</td>
+  </tr>
+  <tr>
+    <td rowspan="4">フロントエンド</td>
+    <td>Vue.js Dashboard</td>
+    <td style="color: green;">✅ 完了</td>
+  </tr>
+  <tr>
+    <td>クラス・課題一覧</td>
+    <td style="color: green;">✅ 完了</td>
+  </tr>
+  <tr>
+    <td>受講生管理</td>
+    <td style="color: green;">✅ 完了</td>
+  </tr>
+  <tr>
+    <td>管理者機能（重複一覧等）</td>
+    <td style="color: green;">✅ 完了</td>
+  </tr>
+</table>
+
+<hr>
+<p><a href="flowcharts">フロー図を見る →</a> | <a href="er-diagram">ER図を見る →</a> | <a href="gantt">ガントチャートを見る →</a></p>
