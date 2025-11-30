@@ -251,6 +251,11 @@ const groupList = computed(() => {
 // クライアント側でのフィルタリング
 const filteredStudents = computed(() => {
   return students.value.filter((student) => {
+    // 無効な受講生を除外（status が inactive の場合）
+    if (student.status === 'inactive') {
+      return false;
+    }
+
     // クラスフィルター
     if (filterClass.value && student.class_name !== filterClass.value) {
       return false;

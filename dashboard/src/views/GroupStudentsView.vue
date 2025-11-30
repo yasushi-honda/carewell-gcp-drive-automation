@@ -184,6 +184,11 @@ const getWorkplace = (student: Student): string => {
 // フィルタリング（クラス、グループ、検索クエリ）
 const filteredStudents = computed(() => {
   return students.value.filter((student) => {
+    // 無効な受講生を除外（status が inactive の場合）
+    if (student.status === 'inactive') {
+      return false;
+    }
+
     // クラスフィルター（短縮形で比較）
     if (student.class_name !== shortClassName) {
       return false;
