@@ -1,7 +1,7 @@
 #!/bin/bash
 #
 # Cloud Scheduler ジョブ作成スクリプト（Phase 11対応）
-# 7クラス × 2課題 = 14ジョブを新命名規則で作成
+# 8クラス × 2課題 = 16ジョブを新命名規則で作成
 #
 # Bash 3.2互換バージョン（連想配列不使用）
 #
@@ -62,7 +62,7 @@ create_job() {
     TOTAL_JOBS=$((TOTAL_JOBS + 1))
 
     echo -e "${BLUE}----------------------------------------${NC}"
-    echo -e "${BLUE}[${TOTAL_JOBS}/14] ${job_name}${NC}"
+    echo -e "${BLUE}[${TOTAL_JOBS}/16] ${job_name}${NC}"
     echo -e "${BLUE}----------------------------------------${NC}"
     echo "クラス: ${class_name}"
     echo "課題ID: ${task_id}"
@@ -156,6 +156,9 @@ create_job "08" "02" "課題②" "課題②" "25,55 * * * *" "1kdKwI7nQ8N6j8gD6a
 
 create_job "09" "01" "課題①" "課題①" "0,30 * * * *" "1nllFEyyDEV7jiTSEgyBnnNeXhC_4Ttu6" "1O8S3w3F8RvLJp0LrS-eZtX0sZW5HcjOgMhyWJ_e8YPA"
 create_job "09" "02" "課題②" "課題②" "5,35 * * * *" "1nllFEyyDEV7jiTSEgyBnnNeXhC_4Ttu6" "1O8S3w3F8RvLJp0LrS-eZtX0sZW5HcjOgMhyWJ_e8YPA"
+
+create_job "10" "01" "課題①" "課題①" "10,40 * * * *" "1BkDi3e_snacC3ITusTSAf3wojbxtpbsH" "1KPEj6LpE6gF76S3jdvADdWKlZeF-9nQ_BfhYi2dlkYA"
+create_job "10" "02" "課題②" "課題②" "15,45 * * * *" "1BkDi3e_snacC3ITusTSAf3wojbxtpbsH" "1KPEj6LpE6gF76S3jdvADdWKlZeF-9nQ_BfhYi2dlkYA"
 
 # サマリー
 echo -e "${BLUE}================================================${NC}"
