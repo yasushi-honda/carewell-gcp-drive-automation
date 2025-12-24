@@ -221,13 +221,18 @@ const sortOrder = ref<'asc' | 'desc' | null>(null);
 
 const { students, loading, error } = useStudents();
 
-// クラスリスト（ユニーク値）
+// クラスリスト（ユニーク値）- 数値順ソート
 const classList = computed(() => {
   const classes = students.value
     .filter((s) => s.status === 'active' && s.class_name)
     .map((s) => s.class_name)
     .filter((v, i, a) => a.indexOf(v) === i)
-    .sort();
+    .sort((a, b) => {
+      // "No1", "No10" などから数値を抽出して比較
+      const numA = parseInt(a.replace(/\D/g, ''), 10) || 0;
+      const numB = parseInt(b.replace(/\D/g, ''), 10) || 0;
+      return numA - numB;
+    });
   return classes;
 });
 
