@@ -80,7 +80,7 @@ graph TB
         S1[carewell-class01-task01]
         S2[carewell-class01-task02]
         S3[carewell-class02-task01]
-        S4[... 全14ジョブ]
+        S4[... 全16ジョブ]
     end
 
     subgraph "Cloud Run: carewell-file-collector"
