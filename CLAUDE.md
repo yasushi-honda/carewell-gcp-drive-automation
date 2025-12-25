@@ -38,6 +38,8 @@ Kiro-style Spec Driven Development implementation using claude code slash comman
 
 - [ ] Firestore のデータベース名は？ → `carewell-native`
 - [ ] 正しいコレクションパスは？ → `submissions/{class}/tasks/{task}/files/`
+- [ ] 現在のクラス数は？ → 8クラス (№01〜05, 08, 09, 10)
+- [ ] Cloud Scheduler ジョブ数は？ → 16ジョブ (8クラス × 2課題)
 - [ ] 問題発生時に最初にやることは？ → CLAUDE.md CRITICAL を読む
 - [ ] Cloud Run ログの確認コマンドは？ → `gcloud logging read ...`
 - [ ] Dashboard の URL は？ → `https://carewell-automation.web.app/`
