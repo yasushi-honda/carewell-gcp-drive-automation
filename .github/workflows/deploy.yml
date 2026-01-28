@@ -44,17 +44,22 @@ jobs:
         run: |
           pytest tests/unit/ -v --cov=src
 
+      # Integration tests temporarily disabled: Firestore Emulator startup issue in GitHub Actions
+      # To re-enable: remove 'if: false' from the steps below
       - name: Set up Firebase CLI
+        if: false
         run: npm install -g firebase-tools
 
       - name: Start Firestore Emulator
+        if: false
         run: |
           firebase emulators:start --only firestore --project demo-test &
           sleep 10
 
       - name: Run integration tests
-        continue-on-error: true  # Firestore Emulator issue - allow deployment to proceed
-        timeout-minutes: 5  # Prevent hanging on emulator connection issues
+        if: false
+        continue-on-error: true
+        timeout-minutes: 5
         run: |
           pytest tests/integration/ -v --timeout=60
         env:
