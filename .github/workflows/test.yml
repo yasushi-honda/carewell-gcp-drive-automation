@@ -87,11 +87,13 @@ jobs:
           sleep 10
 
       - name: Run integration tests
+        timeout-minutes: 5  # Prevent hanging on emulator connection issues
         run: |
           pytest tests/integration/ \
             --cov=src \
             --cov-report=term-missing \
-            -v
+            -v \
+            --timeout=60
         env:
           FIRESTORE_EMULATOR_HOST: localhost:8080
           GCP_PROJECT: demo-test

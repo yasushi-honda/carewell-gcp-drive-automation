@@ -54,8 +54,9 @@ jobs:
 
       - name: Run integration tests
         continue-on-error: true  # Firestore Emulator issue - allow deployment to proceed
+        timeout-minutes: 5  # Prevent hanging on emulator connection issues
         run: |
-          pytest tests/integration/ -v
+          pytest tests/integration/ -v --timeout=60
         env:
           FIRESTORE_EMULATOR_HOST: localhost:8080
           GCP_PROJECT: demo-test
