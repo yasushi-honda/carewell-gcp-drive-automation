@@ -78,7 +78,7 @@ def append_record_with_retry(
 
         # Exponential backoff: 1s, 2s, 4s
         if attempt < max_retries - 1:
-            delay = base_delay * (2 ** attempt)
+            delay = base_delay * (2**attempt)
             logger.info(f"Retrying in {delay}s...")
             time.sleep(delay)
 

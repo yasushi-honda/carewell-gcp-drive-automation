@@ -6,6 +6,7 @@
 """
 
 import sys
+
 sys.path.insert(0, "/Users/yyyhhh/carewell-gcp-drive-automation")
 
 from google.cloud import firestore
@@ -58,7 +59,13 @@ def get_firestore_records(db, class_name: str, task_id: str) -> dict:
     """Firestoreから指定クラス・課題のレコードを取得"""
     records = {}
     try:
-        files_ref = db.collection("submissions").document(class_name).collection("tasks").document(task_id).collection("files")
+        files_ref = (
+            db.collection("submissions")
+            .document(class_name)
+            .collection("tasks")
+            .document(task_id)
+            .collection("files")
+        )
         docs = files_ref.stream()
 
         for doc in docs:
@@ -85,10 +92,12 @@ def get_spreadsheet_records(sheets_service, spreadsheet_id: str, task_id: str) -
     records = set()
     try:
         escaped_name = task_id.replace("'", "''")
-        result = sheets_service.service.spreadsheets().values().get(
-            spreadsheetId=spreadsheet_id,
-            range=f"'{escaped_name}'!A:H"
-        ).execute()
+        result = (
+            sheets_service.service.spreadsheets()
+            .values()
+            .get(spreadsheetId=spreadsheet_id, range=f"'{escaped_name}'!A:H")
+            .execute()
+        )
 
         values = result.get("values", [])
 
@@ -135,7 +144,9 @@ def main():
     all_missing_records = []
     class_summary = []
 
-    for class_key in sorted(CLASS_CONFIG.keys(), key=lambda x: int(x.replace("No", ""))):
+    for class_key in sorted(
+        CLASS_CONFIG.keys(), key=lambda x: int(x.replace("No", ""))
+    ):
         config = CLASS_CONFIG[class_key]
         spreadsheet_id = config["spreadsheet_id"]
         firestore_name = config["firestore_name"]
@@ -153,35 +164,42 @@ def main():
             firestore_records = get_firestore_records(db, firestore_name, task_id)
 
             # スプレッドシートのレコードを取得
-            sheet_records = get_spreadsheet_records(sheets_service, spreadsheet_id, task_id)
+            sheet_records = get_spreadsheet_records(
+                sheets_service, spreadsheet_id, task_id
+            )
 
             # 差分チェック
             missing_in_sheet = []
             for key, record in firestore_records.items():
                 if key not in sheet_records:
                     missing_in_sheet.append(record)
-                    all_missing_records.append({
-                        "class": class_key,
-                        "task": task_id,
-                        "spreadsheet_id": spreadsheet_id,
-                        **record
-                    })
+                    all_missing_records.append(
+                        {
+                            "class": class_key,
+                            "task": task_id,
+                            "spreadsheet_id": spreadsheet_id,
+                            **record,
+                        }
+                    )
 
             missing_count = len(missing_in_sheet)
             class_missing += missing_count
             total_missing += missing_count
 
             if missing_count > 0:
-                print(f"  {task_id}: Firestore={len(firestore_records)}, Sheet={len(sheet_records)}, ❌ 欠落={missing_count}")
+                print(
+                    f"  {task_id}: Firestore={len(firestore_records)}, Sheet={len(sheet_records)}, ❌ 欠落={missing_count}"
+                )
                 for rec in missing_in_sheet:
-                    print(f"      - {rec['student_name']} ({rec['student_id']}): {rec['filename']}")
+                    print(
+                        f"      - {rec['student_name']} ({rec['student_id']}): {rec['filename']}"
+                    )
             else:
-                print(f"  {task_id}: Firestore={len(firestore_records)}, Sheet={len(sheet_records)}, ✅ OK")
+                print(
+                    f"  {task_id}: Firestore={len(firestore_records)}, Sheet={len(sheet_records)}, ✅ OK"
+                )
 
-        class_summary.append({
-            "class": class_key,
-            "missing": class_missing
-        })
+        class_summary.append({"class": class_key, "missing": class_missing})
 
     # サマリー
     print()

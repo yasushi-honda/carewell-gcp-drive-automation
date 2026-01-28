@@ -335,7 +335,6 @@ class TestFirestoreService:
             mock_task_doc.set.assert_not_called()
             mock_task_doc.update.assert_not_called()
 
-
     def test_update_sheets_sync_status_success(self):
         """Test update_sheets_sync_status successfully updates status to 'success'."""
         with patch("firestore_service.firestore.Client") as mock_client:
