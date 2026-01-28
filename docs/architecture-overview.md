@@ -110,6 +110,7 @@ graph TB
 - `src/firestore_service.py`: Firestore操作
 - `src/drive_service.py`: Google Drive操作
 - `src/spreadsheet_service.py`: スプレッドシート操作
+- `src/sheets_retry.py`: Sheets書き込みリトライ（指数バックオフ）
 
 **環境変数**:
 - `GOOGLE_CLOUD_PROJECT`: carewell-automation
@@ -223,10 +224,22 @@ sequenceDiagram
             GD-->>CR: drive_file_id
 
             Note over CR,FS: メタデータ保存
-            CR->>FS: filesサブコレクション作成
+            CR->>FS: filesサブコレクション作成<br/>(sheets_sync_status: pending)
             CR->>FS: 親ドキュメント Increment(file_count)
             CR->>FS: 親ドキュメント last_updated更新
             FS-->>CR: 保存完了
+
+            Note over CR: Sheets書き込み (リトライ付き)
+            loop 最大3回 (指数バックオフ)
+                CR->>FS: Sheets append試行
+                alt 成功
+                    CR->>FS: sheets_sync_status: success
+                else 失敗 & リトライ可
+                    CR->>CR: 待機 (1s, 2s, 4s)
+                else 全リトライ失敗
+                    CR->>FS: sheets_sync_status: failed
+                end
+            end
         end
     end
 
@@ -383,6 +396,7 @@ graph LR
 2. **Atomic Increment**: 並行更新の競合回避
 3. **Composite Key インデックス**: 重複チェック高速化
 4. **Playwright Auto-waiting**: 不要な待機削除
+5. **Sheets リトライ**: 指数バックオフによる一時エラー耐性
 
 ### 監視
 
@@ -423,6 +437,6 @@ graph LR
 
 ---
 
-**最終更新**: 2025/11/05
-**バージョン**: 1.0
+**最終更新**: 2025/01/28
+**バージョン**: 1.1
 **メンテナー**: Claude Code

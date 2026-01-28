@@ -48,6 +48,27 @@ Carewell Webサービスから学生の提出ファイルを自動取得し、Go
 クラス一覧 → 課題一覧 → [👥 受講生一覧] → グループ一覧 → グループ別受講生一覧
 ```
 
+### Sheets同期信頼性向上（2025-01-28追加）
+
+**Google Sheets 書き込みリトライ機能**:
+
+- **リトライロジック**: 指数バックオフ (1秒, 2秒, 4秒) で最大3回リトライ
+- **同期ステータス追跡**: Firestoreドキュメントに `sheets_sync_status` フィールド追加
+  - `pending`: 初期状態
+  - `success`: Sheets書き込み成功
+  - `failed`: 全リトライ失敗
+- **整合性チェックスクリプト**: `scripts/check_all_spreadsheets_consistency.py`
+
+**データフロー**:
+```
+ファイル取得 → Firestore保存 (sheets_sync_status: pending)
+    ↓
+Sheets書き込み試行 (最大3回リトライ)
+    ↓
+成功 → sheets_sync_status: success
+失敗 → sheets_sync_status: failed + エラーメッセージ保存
+```
+
 ### 受講生同期機能（2025-11-30追加）
 
 **Google Sheets ↔ Firestore 自動同期**:
@@ -153,6 +174,9 @@ erDiagram
         timestamp submit_date "提出日時"
         string drive_file_id "Google Drive ID"
         string drive_folder_id "Google Drive Folder ID"
+        string sheets_sync_status "pending/success/failed"
+        timestamp sheets_sync_updated_at "同期更新日時"
+        string sheets_sync_error "エラーメッセージ(失敗時)"
     }
 
     STUDENTS {
@@ -348,6 +372,6 @@ https://carewell-automation.web.app/
 
 ---
 
-**最終更新**: 2025/11/30
-**バージョン**: 1.1
+**最終更新**: 2025/01/28
+**バージョン**: 1.2
 **メンテナー**: Claude Code

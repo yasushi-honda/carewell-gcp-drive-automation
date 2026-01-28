@@ -20,6 +20,9 @@
 | 10 | Deleting Critical STEP 1 | 2025-11-07 | 50% 収集失敗 | 誤った前提で削除 |
 | 11 | Assuming Parameter Names | 2025-11-08 | Page 2+ 0% 成功 | HTML検証なし |
 | 12 | Phase 1 go_back Skip | 2025-11-08 | 2人目以降失敗 | 必須処理スキップ |
+| 13 | Firestore Index Missing | 2025-11-10 | 25分タイムアウト | IaC不徹底 |
+| 14 | Dashboard Class Display | 2025-11-18 | 誤解による作業 | 機能の混同 |
+| 15 | Sheets Sync Silent Failure | 2025-01-28 | 5件データ欠落 | リトライ・ステータス追跡なし |
 
 ---
 
@@ -1112,3 +1115,121 @@ firebase deploy --only firestore:indexes --project carewell-native
 - Incident #1, #4, #10: ドキュメント確認なしのコード変更（パターン類似）
 - Incident #7: 複数箇所の設定見落とし（GitHub Actions + Cloud Run）
 - 今回: Infrastructure as Code の不徹底（手動設定 + 自動デプロイの齟齬）
+
+---
+
+## Incident #15: Google Sheets Sync Silent Failure (2025-01-28)
+
+### 📅 発見日時
+2025-01-28
+
+### 🚨 症状
+- Firestoreにレコードが存在するが、対応するスプレッドシートにエントリがない
+- 5件のレコードが複数クラス（No1, No4, No5, No8, No9）で欠落
+- ユーザーがDashboardで確認したデータがスプレッドシートに反映されていない
+
+### 🔍 根本原因
+
+**Google Sheets API エラー時のサイレント失敗**
+
+1. **エラーハンドリングの不備**:
+   - `sheets_service.append_record()` が失敗時に `False` を返す
+   - 呼び出し元（`main.py`）が戻り値をチェックしていない
+   - Firestore書き込みは成功 → Sheets書き込み失敗 → 不整合発生
+
+2. **リトライなし**:
+   - Google Sheets API の一時的エラー（429, 503等）に対するリトライがない
+   - 1回の失敗で永久にデータ欠落
+
+3. **ステータス追跡なし**:
+   - Firestore側でSheets同期状態を追跡していない
+   - 失敗したレコードを後から特定する手段がなかった
+
+```python
+# ❌ Before (サイレント失敗)
+sheets_service.append_record(...)  # 戻り値チェックなし
+# → 失敗しても処理続行、エラー記録なし
+
+# ✅ After (リトライ + ステータス追跡)
+sheets_success = append_record_with_retry(sheets_service, ...)
+if sheets_success:
+    firestore_service.update_sheets_sync_status(..., status="success")
+else:
+    firestore_service.update_sheets_sync_status(..., status="failed",
+        error_message="All retry attempts failed")
+```
+
+### ✅ 解決策
+
+**Phase 1: リトライ + ステータス追跡（実装済み）**
+
+1. **`src/sheets_retry.py`** - 指数バックオフリトライ
+   - 最大3回リトライ（1秒, 2秒, 4秒間隔）
+   - 一時的APIエラーに対する耐性向上
+
+2. **`sheets_sync_status` フィールド追加**
+   - `pending`: 初期状態
+   - `success`: Sheets書き込み成功
+   - `failed`: 全リトライ失敗
+
+3. **整合性チェックスクリプト**
+   - `scripts/check_all_spreadsheets_consistency.py`
+   - 全8クラスのFirestore-Spreadsheet不整合を検出
+
+### 🎯 教訓
+
+#### 設計上の問題
+
+1. **サイレント失敗の危険性**:
+   - 外部API呼び出しの戻り値は必ずチェック
+   - 失敗時は明示的にログ + ステータス更新
+
+2. **リトライの重要性**:
+   - 外部APIは一時的エラーが発生しうる
+   - 指数バックオフリトライで信頼性向上
+
+3. **ステータス追跡の重要性**:
+   - 非同期処理の結果を追跡可能にする
+   - 失敗したレコードを後から特定できるようにする
+
+#### チェックリスト（外部API連携実装時）
+
+- [ ] API呼び出しの戻り値/例外をチェックしているか？
+- [ ] 一時的エラーに対するリトライロジックがあるか？
+- [ ] 処理結果をDB等に記録しているか？
+- [ ] 失敗時の通知/アラートがあるか？
+- [ ] 定期的な整合性チェックの仕組みがあるか？
+
+### 📊 影響分析
+
+**発見された不整合**:
+- No1 課題①: 1件
+- No4 課題①: 1件
+- No5 課題②: 1件
+- No8 課題②: 1件
+- No9 課題①: 1件
+- **合計: 5件**（全8クラス × 2課題 = 16スプレッドシート中）
+
+**データへの影響**:
+- Firestoreデータは正常（Dashboard表示は正常）
+- スプレッドシートのみ欠落（講師のExcel作業に影響）
+- 手動で5件を修正済み
+
+### 🔗 関連ファイル
+- `src/sheets_retry.py` - リトライロジック
+- `src/firestore_service.py` - `sheets_sync_status` フィールド追加
+- `src/main.py` - リトライ使用 + ステータス更新
+- `scripts/check_all_spreadsheets_consistency.py` - 整合性チェック
+- `tests/unit/test_sheets_retry.py` - リトライテスト
+
+### 🚨 緊急度評価
+- **重大度**: 🟡 Medium（データ欠落だが致命的ではない）
+- **影響範囲**: 🟢 Low（5件/数百件）
+- **修正難易度**: 🟢 Low（リトライ追加のみ）
+- **再発リスク**: 🟢 Low（リトライ + ステータス追跡で予防）
+
+### 今後の改善（Phase 2以降）
+
+1. **アラート通知**: `sheets_sync_status: failed` 時にメール通知
+2. **定期リコンシリエーション**: 失敗レコードの定期再同期ジョブ
+3. **Slackアラート**: 失敗発生時の即時通知（将来検討）

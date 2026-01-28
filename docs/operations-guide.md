@@ -194,7 +194,74 @@ Success: ✅ Yes
 
 ---
 
-### 2. バリデーション実行
+### 2. Firestore-Spreadsheet 整合性チェック
+
+Firestoreにレコードがあるのにスプレッドシートに書き込まれていない不整合を検出します。
+
+#### 実行頻度
+
+- **推奨**: 週1回（月曜日午前など）
+- **必須**: 大規模障害発生後
+
+#### 手順
+
+**ステップ1: 全クラスの整合性チェック**
+
+```bash
+python scripts/check_all_spreadsheets_consistency.py
+```
+
+**出力例（正常時）:**
+
+```
+======================================================================
+全クラス Firestore - スプレッドシート 整合性チェック
+======================================================================
+
+【No1】チェック中...
+  課題①: Firestore=15, Sheet=15, ✅ OK
+  課題②: Firestore=8, Sheet=8, ✅ OK
+
+【結果サマリー】
+  No1: ✅ 欠落 0 件
+  No2: ✅ 欠落 0 件
+  ...
+  合計欠落件数: 0 件
+======================================================================
+```
+
+**出力例（不整合あり）:**
+
+```
+【No4】チェック中...
+  課題①: Firestore=20, Sheet=19, ❌ 欠落=1
+      - 山田太郎 (N9902913): report.pdf
+
+【結果サマリー】
+  No4: ❌ 欠落 1 件
+  合計欠落件数: 1 件
+```
+
+**ステップ2: 不整合の修正**
+
+欠落レコードが見つかった場合、スプレッドシートに手動で追加するか、修正スクリプトを作成します。
+
+#### sheets_sync_status フィールドの確認
+
+Firestoreドキュメントの `sheets_sync_status` フィールドで同期状態を確認できます：
+
+- `pending`: 初期状態（未処理または処理中）
+- `success`: Sheets書き込み成功
+- `failed`: 全リトライ失敗（`sheets_sync_error` にエラー詳細）
+
+```bash
+# failed状態のドキュメントを検索（Firestore Console または SDK使用）
+# パス: submissions/{class}/tasks/{task}/files/ で sheets_sync_status == "failed" をフィルタ
+```
+
+---
+
+### 3. バリデーション実行
 
 マイグレーション後や定期的な健全性チェックとして、バリデーションを実行します。
 
@@ -888,6 +955,9 @@ CI/CD（GitHub Actions）では自動的にエミュレーターが起動され�
 ### A. よく使うコマンド一覧
 
 ```bash
+# Firestore-Spreadsheet 整合性チェック
+python scripts/check_all_spreadsheets_consistency.py
+
 # file_count不整合チェック
 python scripts/fix_file_count.py --dry-run
 
@@ -950,6 +1020,7 @@ gh run watch
 
 | 日付 | バージョン | 変更内容 | 担当者 |
 |------|-----------|---------|--------|
+| 2025-01-28 | 1.1 | Firestore-Spreadsheet 整合性チェック手順追加 | AI Assistant (Claude) |
 | 2025-01-10 | 1.0 | 初版作成 | AI Assistant (Claude) |
 
 ---

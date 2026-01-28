@@ -290,6 +290,7 @@ Before committing changes to Firestore-related code:
 | 12 | Phase 1 go_back Skip | 2025-11-08 | 2人目以降失敗 | ✅ 必須処理をスキップせず、タイムアウト短縮で最適化 |
 | 13 | Firestore Index Missing | 2025-11-10 | 25分タイムアウト | ✅ **全インデックスを `firestore.indexes.json` で管理（IaC 徹底）** |
 | 14 | Dashboard Class Display Confusion | 2025-11-18 | 誤解による作業 | ✅ **Dashboard の2つのクラス表示機能の違いを理解**（詳細: `docs/DASHBOARD_CLASS_DISPLAY.md`） |
+| 15 | Sheets Sync Silent Failure | 2025-01-28 | 5件データ欠落 | ✅ **外部API呼び出しはリトライ + ステータス追跡必須** |
 
 ### 🚨 最重要パターン
 
@@ -318,6 +319,11 @@ Before committing changes to Firestore-related code:
 - インシデント #14（Dashboard のクラス表示）
 - 教訓: **同じ「クラス表示」でも、データソースと更新方法が異なる場合がある**
 - 参照: `docs/DASHBOARD_CLASS_DISPLAY.md`
+
+**パターン7: 外部APIのサイレント失敗**
+- インシデント #15（Google Sheets同期）
+- 教訓: **外部API呼び出しはリトライ + ステータス追跡 + 定期整合性チェック**
+- 参照: `src/sheets_retry.py`, `scripts/check_all_spreadsheets_consistency.py`
 
 **詳細な教訓・解決策・チェックリストは `docs/common-mistakes.md` を参照**
 
