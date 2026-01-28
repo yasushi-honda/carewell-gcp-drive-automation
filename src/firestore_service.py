@@ -255,6 +255,67 @@ class FirestoreService:
             # fail-open: continue processing even if metadata update fails
             return False
 
+    def update_sheets_sync_status(
+        self,
+        class_name: str,
+        task_id: str,
+        student_id: str,
+        filename: str,
+        submit_date: str,
+        status: str,
+        error_message: str = "",
+    ) -> bool:
+        """
+        Update sheets_sync_status field of a file document.
+
+        Args:
+            class_name: Class name
+            task_id: Task ID (e.g., "課題①")
+            student_id: Student ID (e.g., N9902913)
+            filename: Original filename
+            submit_date: Submission date/time
+            status: New status ("success" or "failed")
+            error_message: Error message if status is "failed"
+
+        Returns:
+            True if successful, False if error occurred
+        """
+        try:
+            composite_key = self._generate_composite_key(
+                student_id, filename, submit_date
+            )
+
+            doc_ref = (
+                self.db.collection("submissions")
+                .document(class_name)
+                .collection("tasks")
+                .document(task_id)
+                .collection("files")
+                .document(composite_key)
+            )
+
+            update_data = {
+                "sheets_sync_status": status,
+                "sheets_sync_updated_at": firestore.SERVER_TIMESTAMP,
+            }
+
+            if error_message:
+                update_data["sheets_sync_error"] = error_message
+
+            doc_ref.update(update_data)
+
+            logger.info(
+                f"Updated sheets_sync_status to '{status}' for: {composite_key}"
+            )
+            return True
+
+        except Exception as e:
+            logger.error(
+                f"Failed to update sheets_sync_status for {student_id}/{filename}: {e}",
+                exc_info=True,
+            )
+            return False
+
     def record_upload(
         self,
         class_name: str,
@@ -343,6 +404,8 @@ class FirestoreService:
                 "student_service_type": student_service_type,
                 "student_serial_number": student_serial_number,
                 "student_number": student_number,
+                # Sheets sync status tracking (Phase 1: Sync reliability)
+                "sheets_sync_status": "pending",  # pending -> success/failed
             }
 
             # Collection path: submissions/{class_name}/tasks/{task_id}/files

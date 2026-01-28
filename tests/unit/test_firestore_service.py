@@ -336,6 +336,164 @@ class TestFirestoreService:
             mock_task_doc.update.assert_not_called()
 
 
+    def test_update_sheets_sync_status_success(self):
+        """Test update_sheets_sync_status successfully updates status to 'success'."""
+        with patch("firestore_service.firestore.Client") as mock_client:
+            mock_db = Mock()
+            mock_client.return_value = mock_db
+
+            mock_submissions_collection = Mock()
+            mock_class_doc = Mock()
+            mock_tasks_collection = Mock()
+            mock_task_doc = Mock()
+            mock_files_collection = Mock()
+            mock_file_doc = Mock()
+
+            mock_db.collection.return_value = mock_submissions_collection
+            mock_submissions_collection.document.return_value = mock_class_doc
+            mock_class_doc.collection.return_value = mock_tasks_collection
+            mock_tasks_collection.document.return_value = mock_task_doc
+            mock_task_doc.collection.return_value = mock_files_collection
+            mock_files_collection.document.return_value = mock_file_doc
+
+            service = self.FirestoreService()
+
+            # Execute
+            result = service.update_sheets_sync_status(
+                class_name="テストクラス",
+                task_id="課題①",
+                student_id="N9902913",
+                filename="test.pdf",
+                submit_date="2025-10-12 10:00:00",
+                status="success",
+            )
+
+            # Assert
+            assert result is True
+            mock_file_doc.update.assert_called_once()
+            call_args = mock_file_doc.update.call_args[0][0]
+            assert call_args["sheets_sync_status"] == "success"
+            assert "sheets_sync_error" not in call_args
+
+    def test_update_sheets_sync_status_failed_with_error_message(self):
+        """Test update_sheets_sync_status records error message on failure."""
+        with patch("firestore_service.firestore.Client") as mock_client:
+            mock_db = Mock()
+            mock_client.return_value = mock_db
+
+            mock_submissions_collection = Mock()
+            mock_class_doc = Mock()
+            mock_tasks_collection = Mock()
+            mock_task_doc = Mock()
+            mock_files_collection = Mock()
+            mock_file_doc = Mock()
+
+            mock_db.collection.return_value = mock_submissions_collection
+            mock_submissions_collection.document.return_value = mock_class_doc
+            mock_class_doc.collection.return_value = mock_tasks_collection
+            mock_tasks_collection.document.return_value = mock_task_doc
+            mock_task_doc.collection.return_value = mock_files_collection
+            mock_files_collection.document.return_value = mock_file_doc
+
+            service = self.FirestoreService()
+
+            # Execute
+            result = service.update_sheets_sync_status(
+                class_name="テストクラス",
+                task_id="課題①",
+                student_id="N9902913",
+                filename="test.pdf",
+                submit_date="2025-10-12 10:00:00",
+                status="failed",
+                error_message="API rate limit exceeded",
+            )
+
+            # Assert
+            assert result is True
+            mock_file_doc.update.assert_called_once()
+            call_args = mock_file_doc.update.call_args[0][0]
+            assert call_args["sheets_sync_status"] == "failed"
+            assert call_args["sheets_sync_error"] == "API rate limit exceeded"
+
+    def test_update_sheets_sync_status_handles_error(self):
+        """Test update_sheets_sync_status returns False on Firestore error."""
+        with patch("firestore_service.firestore.Client") as mock_client:
+            mock_db = Mock()
+            mock_client.return_value = mock_db
+
+            mock_submissions_collection = Mock()
+            mock_class_doc = Mock()
+            mock_tasks_collection = Mock()
+            mock_task_doc = Mock()
+            mock_files_collection = Mock()
+            mock_file_doc = Mock()
+
+            mock_db.collection.return_value = mock_submissions_collection
+            mock_submissions_collection.document.return_value = mock_class_doc
+            mock_class_doc.collection.return_value = mock_tasks_collection
+            mock_tasks_collection.document.return_value = mock_task_doc
+            mock_task_doc.collection.return_value = mock_files_collection
+            mock_files_collection.document.return_value = mock_file_doc
+
+            # Simulate Firestore error
+            mock_file_doc.update.side_effect = Exception("Firestore error")
+
+            service = self.FirestoreService()
+
+            # Execute
+            result = service.update_sheets_sync_status(
+                class_name="テストクラス",
+                task_id="課題①",
+                student_id="N9902913",
+                filename="test.pdf",
+                submit_date="2025-10-12 10:00:00",
+                status="success",
+            )
+
+            # Assert
+            assert result is False
+
+    def test_record_upload_includes_sheets_sync_status(self):
+        """Test that record_upload includes sheets_sync_status field."""
+        with patch("firestore_service.firestore.Client") as mock_client:
+            mock_db = Mock()
+            mock_client.return_value = mock_db
+
+            mock_submissions_collection = Mock()
+            mock_class_doc = Mock()
+            mock_tasks_collection = Mock()
+            mock_task_doc = Mock()
+            mock_files_collection = Mock()
+            mock_file_doc = Mock()
+
+            mock_db.collection.return_value = mock_submissions_collection
+            mock_submissions_collection.document.return_value = mock_class_doc
+            mock_class_doc.collection.return_value = mock_tasks_collection
+            mock_tasks_collection.document.return_value = mock_task_doc
+            mock_task_doc.collection.return_value = mock_files_collection
+            mock_files_collection.document.return_value = mock_file_doc
+
+            service = self.FirestoreService()
+
+            # Execute
+            result = service.record_upload(
+                class_name="テストクラス",
+                task_id="課題①",
+                student_name="テスト太郎",
+                student_id="N9902913",
+                filename="test.pdf",
+                drive_file_id="file123",
+                drive_folder_id="folder456",
+                submit_date="2025-10-12 10:00:00",
+            )
+
+            # Assert
+            assert result is True
+            mock_file_doc.set.assert_called_once()
+            call_args = mock_file_doc.set.call_args[0][0]
+            assert call_args["sheets_sync_status"] == "pending"
+
+
 # Placeholder test to ensure pytest can run
 def test_placeholder():
     """Placeholder test."""

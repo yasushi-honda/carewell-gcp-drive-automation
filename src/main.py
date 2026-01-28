@@ -12,6 +12,7 @@ from flask import Request
 from firestore_service import FirestoreService
 from google_drive_service import GoogleDriveService
 from playwright_automation import PlaywrightAutomationEngine
+from sheets_retry import append_record_with_retry
 from sheets_service import SheetsService
 
 # Configure logging
@@ -281,8 +282,9 @@ def main(request):
                             student_number=student_number,
                         )
 
-                        # Record in Google Sheets
-                        sheets_service.append_record(
+                        # Record in Google Sheets with retry
+                        sheets_success = append_record_with_retry(
+                            sheets_service,
                             spreadsheet_id,
                             task_id,
                             submission["student_name"],
@@ -291,6 +293,31 @@ def main(request):
                             submission["filename"],
                             drive_file_id,
                         )
+
+                        # Update sheets_sync_status in Firestore
+                        if sheets_success:
+                            firestore_service.update_sheets_sync_status(
+                                class_name,
+                                task_id,
+                                student_id,
+                                submission["filename"],
+                                submission.get("submit_date", ""),
+                                status="success",
+                            )
+                        else:
+                            firestore_service.update_sheets_sync_status(
+                                class_name,
+                                task_id,
+                                student_id,
+                                submission["filename"],
+                                submission.get("submit_date", ""),
+                                status="failed",
+                                error_message="All retry attempts failed",
+                            )
+                            logger.error(
+                                f"SHEETS_SYNC_FAILED: {submission['student_name']} "
+                                f"({student_id}) - {submission['filename']}"
+                            )
 
                         downloaded_count += 1
                     else:
