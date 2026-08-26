@@ -23,6 +23,7 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from google.cloud import firestore
+
 from src.sheets_service import SheetsService
 
 # 設定
@@ -47,7 +48,13 @@ def get_firestore_records(db, class_name: str, task_id: str) -> dict:
     records = {}
     try:
         # パス: submissions/{class_name}/tasks/{task_id}/files/{composite_key}
-        files_ref = db.collection("submissions").document(class_name).collection("tasks").document(task_id).collection("files")
+        files_ref = (
+            db.collection("submissions")
+            .document(class_name)
+            .collection("tasks")
+            .document(task_id)
+            .collection("files")
+        )
         docs = files_ref.stream()
 
         for doc in docs:
@@ -75,10 +82,12 @@ def get_spreadsheet_records(sheets_service, spreadsheet_id: str, task_id: str) -
     try:
         # シート名はtask_id（例: "課題②"）
         escaped_name = task_id.replace("'", "''")
-        result = sheets_service.service.spreadsheets().values().get(
-            spreadsheetId=spreadsheet_id,
-            range=f"'{escaped_name}'!A:H"
-        ).execute()
+        result = (
+            sheets_service.service.spreadsheets()
+            .values()
+            .get(spreadsheetId=spreadsheet_id, range=f"'{escaped_name}'!A:H")
+            .execute()
+        )
 
         values = result.get("values", [])
 
@@ -140,7 +149,9 @@ def main():
 
         for task_id in TASKS:
             # スプレッドシートのレコードを取得
-            sheet_records = get_spreadsheet_records(sheets_service, spreadsheet_id, task_id)
+            sheet_records = get_spreadsheet_records(
+                sheets_service, spreadsheet_id, task_id
+            )
 
             # Firestoreのレコードを取得
             firestore_records = get_firestore_records(db, firestore_name, task_id)
@@ -154,12 +165,12 @@ def main():
                 if key not in sheet_records:
                     task_missing += 1
                     total_missing += 1
-                    missing_records.append({
-                        "class": short_name,
-                        "task": task_id,
-                        **record
-                    })
-                    print(f"  ⚠️  欠落: {task_id} - {record['student_name']} ({record['student_id']}) - {record['filename']}")
+                    missing_records.append(
+                        {"class": short_name, "task": task_id, **record}
+                    )
+                    print(
+                        f"  ⚠️  欠落: {task_id} - {record['student_name']} ({record['student_id']}) - {record['filename']}"
+                    )
 
             if task_missing == 0:
                 print(f"  ✅ {task_id}: 欠落なし")
