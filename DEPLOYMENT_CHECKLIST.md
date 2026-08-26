@@ -96,7 +96,7 @@ gcloud services enable \
 
 ```json
 {
-  "class_name": "令和7年度 デジタル中核人材養成研修 №01",
+  "class_name": "令和8年度 デジタル中核人材養成研修 №01",
   "task_name": "課題①業務分析　※～11/3〆切",
   "drive_folder_id": "YOUR_FOLDER_ID_HERE",
   "spreadsheet_id": "YOUR_SPREADSHEET_ID_HERE"
@@ -150,7 +150,7 @@ curl -X GET https://carewell-file-collector-imczapxkba-an.a.run.app
 curl -X POST https://carewell-file-collector-imczapxkba-an.a.run.app \
   -H "Content-Type: application/json" \
   -d '{
-    "class_name": "令和7年度 デジタル中核人材養成研修 №01",
+    "class_name": "令和8年度 デジタル中核人材養成研修 №01",
     "task_name": "課題①業務分析　※～11/3〆切",
     "drive_folder_id": "YOUR_FOLDER_ID",
     "spreadsheet_id": "YOUR_SPREADSHEET_ID"

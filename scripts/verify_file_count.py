@@ -2,6 +2,14 @@
 """
 Verify file_count accuracy across all parent documents.
 
+⚠️ KNOWN BUG (found 2026-08-26, unrelated to the 令和8年度 year-string update):
+This script targets db.collection(class_name).document(task_id).collection("documents"),
+which is the OLD pre-migration schema. The current production writer
+(src/firestore_service.py) uses submissions/{class_name}/tasks/{task_id}/files/{...}
+instead. This script does NOT operate on current production data for ANY class/year
+and its output should NOT be trusted until fixed. See docs/SERVICE_SHUTDOWN_AND_RESUME.md
+"令和8年度（2026年度）再開ステータス" for tracking.
+
 Usage:
     python scripts/verify_file_count.py
 """

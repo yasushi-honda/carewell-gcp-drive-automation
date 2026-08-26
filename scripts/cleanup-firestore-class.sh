@@ -3,8 +3,8 @@
 # Firestoreの特定クラス・課題のデータをクリアするスクリプト
 #
 # Usage:
-#   ./scripts/cleanup-firestore-class.sh "令和7年度 デジタル中核人材養成研修 №01" "課題①"
-#   ./scripts/cleanup-firestore-class.sh "令和7年度 デジタル中核人材養成研修 №01" "課題①" --execute
+#   ./scripts/cleanup-firestore-class.sh "令和8年度 デジタル中核人材養成研修 №01" "課題①"
+#   ./scripts/cleanup-firestore-class.sh "令和8年度 デジタル中核人材養成研修 №01" "課題①" --execute
 #
 
 set -e
@@ -35,8 +35,8 @@ if [ -z "$CLASS_NAME" ] || [ -z "$TASK_ID" ]; then
     echo "  $0 \"クラス名\" \"課題ID\" [--execute]"
     echo ""
     echo "Example:"
-    echo "  $0 \"令和7年度 デジタル中核人材養成研修 №01\" \"課題①\""
-    echo "  $0 \"令和7年度 デジタル中核人材養成研修 №01\" \"課題①\" --execute"
+    echo "  $0 \"令和8年度 デジタル中核人材養成研修 №01\" \"課題①\""
+    echo "  $0 \"令和8年度 デジタル中核人材養成研修 №01\" \"課題①\" --execute"
     exit 1
 fi
 

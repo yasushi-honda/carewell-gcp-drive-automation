@@ -1,49 +1,66 @@
 # Current System Status
 
-**最終更新**: 2025-12-25 JST
+**最終更新**: 2026-04-03 JST
 
-## 🟢 システム全体ステータス
+## 🔴 システム全体ステータス
 
-**全 Cloud Scheduler ジョブが正常稼働中 (ENABLED)**
+**サービス停止中（年度区切り課金完全停止）**
+
+詳細: `docs/SERVICE_SHUTDOWN_AND_RESUME.md`
 
 ---
 
-## 📊 クラス・ジョブ一覧
+## 📊 Cloud Scheduler ジョブ一覧（全25ジョブ PAUSED）
 
 ### ファイル収集ジョブ（全16ジョブ）
 
 | クラス | 課題① | 課題② | スケジュール |
 |--------|--------|--------|--------------|
-| №01 | ✅ ENABLED | ✅ ENABLED | 0,30 / 5,35 |
-| №02 | ✅ ENABLED | ✅ ENABLED | 10,40 / 15,45 |
-| №03 | ✅ ENABLED | ✅ ENABLED | 20,50 / 25,55 |
-| №04 | ✅ ENABLED | ✅ ENABLED | 0,30 / 5,35 |
-| №05 | ✅ ENABLED | ✅ ENABLED | 10,40 / 15,45 |
-| №08 | ✅ ENABLED | ✅ ENABLED | 20,50 / 25,55 |
-| №09 | ✅ ENABLED | ✅ ENABLED | 0,30 / 5,35 |
-| №10 | ✅ ENABLED | ✅ ENABLED | 3,33 / (pattern10) |
+| №01 | ⏸ PAUSED | ⏸ PAUSED | 0,30 / 5,35 |
+| №02 | ⏸ PAUSED | ⏸ PAUSED | 10,40 / 15,45 |
+| №03 | ⏸ PAUSED | ⏸ PAUSED | 20,50 / 25,55 |
+| №04 | ⏸ PAUSED | ⏸ PAUSED | 0,30 / 5,35 |
+| №05 | ⏸ PAUSED | ⏸ PAUSED | 10,40 / 15,45 |
+| №08 | ⏸ PAUSED | ⏸ PAUSED | 20,50 / 25,55 |
+| №09 | ⏸ PAUSED | ⏸ PAUSED | 0,30 / 5,35 |
+| №10 | ⏸ PAUSED | ⏸ PAUSED | 3,33 / (pattern10) |
 
 ### 受講生同期ジョブ
 
-| ジョブ名 | ステータス | スケジュール |
-|----------|-----------|--------------|
-| carewell-student-sync-daily | ✅ ENABLED | 毎日 JST 02:00 |
+| ジョブ名 | ステータス |
+|----------|-----------|
+| carewell-student-sync-daily | ⏸ PAUSED |
+
+### パターン自動化ジョブ（全9ジョブ）
+
+| ジョブ名 | ステータス |
+|----------|-----------|
+| carewell-automation-pattern1〜5,8,9,10 | ⏸ PAUSED |
 
 ---
 
-## 🆕 №10 クラス追加情報 (2025-12-25)
+## 🛑 停止済みリソース（2026-04-03）
 
-**追加対応済み**:
-- ✅ Cloud Scheduler ジョブ作成 (`carewell-class10-task01`, `carewell-class10-task02`)
-- ✅ Dashboard `KNOWN_CLASSES` に追加
-- ✅ Dashboard `CLASS_NAME_MAPPING` に `No10` マッピング追加
-- ✅ Google Sheets 受講生データ同期完了（257名）
-- ✅ 受講生一覧クラスフィルター数値順ソート対応
+- **GitHub Actions**: 全5ワークフロー disabled
+- **Cloud Scheduler**: 全25ジョブ PAUSED
+- **Cloud Run**: min-instances=0のまま（課金ゼロ）
+- **Artifact Registry**: latestイメージのみ保持
 
-**現在の状況**:
-- Carewell Web に提出物がまだないため、ファイル収集は 0件
-- テーブル行待機でタイムアウト（想定内の動作）
-- 提出物が増えれば自動収集開始
+## ✅ データ保持中（停止後も維持）
+
+- **Firestore** (`carewell-native`): データそのまま保持
+- **Firebase Hosting** (`carewell-automation.web.app`): Dashboard閲覧可能
+- **Secret Manager**: 2シークレット保持
+- **Google Drive / Sheets**: データ保持
+
+---
+
+## 🔄 再開手順
+
+`docs/SERVICE_SHUTDOWN_AND_RESUME.md` の「再開手順（来年度）」を参照:
+1. GitHub Actions ワークフロー有効化
+2. Cloud Scheduler ジョブ再開
+3. 動作確認
 
 ---
 
@@ -51,8 +68,9 @@
 
 **AIエージェント向け**:
 1. セッション開始時に必ずこのファイルを読むこと
-2. ジョブ状態変更時はこのファイルを更新すること
-3. 新クラス追加時は以下を確認:
+2. **サービスは停止中**。再開前に `docs/SERVICE_SHUTDOWN_AND_RESUME.md` を確認
+3. ジョブ状態変更時はこのファイルを更新すること
+4. 新クラス追加時は以下を確認:
    - Cloud Scheduler ジョブ
    - `dashboard/src/config/classes.ts` (KNOWN_CLASSES, CLASS_NAME_MAPPING)
    - Google Sheets 受講生データ → 同期実行

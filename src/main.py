@@ -30,7 +30,7 @@ def main(request):
 
     Expected request body:
     {
-        "class_name": "令和7年度 デジタル中核人材養成研修 №01",
+        "class_name": "令和8年度 デジタル中核人材養成研修 №01",
         "task_id": "課題①",
         "task_pattern": "課題①",
         "drive_folder_id": "1abc...xyz",
@@ -375,7 +375,7 @@ def cleanup_firestore(request):
 
     Expected request body:
     {
-        "class_name": "令和7年度 デジタル中核人材養成研修 №01",
+        "class_name": "令和8年度 デジタル中核人材養成研修 №01",
         "task_id": "課題①",
         "confirm": true
     }

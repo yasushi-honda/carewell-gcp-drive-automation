@@ -25,27 +25,36 @@ RESULT_FILE="${LOG_DIR}/test_results_${TIMESTAMP}.txt"
 mkdir -p "${LOG_DIR}"
 
 # テスト設定データ
+#
+# ⚠️⚠️ 2026-08-26時点でCLASSESを空にし、このスクリプトは無効化しています ⚠️⚠️
+# 下記のDRIVE_FOLDERS/SPREADSHEETSは全て「令和7年度」に用意されたものです。
+# このスクリプトは実際にCloud Runへリクエストを送り、見つかった新規提出物を実際にダウンロード・
+# 記録する（dry-runではない）ため、令和8年度のclass_nameのまま古い令和7年度の保存先IDを使うと
+# 令和8年度の提出物が令和7年度のフォルダ・シートに誤って書き込まれるおそれがある。
+# 令和8年度用の保存先を確認・確定してから、CLASSESに対象クラス番号を追加すること。
+# №10がそもそも元々このリストに含まれていない不備も未修正のまま（要確認）。
 declare -A DRIVE_FOLDERS=(
-    ["01"]="1gxt-OVloMfJWi73Yjm4v5bjupKL25Pag"
-    ["02"]="1yJ60hEUHCHGOZNdMbACteoM5C2-pPVmC"
-    ["03"]="1IR81q87NIN9PkUAUDZpW9c2XZdkWTM7p"
-    ["04"]="1OuJk_u1Ig9CfIVXu3n5wQu0Ft6lfr3jQ"
-    ["05"]="1rNnmEJ92smjkcKFOd1L_u1n8SO1LDAC4"
-    ["08"]="1kdKwI7nQ8N6j8gD6agZap5FWL-uDTbwg"
-    ["09"]="1nllFEyyDEV7jiTSEgyBnnNeXhC_4Ttu6"
+    ["01"]="1gxt-OVloMfJWi73Yjm4v5bjupKL25Pag"  # 令和7年度用（令和8年度での流用可否は未検証）
+    ["02"]="1yJ60hEUHCHGOZNdMbACteoM5C2-pPVmC"  # 令和7年度用（令和8年度での流用可否は未検証）
+    ["03"]="1IR81q87NIN9PkUAUDZpW9c2XZdkWTM7p"  # 令和7年度用（令和8年度での流用可否は未検証）
+    ["04"]="1OuJk_u1Ig9CfIVXu3n5wQu0Ft6lfr3jQ"  # 令和7年度用（令和8年度での流用可否は未検証）
+    ["05"]="1rNnmEJ92smjkcKFOd1L_u1n8SO1LDAC4"  # 令和7年度用（令和8年度での流用可否は未検証）
+    ["08"]="1kdKwI7nQ8N6j8gD6agZap5FWL-uDTbwg"  # 令和7年度用（令和8年度での流用可否は未検証）
+    ["09"]="1nllFEyyDEV7jiTSEgyBnnNeXhC_4Ttu6"  # 令和7年度用（令和8年度での流用可否は未検証）
 )
 
 declare -A SPREADSHEETS=(
-    ["01"]="1R1bsr24uyFf67p7_0I0yUA47ap5uIrJE7n89A9NbRYI"
-    ["02"]="1qmczJQo2f3rSsZxhRWF3XfjCVc5Y3yW7K4wrk7bAcnc"
-    ["03"]="1kzDATIoQ1hOM9KYuYloCPsbmGn-tSDHSwYxK9pYQkwA"
-    ["04"]="12Xg8Edrtloct-jk_IBVApnqLVz6fPeQFTxxQDPXxi_Q"
-    ["05"]="1CPVDaX4E3AX3xl5I_sm-DjRVr7SfYKz4DjoBSS-h74o"
-    ["08"]="1Zm2ePE2gbKm8Yw_4B6vuO8HP3kfN2wZpFCQaNFHfcsk"
-    ["09"]="1O8S3w3F8RvLJp0LrS-eZtX0sZW5HcjOgMhyWJ_e8YPA"
+    ["01"]="1R1bsr24uyFf67p7_0I0yUA47ap5uIrJE7n89A9NbRYI"  # 令和7年度用（令和8年度での流用可否は未検証）
+    ["02"]="1qmczJQo2f3rSsZxhRWF3XfjCVc5Y3yW7K4wrk7bAcnc"  # 令和7年度用（令和8年度での流用可否は未検証）
+    ["03"]="1kzDATIoQ1hOM9KYuYloCPsbmGn-tSDHSwYxK9pYQkwA"  # 令和7年度用（令和8年度での流用可否は未検証）
+    ["04"]="12Xg8Edrtloct-jk_IBVApnqLVz6fPeQFTxxQDPXxi_Q"  # 令和7年度用（令和8年度での流用可否は未検証）
+    ["05"]="1CPVDaX4E3AX3xl5I_sm-DjRVr7SfYKz4DjoBSS-h74o"  # 令和7年度用（令和8年度での流用可否は未検証）
+    ["08"]="1Zm2ePE2gbKm8Yw_4B6vuO8HP3kfN2wZpFCQaNFHfcsk"  # 令和7年度用（令和8年度での流用可否は未検証）
+    ["09"]="1O8S3w3F8RvLJp0LrS-eZtX0sZW5HcjOgMhyWJ_e8YPA"  # 令和7年度用（令和8年度での流用可否は未検証）
 )
 
-CLASSES=("01" "02" "03" "04" "05" "08" "09")
+# 令和8年度用の保存先が確認・確定するまで空のまま（このスクリプトは実際に書込みを行うため）
+CLASSES=()
 TASKS=("課題①" "課題②")
 
 # 統計カウンタ
@@ -91,7 +100,7 @@ run_test() {
     local spreadsheet_id=$5
 
     local test_name="№${class_num}-${task_id}"
-    local class_name="令和7年度 デジタル中核人材養成研修 №${class_num}"
+    local class_name="令和8年度 デジタル中核人材養成研修 №${class_num}"
 
     TOTAL_TESTS=$((TOTAL_TESTS + 1))
 

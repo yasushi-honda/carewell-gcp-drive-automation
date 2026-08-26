@@ -10,7 +10,7 @@ vi.mock('../useFirestore', () => ({
 }));
 
 describe('useFileList', () => {
-  const className = '令和7年度 デジタル中核人材養成研修 №01';
+  const className = '令和8年度 デジタル中核人材養成研修 №01';
   const taskId = '課題①';
 
   const mockFiles: FileData[] = [

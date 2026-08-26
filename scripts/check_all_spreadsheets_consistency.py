@@ -18,39 +18,53 @@ DATABASE_NAME = "carewell-native"
 PROJECT_ID = "carewell-automation"
 
 # クラス別スプレッドシートID と Firestoreクラス名のマッピング
+#
+# ⚠️⚠️ 2026-08-26時点で空にしています ⚠️⚠️
+# 下記コメントアウト分のspreadsheet_idは全て「令和7年度」に用意されたものです。
+# 令和8年度でもそのまま流用してよいかは未検証（docs/SERVICE_SHUTDOWN_AND_RESUME.md
+# 「令和8年度再開ステータス」参照）。№06・07はスプレッドシート自体が未作成。
+# 対象クラスごとに令和8年度用の保存先を確認・確定してから、該当エントリのコメントを解除して使うこと。
 CLASS_CONFIG = {
-    "No1": {
-        "spreadsheet_id": "1R1bsr24uyFf67p7_0I0yUA47ap5uIrJE7n89A9NbRYI",
-        "firestore_name": "令和7年度 デジタル中核人材養成研修 №01",
-    },
-    "No2": {
-        "spreadsheet_id": "1qmczJQo2f3rSsZxhRWF3XfjCVc5Y3yW7K4wrk7bAcnc",
-        "firestore_name": "令和7年度 デジタル中核人材養成研修 №02",
-    },
-    "No3": {
-        "spreadsheet_id": "1kzDATIoQ1hOM9KYuYloCPsbmGn-tSDHSwYxK9pYQkwA",
-        "firestore_name": "令和7年度 デジタル中核人材養成研修 №03",
-    },
-    "No4": {
-        "spreadsheet_id": "12Xg8Edrtloct-jk_IBVApnqLVz6fPeQFTxxQDPXxi_Q",
-        "firestore_name": "令和7年度 デジタル中核人材養成研修 №04",
-    },
-    "No5": {
-        "spreadsheet_id": "1CPVDaX4E3AX3xl5I_sm-DjRVr7SfYKz4DjoBSS-h74o",
-        "firestore_name": "令和7年度 デジタル中核人材養成研修 №05",
-    },
-    "No8": {
-        "spreadsheet_id": "1Zm2ePE2gbKm8Yw_4B6vuO8HP3kfN2wZpFCQaNFHfcsk",
-        "firestore_name": "令和7年度 デジタル中核人材養成研修 №08",
-    },
-    "No9": {
-        "spreadsheet_id": "1O8S3w3F8RvLJp0LrS-eZtX0sZW5HcjOgMhyWJ_e8YPA",
-        "firestore_name": "令和7年度 デジタル中核人材養成研修 №09",
-    },
-    "No10": {
-        "spreadsheet_id": "1KPEj6LpE6gF76S3jdvADdWKlZeF-9nQ_BfhYi2dlkYA",
-        "firestore_name": "令和7年度 デジタル中核人材養成研修 №10",
-    },
+    # "No1": {
+    #     "spreadsheet_id": "1R1bsr24uyFf67p7_0I0yUA47ap5uIrJE7n89A9NbRYI",
+    #     "firestore_name": "令和8年度 デジタル中核人材養成研修 №01",
+    # },
+    # "No2": {
+    #     "spreadsheet_id": "1qmczJQo2f3rSsZxhRWF3XfjCVc5Y3yW7K4wrk7bAcnc",
+    #     "firestore_name": "令和8年度 デジタル中核人材養成研修 №02",
+    # },
+    # "No3": {
+    #     "spreadsheet_id": "1kzDATIoQ1hOM9KYuYloCPsbmGn-tSDHSwYxK9pYQkwA",
+    #     "firestore_name": "令和8年度 デジタル中核人材養成研修 №03",
+    # },
+    # "No4": {
+    #     "spreadsheet_id": "12Xg8Edrtloct-jk_IBVApnqLVz6fPeQFTxxQDPXxi_Q",
+    #     "firestore_name": "令和8年度 デジタル中核人材養成研修 №04",
+    # },
+    # "No5": {
+    #     "spreadsheet_id": "1CPVDaX4E3AX3xl5I_sm-DjRVr7SfYKz4DjoBSS-h74o",
+    #     "firestore_name": "令和8年度 デジタル中核人材養成研修 №05",
+    # },
+    # "No6": {
+    #     "spreadsheet_id": "TODO: 令和8年度用スプレッドシート未作成",
+    #     "firestore_name": "令和8年度 デジタル中核人材養成研修 №06",
+    # },
+    # "No7": {
+    #     "spreadsheet_id": "TODO: 令和8年度用スプレッドシート未作成",
+    #     "firestore_name": "令和8年度 デジタル中核人材養成研修 №07",
+    # },
+    # "No8": {
+    #     "spreadsheet_id": "1Zm2ePE2gbKm8Yw_4B6vuO8HP3kfN2wZpFCQaNFHfcsk",
+    #     "firestore_name": "令和8年度 デジタル中核人材養成研修 №08",
+    # },
+    # "No9": {
+    #     "spreadsheet_id": "1O8S3w3F8RvLJp0LrS-eZtX0sZW5HcjOgMhyWJ_e8YPA",
+    #     "firestore_name": "令和8年度 デジタル中核人材養成研修 №09",
+    # },
+    # "No10": {
+    #     "spreadsheet_id": "1KPEj6LpE6gF76S3jdvADdWKlZeF-9nQ_BfhYi2dlkYA",
+    #     "firestore_name": "令和8年度 デジタル中核人材養成研修 №10",
+    # },
 }
 
 TASKS = ["課題①", "課題②"]

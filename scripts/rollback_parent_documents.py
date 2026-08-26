@@ -8,6 +8,14 @@ Use this when migration fails or when rolling back a deployment.
 IMPORTANT: This script only deletes parent documents.
 Subcollections (documents) are preserved.
 
+⚠️ KNOWN BUG (found 2026-08-26, unrelated to the 令和8年度 year-string update):
+This script targets db.collection(class_name).document(task_id), which is the
+OLD pre-migration schema. The current production writer (src/firestore_service.py)
+uses submissions/{class_name}/tasks/{task_id}/files/{...} instead. This script does
+NOT operate on current production data for ANY class/year and should NOT be
+executed (it deletes documents) until fixed. See docs/SERVICE_SHUTDOWN_AND_RESUME.md
+"令和8年度（2026年度）再開ステータス" for tracking.
+
 Usage:
     python scripts/rollback_parent_documents.py                 # Preview only
     python scripts/rollback_parent_documents.py --confirm       # Actually delete

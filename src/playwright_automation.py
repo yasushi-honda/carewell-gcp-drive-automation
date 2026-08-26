@@ -19,7 +19,7 @@ def _format_log_context(class_name: Optional[str], task_id: Optional[str]) -> st
     Format class/task context for log identification.
 
     Args:
-        class_name: Class name (e.g., "令和7年度 デジタル中核人材養成研修 №01")
+        class_name: Class name (e.g., "令和8年度 デジタル中核人材養成研修 №01")
         task_id: Task ID (e.g., "課題①")
 
     Returns:
@@ -28,7 +28,7 @@ def _format_log_context(class_name: Optional[str], task_id: Optional[str]) -> st
     if not class_name or not task_id:
         return ""
 
-    # Extract class number from class_name (e.g., "№01" from "令和7年度 デジタル中核人材養成研修 №01")
+    # Extract class number from class_name (e.g., "№01" from "令和8年度 デジタル中核人材養成研修 №01")
     import re
 
     class_match = re.search(r"№(\d+)", class_name)
@@ -352,7 +352,7 @@ class PlaywrightAutomationEngine:
         Navigate to specific task page using partial text match
 
         Args:
-            class_name: Class name (e.g., "令和7年度 デジタル中核人材養成研修 №01")
+            class_name: Class name (e.g., "令和8年度 デジタル中核人材養成研修 №01")
             task_pattern: Task pattern for partial match (e.g., "課題①")
 
         Returns:

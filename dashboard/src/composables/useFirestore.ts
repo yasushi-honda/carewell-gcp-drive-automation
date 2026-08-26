@@ -64,16 +64,16 @@ function convertTimestampsToStrings(obj: any): any {
 /**
  * 汎用ドキュメント取得関数
  *
- * @param collectionPath - コレクションパス（例: "令和7年度 デジタル中核人材養成研修 №01"）
+ * @param collectionPath - コレクションパス（例: "令和8年度 デジタル中核人材養成研修 №01"）
  * @param pathSegments - 追加のパスセグメント（例: ["課題①", "documents"]）
  * @returns ドキュメントの配列
  *
  * @example
  * // クラス内の課題一覧を取得
- * const tasks = await getDocuments("令和7年度 デジタル中核人材養成研修 №01");
+ * const tasks = await getDocuments("令和8年度 デジタル中核人材養成研修 №01");
  *
  * // 特定課題のファイル一覧を取得
- * const files = await getDocuments("令和7年度 デジタル中核人材養成研修 №01", "課題①", "documents");
+ * const files = await getDocuments("令和8年度 デジタル中核人材養成研修 №01", "課題①", "documents");
  */
 export async function getDocuments<T = DocumentData>(
   collectionPath: string,
@@ -109,12 +109,12 @@ export async function getDocuments<T = DocumentData>(
  * Firestore Schema Improvementで追加された親ドキュメントから、
  * file_count, last_updatedなどのメタデータを効率的に取得する。
  *
- * @param className - クラス名（例: "令和7年度 デジタル中核人材養成研修 №01"）
+ * @param className - クラス名（例: "令和8年度 デジタル中核人材養成研修 №01"）
  * @param taskId - タスクID（例: "課題①"）
  * @returns 親ドキュメントデータ、存在しない場合はnull
  *
  * @example
- * const taskDoc = await getTaskDocument("令和7年度 デジタル中核人材養成研修 №01", "課題①");
+ * const taskDoc = await getTaskDocument("令和8年度 デジタル中核人材養成研修 №01", "課題①");
  * if (taskDoc) {
  *   console.log(`File count: ${taskDoc.file_count}`);
  *   console.log(`Last updated: ${taskDoc.last_updated}`);
