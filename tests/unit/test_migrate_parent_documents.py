@@ -11,6 +11,13 @@ import pytest
 from google.cloud import firestore as firestore_module
 
 sys.path.insert(0, "scripts")
+sys.path.insert(0, "src")
+
+from config.classes import KNOWN_CLASSES  # noqa: E402
+
+# KNOWN_CLASSESの年度表記（例: "令和8年度"）。ハードコードすると年度更新のたびに
+# このテストだけ追随を忘れて壊れる（2026-08-26に実際発生）ため、動的に取得する。
+CURRENT_YEAR_PREFIX = KNOWN_CLASSES[0].split(" ")[0]
 
 
 class TestMigrateParentDocuments:
@@ -57,7 +64,7 @@ class TestMigrateParentDocuments:
             def document_side_effect(doc_id):
                 mock_doc_ref = Mock()
 
-                if collection_name.startswith("令和7年度"):
+                if collection_name.startswith(CURRENT_YEAR_PREFIX):
                     # Task document
                     mock_doc_ref.get.return_value = mock_parent_doc
 
