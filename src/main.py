@@ -9,6 +9,7 @@ import time  # ✅ 追加: 診断ログで使用（将来の拡張用に追加�
 
 from flask import Request
 
+from config.classes import resolve_student_spreadsheet_id
 from firestore_service import FirestoreService
 from google_drive_service import GoogleDriveService
 from playwright_automation import PlaywrightAutomationEngine
@@ -499,9 +500,7 @@ def sync_students_from_sheets(request):
         firestore_service = FirestoreService()
 
         # Phase 1: Sync students from Google Sheets
-        spreadsheet_id = os.environ.get(
-            "STUDENT_SPREADSHEET_ID", "1AQ12-h3n_NmN2kWxi4Z_g354X0wmUyMKAPeAsXJwu_w"
-        )
+        spreadsheet_id = resolve_student_spreadsheet_id()
         sync_result = _sync_students(sheets_service, firestore_service, spreadsheet_id)
 
         if sync_result.get("status") != "success":
@@ -561,9 +560,7 @@ def get_duplicate_students(request):
         sheets_service = SheetsService()
 
         # Get spreadsheet ID
-        spreadsheet_id = os.environ.get(
-            "STUDENT_SPREADSHEET_ID", "1AQ12-h3n_NmN2kWxi4Z_g354X0wmUyMKAPeAsXJwu_w"
-        )
+        spreadsheet_id = resolve_student_spreadsheet_id()
 
         # Get duplicates (now returns dict with duplicates and class_urls)
         result = sheets_service.get_duplicate_students(spreadsheet_id)

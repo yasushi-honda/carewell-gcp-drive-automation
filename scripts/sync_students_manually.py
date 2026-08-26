@@ -9,6 +9,7 @@ import sys
 # Add parent directory to path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
+from config.classes import resolve_student_spreadsheet_id
 from firestore_service import FirestoreService
 from sheets_service import SheetsService
 
@@ -20,10 +21,8 @@ def main():
     sheets_service = SheetsService()
     firestore_service = FirestoreService()
 
-    # Spreadsheet ID (from environment or hardcoded)
-    spreadsheet_id = os.environ.get(
-        "STUDENT_SPREADSHEET_ID", "1AQ12-h3n_NmN2kWxi4Z_g354X0wmUyMKAPeAsXJwu_w"
-    )
+    # Spreadsheet ID (environment override, otherwise current-year lookup)
+    spreadsheet_id = resolve_student_spreadsheet_id()
 
     print(f"📊 Reading student data from Google Sheets: {spreadsheet_id}")
 
