@@ -3,6 +3,7 @@
 
 import { initializeApp, FirebaseApp } from 'firebase/app';
 import { getFirestore, Firestore } from 'firebase/firestore';
+import { getAuth, Auth } from 'firebase/auth';
 
 /**
  * Firebase設定
@@ -24,6 +25,7 @@ const firebaseConfig = {
 
 let app: FirebaseApp | null = null;
 let db: Firestore | null = null;
+let authInstance: Auth | null = null;
 
 /**
  * Firebaseアプリを初期化
@@ -49,4 +51,16 @@ export function getDb(): Firestore {
     db = getFirestore(firebaseApp, 'carewell-native');
   }
   return db;
+}
+
+/**
+ * Firebase Authenticationインスタンスを取得
+ * 自動的にFirebaseアプリを初期化（getDb()と同じシングルトンパターン）
+ */
+export function getAuthInstance(): Auth {
+  if (!authInstance) {
+    const firebaseApp = initializeFirebase();
+    authInstance = getAuth(firebaseApp);
+  }
+  return authInstance;
 }

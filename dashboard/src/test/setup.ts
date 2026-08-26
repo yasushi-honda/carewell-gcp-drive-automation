@@ -14,6 +14,14 @@ vi.mock('firebase/firestore', () => ({
   getDoc: vi.fn(),
 }));
 
+vi.mock('firebase/auth', () => ({
+  getAuth: vi.fn(() => ({})),
+  onAuthStateChanged: vi.fn(),
+  signInWithPopup: vi.fn(),
+  signOut: vi.fn(),
+  GoogleAuthProvider: vi.fn(),
+}));
+
 // Global test utilities
 global.ResizeObserver = vi.fn().mockImplementation(() => ({
   observe: vi.fn(),

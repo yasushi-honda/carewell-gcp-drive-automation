@@ -93,6 +93,7 @@
                 重複一覧
               </router-link>
             </nav>
+            <AuthButton />
           </div>
         </div>
       </div>
@@ -171,14 +172,14 @@
 </template>
 
 <script setup lang="ts">
-import { RouterView, useRoute } from 'vue-router'
-import { ref, watch, onMounted } from 'vue'
+import { RouterView } from 'vue-router'
+import { ref } from 'vue'
+import { useAuth } from './composables/useAuth'
 import { useStudentSync } from './composables/useStudentSync'
+import AuthButton from './components/AuthButton.vue'
 
-const route = useRoute()
-
-// 管理者モード
-const isAdmin = ref(false)
+// 管理者モード（Issue #12: Firebase Authenticationのログイン状態+admins許可リストで判定）
+const { isAdmin } = useAuth()
 
 // 同期機能
 const { syncStudents, syncing } = useStudentSync()
@@ -225,41 +226,4 @@ const handleSync = async () => {
     showNotification('error', '同期エラー', errorMessage)
   }
 }
-
-// グローバル管理者モード検出
-const checkAdminMode = () => {
-  if (route.query.admin === 'true') {
-    sessionStorage.setItem('adminMode', 'true')
-    isAdmin.value = true
-    console.log('[App.vue] Admin mode activated via URL parameter')
-  } else if (route.path === '/' && !route.query.admin) {
-    // サイト内遷移かどうかを判定
-    const isInternalNavigation = document.referrer &&
-      document.referrer.startsWith(window.location.origin)
-
-    if (!isInternalNavigation) {
-      // 外部からの直接アクセスの場合のみクリア
-      sessionStorage.removeItem('adminMode')
-      isAdmin.value = false
-      console.log('[App.vue] Admin mode cleared (external access to homepage)')
-    } else {
-      // 内部遷移の場合は sessionStorage から読み取り
-      isAdmin.value = sessionStorage.getItem('adminMode') === 'true'
-      console.log('[App.vue] Admin mode preserved (internal navigation)')
-    }
-  } else {
-    // その他のページでは sessionStorage から読み取り
-    isAdmin.value = sessionStorage.getItem('adminMode') === 'true'
-  }
-}
-
-// 初期チェック
-onMounted(() => {
-  checkAdminMode()
-})
-
-// ルート変更を監視
-watch(() => route.query.admin, () => {
-  checkAdminMode()
-})
 </script>

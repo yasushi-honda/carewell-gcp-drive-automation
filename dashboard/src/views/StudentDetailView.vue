@@ -129,6 +129,7 @@ import { ref, onMounted, computed } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { doc, getDoc, updateDoc, Timestamp } from 'firebase/firestore';
 import { getDb } from '../config/firebase';
+import { useAuth } from '../composables/useAuth';
 import type { Student } from '../types/models';
 import LoadingSkeleton from '../components/LoadingSkeleton.vue';
 import ErrorAlert from '../components/ErrorAlert.vue';
@@ -141,13 +142,10 @@ const studentId = route.params.id as string;
 const student = ref<Student | null>(null);
 const loading = ref(true);
 const updating = ref(false);
-const isAdmin = ref(false);
+// 管理者モード（Issue #12: Firebase Authenticationのログイン状態+admins許可リストで判定）
+const { isAdmin } = useAuth();
 
 onMounted(async () => {
-  // 管理者モード判定（App.vueでグローバル管理されているsessionStorageを読み取るだけ）
-  isAdmin.value = sessionStorage.getItem('adminMode') === 'true';
-  console.log('[StudentDetailView] Admin mode:', isAdmin.value);
-
   try {
     const db = getDb();
     const docRef = doc(db, 'students', studentId);
@@ -183,6 +181,10 @@ onMounted(async () => {
  */
 const toggleStatus = async () => {
   if (!student.value) return;
+  if (!isAdmin.value) {
+    alert('管理者ログインが必要です');
+    return;
+  }
 
   updating.value = true;
   try {
@@ -198,7 +200,13 @@ const toggleStatus = async () => {
     student.value.status = newStatus;
   } catch (err) {
     console.error('Error updating student status:', err);
-    alert('ステータスの更新に失敗しました');
+    const isPermissionDenied =
+      err instanceof Error && 'code' in err && (err as { code?: string }).code === 'permission-denied';
+    alert(
+      isPermissionDenied
+        ? '管理者権限がないか、セッションが切れています。再ログインしてください'
+        : 'ステータスの更新に失敗しました'
+    );
   } finally {
     updating.value = false;
   }
