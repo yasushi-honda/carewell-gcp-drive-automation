@@ -5,6 +5,7 @@ Firestoreに蓄積された提出ファイルのメタ情報を可視化するWe
 **バージョン**: Ver1（Phase 1完了）
 **リリース日**: 2025-10-13
 **公開URL**: https://carewell-dashboard-2026.web.app
+**令和8年度サイト稼働開始日**: 2026-08-26（旧サイト https://carewell-automation.web.app は令和7年度の凍結アーカイブ）
 
 ## 概要
 
