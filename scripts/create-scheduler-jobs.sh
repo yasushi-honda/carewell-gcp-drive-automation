@@ -1,7 +1,7 @@
 #!/bin/bash
 #
 # Cloud Scheduler ジョブ作成スクリプト（Phase 11対応）
-# 8クラス × 2課題 = 16ジョブを新命名規則で作成
+# 10クラス（№01〜10）× 2課題 = 20ジョブを新命名規則で作成（令和8年度・№06/07追加後）
 #
 # Bash 3.2互換バージョン（連想配列不使用）
 #
@@ -62,7 +62,7 @@ create_job() {
     TOTAL_JOBS=$((TOTAL_JOBS + 1))
 
     echo -e "${BLUE}----------------------------------------${NC}"
-    echo -e "${BLUE}[${TOTAL_JOBS}/16] ${job_name}${NC}"
+    echo -e "${BLUE}[${TOTAL_JOBS}/20] ${job_name}${NC}"
     echo -e "${BLUE}----------------------------------------${NC}"
     echo "クラス: ${class_name}"
     echo "課題ID: ${task_id}"
@@ -132,45 +132,52 @@ EOF
 # 令和8年度（2026年度）ジョブパラメータ定義
 # 順番: class_num task_num task_id task_pattern cron_schedule drive_folder_id spreadsheet_id
 #
-# ⚠️⚠️ 2026-08-26時点で全エントリをコメントアウトしています ⚠️⚠️
-# 下記のdrive_folder_id / spreadsheet_idは全て「令和7年度」に用意されたものです。
-# 令和8年度でもそのまま流用してよいかは未検証（クロスレビューで発見、docs/SERVICE_SHUTDOWN_AND_RESUME.md
-# 「令和8年度再開ステータス」参照）。№06・07は保存先ID自体が未作成。
-# 対象クラスごとに令和8年度用の保存先を確認・確定してから、該当行のコメントを解除して使うこと。
+# ⚠️⚠️⚠️ このスクリプトは実行禁止・参照専用です（2026-08-26 実適用時のcodexレビューで判明） ⚠️⚠️⚠️
+# 実際の令和8年度対応（既存16ジョブの更新＋№06/07の新規4ジョブ作成）は、下記の値を使って
+# gcloud CLIで個別に適用済みです。下記の値はその「適用結果の記録」であり、このスクリプトを
+# 実行しても再現はできません:
+#   - create_job() は既存ジョブを存在チェックでスキップするだけで、message-bodyの更新はできない
+#     （既存16ジョブは gcloud scheduler jobs update http --message-body で個別に更新した）
+#   - 新規ジョブ（№06・07）はこのスクリプトのまま実行すると本来のcronで直接ENABLED作成されてしまう。
+#     実際には「ダミーcron（0 0 29 2 *）で作成→即pause→本来のcronへupdate」という手順で、
+#     既存ピアジョブ（carewell-class03-task01）からattemptDeadline等の実行設定も明示的に複製して
+#     作成した（詳細: docs/SERVICE_SHUTDOWN_AND_RESUME.md「令和8年度再開ステータス」）
+# 令和7年度時点のDrive/Sheets IDは使い回さず、2026年度用に新規作成したフォルダ・スプレッドシートを
+# 使用している（令和7年度分の「2025年」フォルダとは別の「2026年」フォルダ）。
 #
-# ⚠️ 重要: task_patternは現在暫定値（task_idと同じ）です
-# TODO: Carewell実際の課題名に更新する必要があります
-#   例: "課題①" → "課題①業務分析　※～11/3〆切"
+# ⚠️ task_patternは現在も暫定値（task_idと同じ短縮形）です。text=部分一致セレクタとして機能する
+# ことは実機確認済みだが、締切日入りの正式な表示名は未確定（ポータル人間確認が必要）。
+#   例: "課題①" → 将来的に "課題①業務分析　※～11/3〆切" 相当の令和8年度版へ更新予定
 #
-# create_job "01" "01" "課題①" "課題①" "0,30 * * * *" "1gxt-OVloMfJWi73Yjm4v5bjupKL25Pag" "1R1bsr24uyFf67p7_0I0yUA47ap5uIrJE7n89A9NbRYI"
-# create_job "01" "02" "課題②" "課題②" "5,35 * * * *" "1gxt-OVloMfJWi73Yjm4v5bjupKL25Pag" "1R1bsr24uyFf67p7_0I0yUA47ap5uIrJE7n89A9NbRYI"
+# create_job "01" "01" "課題①" "課題①" "0,30 * * * *" "1-sYM3bcyGxpvWTOA3MMZJN_2_d1HkgGT" "1sg4YWQ1hHgzFWFXNbOVFXiWTXUhzvjPpejaMArwLQRc"
+# create_job "01" "02" "課題②" "課題②" "5,35 * * * *" "1-sYM3bcyGxpvWTOA3MMZJN_2_d1HkgGT" "1sg4YWQ1hHgzFWFXNbOVFXiWTXUhzvjPpejaMArwLQRc"
 #
-# create_job "02" "01" "課題①" "課題①" "10,40 * * * *" "1yJ60hEUHCHGOZNdMbACteoM5C2-pPVmC" "1qmczJQo2f3rSsZxhRWF3XfjCVc5Y3yW7K4wrk7bAcnc"
-# create_job "02" "02" "課題②" "課題②" "15,45 * * * *" "1yJ60hEUHCHGOZNdMbACteoM5C2-pPVmC" "1qmczJQo2f3rSsZxhRWF3XfjCVc5Y3yW7K4wrk7bAcnc"
+# create_job "02" "01" "課題①" "課題①" "10,40 * * * *" "1VJ9TCpPYqbJ18ImTY548LsDjLeSFJuR-" "1M-QhWSBxHleF0f65AHZofzdysCBZREkgC6XGiwnrgFo"
+# create_job "02" "02" "課題②" "課題②" "15,45 * * * *" "1VJ9TCpPYqbJ18ImTY548LsDjLeSFJuR-" "1M-QhWSBxHleF0f65AHZofzdysCBZREkgC6XGiwnrgFo"
 #
-# create_job "03" "01" "課題①" "課題①" "20,50 * * * *" "1IR81q87NIN9PkUAUDZpW9c2XZdkWTM7p" "1kzDATIoQ1hOM9KYuYloCPsbmGn-tSDHSwYxK9pYQkwA"
-# create_job "03" "02" "課題②" "課題②" "25,55 * * * *" "1IR81q87NIN9PkUAUDZpW9c2XZdkWTM7p" "1kzDATIoQ1hOM9KYuYloCPsbmGn-tSDHSwYxK9pYQkwA"
+# create_job "03" "01" "課題①" "課題①" "20,50 * * * *" "18TurAyJL-OClevEOiY3XdjYkN4aJiTlY" "1fELsGrr7CKuEuEQaHk2w8meZXzd5xqHo6IHSQOjWVKI"
+# create_job "03" "02" "課題②" "課題②" "25,55 * * * *" "18TurAyJL-OClevEOiY3XdjYkN4aJiTlY" "1fELsGrr7CKuEuEQaHk2w8meZXzd5xqHo6IHSQOjWVKI"
 #
-# create_job "04" "01" "課題①" "課題①" "0,30 * * * *" "1OuJk_u1Ig9CfIVXu3n5wQu0Ft6lfr3jQ" "12Xg8Edrtloct-jk_IBVApnqLVz6fPeQFTxxQDPXxi_Q"
-# create_job "04" "02" "課題②" "課題②" "5,35 * * * *" "1OuJk_u1Ig9CfIVXu3n5wQu0Ft6lfr3jQ" "12Xg8Edrtloct-jk_IBVApnqLVz6fPeQFTxxQDPXxi_Q"
+# create_job "04" "01" "課題①" "課題①" "0,30 * * * *" "1pEoygSCSShHrbu5DE-qmDEBl5zwV5pE_" "1J-QbRHo0ffuxIUwkicRg6iRtw6EUjF3dNvr3I27YyAY"
+# create_job "04" "02" "課題②" "課題②" "5,35 * * * *" "1pEoygSCSShHrbu5DE-qmDEBl5zwV5pE_" "1J-QbRHo0ffuxIUwkicRg6iRtw6EUjF3dNvr3I27YyAY"
 #
-# create_job "05" "01" "課題①" "課題①" "10,40 * * * *" "1rNnmEJ92smjkcKFOd1L_u1n8SO1LDAC4" "1CPVDaX4E3AX3xl5I_sm-DjRVr7SfYKz4DjoBSS-h74o"
-# create_job "05" "02" "課題②" "課題②" "15,45 * * * *" "1rNnmEJ92smjkcKFOd1L_u1n8SO1LDAC4" "1CPVDaX4E3AX3xl5I_sm-DjRVr7SfYKz4DjoBSS-h74o"
+# create_job "05" "01" "課題①" "課題①" "10,40 * * * *" "1HSBNdBSZM_eq1dvmzfL9HE0F9A7D8eD7" "1D7GDi0Waem0g07se-MBO1AHa0nH2E8wblAcHIm16_2s"
+# create_job "05" "02" "課題②" "課題②" "15,45 * * * *" "1HSBNdBSZM_eq1dvmzfL9HE0F9A7D8eD7" "1D7GDi0Waem0g07se-MBO1AHa0nH2E8wblAcHIm16_2s"
 #
-# create_job "06" "01" "課題①" "課題①" "??,?? * * * *" "TODO: 令和8年度用Driveフォルダ未作成" "TODO: 令和8年度用スプレッドシート未作成"
-# create_job "06" "02" "課題②" "課題②" "??,?? * * * *" "TODO: 令和8年度用Driveフォルダ未作成" "TODO: 令和8年度用スプレッドシート未作成"
+# create_job "06" "01" "課題①" "課題①" "20,50 * * * *" "1r0J0qHdZtdLkcfq2YjCqtYfzkh5ZVtOK" "1cDV03woQ1tNur1n0XEmMJRxMPKAwl6V2FosGHzG0KA8"
+# create_job "06" "02" "課題②" "課題②" "25,55 * * * *" "1r0J0qHdZtdLkcfq2YjCqtYfzkh5ZVtOK" "1cDV03woQ1tNur1n0XEmMJRxMPKAwl6V2FosGHzG0KA8"
 #
-# create_job "07" "01" "課題①" "課題①" "??,?? * * * *" "TODO: 令和8年度用Driveフォルダ未作成" "TODO: 令和8年度用スプレッドシート未作成"
-# create_job "07" "02" "課題②" "課題②" "??,?? * * * *" "TODO: 令和8年度用Driveフォルダ未作成" "TODO: 令和8年度用スプレッドシート未作成"
+# create_job "07" "01" "課題①" "課題①" "0,30 * * * *" "1yERlcHarETqjsK9fTX0_cr6jbdU7ZOJv" "1OCX-7mLjFScEwcLx5A0tYMI8YkTNcCKE8C2vh-wQkU8"
+# create_job "07" "02" "課題②" "課題②" "5,35 * * * *" "1yERlcHarETqjsK9fTX0_cr6jbdU7ZOJv" "1OCX-7mLjFScEwcLx5A0tYMI8YkTNcCKE8C2vh-wQkU8"
 #
-# create_job "08" "01" "課題①" "課題①" "20,50 * * * *" "1kdKwI7nQ8N6j8gD6agZap5FWL-uDTbwg" "1Zm2ePE2gbKm8Yw_4B6vuO8HP3kfN2wZpFCQaNFHfcsk"
-# create_job "08" "02" "課題②" "課題②" "25,55 * * * *" "1kdKwI7nQ8N6j8gD6agZap5FWL-uDTbwg" "1Zm2ePE2gbKm8Yw_4B6vuO8HP3kfN2wZpFCQaNFHfcsk"
+# create_job "08" "01" "課題①" "課題①" "20,50 * * * *" "1eo6jJoS_LK291cnyXnxKUi10Z8YpVoN6" "1yBTyiSYG8ZTt-EZiAb69OENCvk9vHgsOPCQ3pzGAftY"
+# create_job "08" "02" "課題②" "課題②" "25,55 * * * *" "1eo6jJoS_LK291cnyXnxKUi10Z8YpVoN6" "1yBTyiSYG8ZTt-EZiAb69OENCvk9vHgsOPCQ3pzGAftY"
 #
-# create_job "09" "01" "課題①" "課題①" "0,30 * * * *" "1nllFEyyDEV7jiTSEgyBnnNeXhC_4Ttu6" "1O8S3w3F8RvLJp0LrS-eZtX0sZW5HcjOgMhyWJ_e8YPA"
-# create_job "09" "02" "課題②" "課題②" "5,35 * * * *" "1nllFEyyDEV7jiTSEgyBnnNeXhC_4Ttu6" "1O8S3w3F8RvLJp0LrS-eZtX0sZW5HcjOgMhyWJ_e8YPA"
+# create_job "09" "01" "課題①" "課題①" "0,30 * * * *" "1jRIGRKZ1UL9ZSN0sdmN_C0a_A8LmgtTx" "15tbkPsitAVjr65xThn5869Ve6l5evvPv4avd28fAV9U"
+# create_job "09" "02" "課題②" "課題②" "5,35 * * * *" "1jRIGRKZ1UL9ZSN0sdmN_C0a_A8LmgtTx" "15tbkPsitAVjr65xThn5869Ve6l5evvPv4avd28fAV9U"
 #
-# create_job "10" "01" "課題①" "課題①" "10,40 * * * *" "1BkDi3e_snacC3ITusTSAf3wojbxtpbsH" "1KPEj6LpE6gF76S3jdvADdWKlZeF-9nQ_BfhYi2dlkYA"
-# create_job "10" "02" "課題②" "課題②" "15,45 * * * *" "1BkDi3e_snacC3ITusTSAf3wojbxtpbsH" "1KPEj6LpE6gF76S3jdvADdWKlZeF-9nQ_BfhYi2dlkYA"
+# create_job "10" "01" "課題①" "課題①" "10,40 * * * *" "1PPdr6X034pbJAmEr-DESn8iNVuKk2x-C" "1Rtw8nqBgrM4cw8YIpjihiclQQxfa378_mHpN9OAJ_CY"
+# create_job "10" "02" "課題②" "課題②" "15,45 * * * *" "1PPdr6X034pbJAmEr-DESn8iNVuKk2x-C" "1Rtw8nqBgrM4cw8YIpjihiclQQxfa378_mHpN9OAJ_CY"
 
 # サマリー
 echo -e "${BLUE}================================================${NC}"
