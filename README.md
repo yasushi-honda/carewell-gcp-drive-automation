@@ -218,7 +218,7 @@ playwright install chromium
 
 - 認証情報はSecret Managerで管理
 - Workload Identity Federationによる鍵なし認証
-- Cloud Run: 認証トークン必須（パブリックアクセス無効化）
+- Cloud Run: `--allow-unauthenticated`でデプロイ（Dashboardからのブラウザ呼び出しに必要なため、Firebase IDトークンはCloud RunのIAMでは検証できない）。書き込み・削除系エンドポイント（`/cleanup`, `/admin/*`）はアプリケーション層（`src/auth.py`）でGoogle OIDC / Firebase IDトークンを検証し、未認証アクセスは401/403で拒否する（Issue #12対応）
 - サービスアカウント最小権限の原則
 - 環境変数での認証情報保存は禁止
 

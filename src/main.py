@@ -9,6 +9,7 @@ import time  # ✅ 追加: 診断ログで使用（将来の拡張用に追加�
 
 from flask import Request
 
+import auth
 from config.classes import resolve_student_spreadsheet_id
 from firestore_service import FirestoreService
 from google_drive_service import GoogleDriveService
@@ -528,8 +529,9 @@ def sync_students_from_sheets(request):
 
     except ValueError as e:
         # 同期元スプレッドシートID未設定等の設定不備。詳細はログにのみ残し、
-        # 未認証で到達可能なこのエンドポイントのレスポンスには内部構成の詳細
-        # （ファイルパス・環境変数名等）を含めない（silent-failure-hunterレビュー指摘）。
+        # レスポンスには内部構成の詳細（ファイルパス・環境変数名等）を含めない
+        # （silent-failure-hunterレビュー指摘。Issue #12でAuth必須化後も、
+        # 多層防御としてこの方針は維持する）。
         logger.error(f"Student sync configuration error: {str(e)}", exc_info=True)
         return {
             "status": "error",
@@ -582,24 +584,22 @@ def get_duplicate_students(request):
             "total_duplicates": len(result.get("duplicates", [])),
         }
 
-        return _add_cors_headers(response, 200)
+        return response, 200
 
     except ValueError as e:
         # 同期元スプレッドシートID未設定等の設定不備。詳細はログにのみ残し、
-        # 未認証で到達可能なこのエンドポイントのレスポンスには内部構成の詳細
-        # （ファイルパス・環境変数名等）を含めない（silent-failure-hunterレビュー指摘）。
+        # レスポンスには内部構成の詳細（ファイルパス・環境変数名等）を含めない
+        # （silent-failure-hunterレビュー指摘。Issue #12でAuth必須化後も、
+        # 多層防御としてこの方針は維持する）。
         logger.error(f"Duplicate students configuration error: {str(e)}", exc_info=True)
-        return _add_cors_headers(
-            {
-                "status": "error",
-                "error": "受講生名簿の同期設定が未完了です。管理者に連絡してください。",
-            },
-            500,
-        )
+        return {
+            "status": "error",
+            "error": "受講生名簿の同期設定が未完了です。管理者に連絡してください。",
+        }, 500
 
     except Exception as e:
         logger.error(f"Error getting duplicate students: {str(e)}", exc_info=True)
-        return _add_cors_headers({"status": "error", "error": str(e)}, 500)
+        return {"status": "error", "error": str(e)}, 500
 
 
 def _sync_students(sheets_service, firestore_service, spreadsheet_id):
@@ -842,49 +842,62 @@ def _add_cors_headers(response_data, status_code=200):
     return response_data, status_code, headers
 
 
+def _normalize(result):
+    """ハンドラの戻り値を (data, status_code) に正規化する。
+
+    ハンドラは dict 単体、または (dict, status) の2-tupleのいずれかを返す。
+    """
+    if isinstance(result, tuple):
+        return result[0], result[1]
+    return result, 200
+
+
+# パスごとのハンドラ名（認証ゲート通過後にのみ呼ばれる）。
+# 関数オブジェクトを直接束縛せず名前（文字列）で保持し、呼び出しのたびに
+# globals() から解決する（テストで unittest.mock.patch("main.xxx") した際に
+# 反映されるようにするため。src/auth.py の _VERIFIER_NAMES と同じ理由）。
+_HANDLER_NAMES = {
+    "/": "main",
+    "/cleanup": "cleanup_firestore",
+    "/admin/sync-students-from-sheets": "sync_students_from_sheets",
+    "/admin/duplicate-students": "get_duplicate_students",
+    "/health": "health_check",
+}
+
+
 def app(request):
     """
-    Main entrypoint with routing
+    Main entrypoint with routing + 認証ゲート（Issue #12）
 
     Routes:
-    - POST /                              → File collection (main)
-    - POST /cleanup                       → Firestore cleanup (administrative)
-    - POST /admin/sync-students-from-sheets → Student sync from Google Sheets (administrative)
-    - GET  /admin/duplicate-students      → Get duplicate student_id info (administrative)
-    - GET  /health                        → Health check
-    - OPTIONS /*                          → CORS preflight
+    - POST /                              → File collection (main) — Scheduler専用
+    - POST /cleanup                       → Firestore cleanup (administrative) — Firebase管理者専用
+    - POST /admin/sync-students-from-sheets → Student sync from Google Sheets — Scheduler or Firebase管理者
+    - GET  /admin/duplicate-students      → Get duplicate student_id info (administrative) — Firebase管理者専用
+    - GET  /health                        → Health check — 認証不要
+    - OPTIONS /*                          → CORS preflight — 認証不要（実処理なし）
+
+    認証は auth.authorize() が一元的に行う（default-deny）。Cloud Run 自体は
+    --allow-unauthenticated のまま運用し、アプリ層でゲートする設計の理由は
+    src/auth.py のモジュールdocstring参照。
     """
     path = request.path
     method = request.method
 
     logger.info(f"Request: {method} {path}")
 
-    # Handle CORS preflight requests
+    # CORS preflight は認証不要・実処理なし（Authorization ヘッダを持てないため）
     if method == "OPTIONS":
         return _add_cors_headers({}, 204)
 
-    if path == "/cleanup" and method == "POST":
-        return cleanup_firestore(request)
-    elif path == "/admin/sync-students-from-sheets" and method == "POST":
-        result = sync_students_from_sheets(request)
-        # Add CORS headers for browser requests
-        if isinstance(result, tuple):
-            return _add_cors_headers(result[0], result[1])
-        return _add_cors_headers(result, 200)
-    elif path == "/admin/duplicate-students" and method == "GET":
-        return get_duplicate_students(request)
-    elif path == "/health" and method == "GET":
-        return health_check(request)
-    elif path == "/" and method == "POST":
-        return main(request)
-    else:
-        return {
-            "error": f"Not found: {method} {path}",
-            "available_endpoints": [
-                "POST /",
-                "POST /cleanup",
-                "POST /admin/sync-students-from-sheets",
-                "GET /admin/duplicate-students",
-                "GET /health",
-            ],
-        }, 404
+    try:
+        auth.authorize(request, method, path)
+    except auth.RouteNotFound:
+        # 未知パスの一覧列挙は情報漏洩になるため返さない
+        return _add_cors_headers({"error": "Not found"}, 404)
+    except auth.AuthError as e:
+        return _add_cors_headers({"error": e.public_message}, e.status_code)
+
+    handler = globals()[_HANDLER_NAMES[path]]
+    result = handler(request)
+    return _add_cors_headers(*_normalize(result))
