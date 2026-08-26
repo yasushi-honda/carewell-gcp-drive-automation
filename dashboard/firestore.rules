@@ -1,38 +1,47 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    // Students collection: ステータス更新のみ許可
+
+    // Issue #12: 管理者許可リスト。src/auth.py の is_admin_email() と同じ
+    // 判定基準（admins/{email小文字} の存在チェックのみ）。
+    function isAdmin() {
+      return request.auth != null
+          && request.auth.token.email_verified == true
+          && exists(/databases/$(database)/documents/admins/$(request.auth.token.email.lower()));
+    }
+
+    // admins コレクション: 一覧(list)は誰にも許可しない（管理者メールアドレスの
+    // 列挙を防ぐため）。自分自身の1件だけ get を許可し、フロントの isAdmin 判定に使う。
+    // 書き込みは scripts/seed_admins.py（Admin SDK、ルールをバイパス）からのみ。
+    match /admins/{adminEmail} {
+      allow get: if request.auth != null
+                 && request.auth.token.email.lower() == adminEmail;
+      allow list, write: if false;
+    }
+
+    // 受講生: 閲覧はリンク共有運用のため無認証で維持。更新（辞退切替）は管理者のみ。
     match /students/{studentId} {
-      allow read: if true;   // 誰でも読み取り可能
+      allow read: if true;
       // ステータス更新のみ許可（status と last_updated フィールドのみ変更可能）
-      allow update: if true &&
+      allow update: if isAdmin() &&
                        request.resource.data.diff(resource.data).affectedKeys()
                          .hasOnly(['status', 'last_updated']);
       allow create, delete: if false;  // 作成・削除は禁止
     }
 
-    // Phase 1: 全ユーザー読み取り許可、書き込み完全禁止
-    // リンクを知っている人全員がアクセス可能
-    match /{document=**} {
-      allow read: if true;   // 誰でも読み取り可能
-      allow write: if false;  // フロントエンドからの書き込みは完全禁止
+    // 提出ファイル: 閲覧のみ（リンク共有運用）。バックエンドはAdmin SDKでルールをバイパスする。
+    match /submissions/{document=**} {
+      allow read: if true;
+      allow write: if false;
     }
 
-    // Phase 2: 認証ユーザーのみ読み取り許可（将来実装）
-    // 以下をアンコメントして上記ルールを置き換えることで、認証を有効化できます
-    //
-    // match /{document=**} {
-    //   allow read: if request.auth != null;  // 認証済みユーザーのみ読み取り可能
-    //   allow write: if false;                 // 書き込みは引き続き禁止
-    // }
-
-    // Phase 3: 講師別の担当クラスフィルタリング（将来実装）
-    // 講師が自分の担当クラスのみ閲覧できるようにする場合は、以下のルールを使用
-    //
-    // match /{className}/{document=**} {
-    //   allow read: if request.auth != null &&
-    //                  className in get(/databases/$(database)/documents/teachers/$(request.auth.uid)).data.assignedClasses;
-    //   allow write: if false;
-    // }
+    // 🚨 default-deny。
+    // 旧ルールの `match /{document=**} { allow read: if true; }` は Firestore の
+    // permissive union（いずれか1つのmatchがallowなら通る）により、admins コレクション
+    // まで無条件公開してしまうトラップだった（Issue #12で発見）。
+    // 新規コレクションをDashboardから読む場合は、上に明示matchを追加すること。
+    match /{document=**} {
+      allow read, write: if false;
+    }
   }
 }
