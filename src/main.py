@@ -9,6 +9,7 @@ import time  # ✅ 追加: 診断ログで使用（将来の拡張用に追加�
 
 from flask import Request
 
+from config.classes import resolve_student_spreadsheet_id
 from firestore_service import FirestoreService
 from google_drive_service import GoogleDriveService
 from playwright_automation import PlaywrightAutomationEngine
@@ -499,9 +500,7 @@ def sync_students_from_sheets(request):
         firestore_service = FirestoreService()
 
         # Phase 1: Sync students from Google Sheets
-        spreadsheet_id = os.environ.get(
-            "STUDENT_SPREADSHEET_ID", "1AQ12-h3n_NmN2kWxi4Z_g354X0wmUyMKAPeAsXJwu_w"
-        )
+        spreadsheet_id = resolve_student_spreadsheet_id()
         sync_result = _sync_students(sheets_service, firestore_service, spreadsheet_id)
 
         if sync_result.get("status") != "success":
@@ -526,6 +525,16 @@ def sync_students_from_sheets(request):
 
         logger.info(f"Student sync completed: {response}")
         return response, 200
+
+    except ValueError as e:
+        # 同期元スプレッドシートID未設定等の設定不備。詳細はログにのみ残し、
+        # 未認証で到達可能なこのエンドポイントのレスポンスには内部構成の詳細
+        # （ファイルパス・環境変数名等）を含めない（silent-failure-hunterレビュー指摘）。
+        logger.error(f"Student sync configuration error: {str(e)}", exc_info=True)
+        return {
+            "status": "error",
+            "error": "受講生名簿の同期設定が未完了です。管理者に連絡してください。",
+        }, 500
 
     except Exception as e:
         logger.error(f"Error during student sync: {str(e)}", exc_info=True)
@@ -561,9 +570,7 @@ def get_duplicate_students(request):
         sheets_service = SheetsService()
 
         # Get spreadsheet ID
-        spreadsheet_id = os.environ.get(
-            "STUDENT_SPREADSHEET_ID", "1AQ12-h3n_NmN2kWxi4Z_g354X0wmUyMKAPeAsXJwu_w"
-        )
+        spreadsheet_id = resolve_student_spreadsheet_id()
 
         # Get duplicates (now returns dict with duplicates and class_urls)
         result = sheets_service.get_duplicate_students(spreadsheet_id)
@@ -576,6 +583,19 @@ def get_duplicate_students(request):
         }
 
         return _add_cors_headers(response, 200)
+
+    except ValueError as e:
+        # 同期元スプレッドシートID未設定等の設定不備。詳細はログにのみ残し、
+        # 未認証で到達可能なこのエンドポイントのレスポンスには内部構成の詳細
+        # （ファイルパス・環境変数名等）を含めない（silent-failure-hunterレビュー指摘）。
+        logger.error(f"Duplicate students configuration error: {str(e)}", exc_info=True)
+        return _add_cors_headers(
+            {
+                "status": "error",
+                "error": "受講生名簿の同期設定が未完了です。管理者に連絡してください。",
+            },
+            500,
+        )
 
     except Exception as e:
         logger.error(f"Error getting duplicate students: {str(e)}", exc_info=True)

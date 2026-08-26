@@ -106,7 +106,7 @@ Hostingを有効化すると本番Firestore rulesも同時に再適用される�
 ✅ **message-body の令和8年度対応は2026-08-26に完了済み**（`carewell-classXX-taskYY`16ジョブの更新＋`carewell-class06/07`新規4ジョブ作成、全20ジョブPAUSEDのまま。詳細は本ファイル下部「令和8年度（2026年度）再開ステータス」参照）。残る作業は**resumeのみ**。
 
 ⚠️⚠️ **無条件の一括resumeは絶対に行わないこと**。config自体は令和8年度用に更新済みだが、以下の理由で個別確認が必要:
-- `student-sync-daily`は**resume禁止**（Issue #5: `STUDENT_SPREADSHEET_ID`が年度概念を持たない単一環境変数のため、令和7年度の名簿を誤って同期する恐れがある）
+- `student-sync-daily`は**resume禁止**（Issue #5 Phase 1で「年度不明時に誤って令和7年度の名簿へフォールバックする」リスクは解消済み（`resolve_student_spreadsheet_id()`が未設定時は明示エラーで停止）だが、①令和8年度の正しいスプレッドシートIDが`STUDENT_SPREADSHEET_IDS_BY_YEAR`にまだ未設定 ②`students`コレクション・`_backfill_all_files`の年度分離＝Phase 2が未着手のため、resume禁止は継続）
 - 課題②ジョブ（`carewell-classXX-task02`）は実際にポータルへ課題②が公開されているか、resume前に実機確認が必要（未確認のまま自動実行させない）
 - `carewell-class06/07`はcronスロットを既存クラスと合流させているため、同時実行本数が増える。一括ではなく1クラスずつ段階的に有効化する
 
@@ -202,15 +202,20 @@ Hosting分離は「開いたURLで違う年度のUIが表示される」事故�
    `syncStudents({ backfill: true })` を呼び、`src/main.py`の`_backfill_all_files`は
    `submissions`コレクションを年度条件なしで全クラス走査する。押した瞬間、令和7年度の
    提出物データも処理対象に入る
-3. **③ 同期元データそのものが年度非対応（最も根本的）**: `src/main.py:503,565`の`_sync_students`は、
+3. **③ 同期元データそのものが年度非対応（最も根本的）**: ~~`src/main.py:503,565`の`_sync_students`は、
    同期元スプレッドシートIDを単一のCloud Run環境変数`STUDENT_SPREADSHEET_ID`
    （未設定時はハードコードされたデフォルトID`1AQ12-h3n_NmN2kWxi4Z_g354X0wmUyMKAPeAsXJwu_w`に
-   フォールバック）から取得しており、年度という概念自体が存在しない。CORSを新URLへ直し
-   Cloud Run Functionsを再デプロイして新サイトの同期ボタンが技術的に動くようになっても、
-   この環境変数が令和8年度の正しい名簿を指している保証はない
+   フォールバック）から取得しており、年度という概念自体が存在しない~~。
+   **2026-08-26 Issue #5 Phase 1で解消**: `src/config/classes.py`の
+   `resolve_student_spreadsheet_id()`が、環境変数未設定時は`KNOWN_CLASSES`から動的に導出した
+   現在年度（`STUDENT_SPREADSHEET_IDS_BY_YEAR`）を参照し、対応する値がなければ誤った年度への
+   暗黙フォールバックをせず`ValueError`で明示的に停止するよう変更（`src/main.py`
+   `sync_students_from_sheets`/`get_duplicate_students`、`scripts/sync_students_manually.py`が
+   利用）。ただし`STUDENT_SPREADSHEET_IDS_BY_YEAR`に**令和8年度の正しいIDはまだ未設定**
+   （プレースホルダーのみ）のため、設定するまで同期は実行時エラーで止まる（＝安全側）
 
 **再開ゲート（次回セッションで実デプロイ・運用開始する前に必須）**:
-1. `STUDENT_SPREADSHEET_ID`が令和8年度の正しい名簿スプレッドシートを指していることを確認するまで、新サイトの「同期」ボタンは押さない
+1. `src/config/classes.py`の`STUDENT_SPREADSHEET_IDS_BY_YEAR`に令和8年度の正しい名簿スプレッドシートIDを設定するまで、新サイトの「同期」ボタンは押さない（未設定のままだと`ValueError`で失敗する設計のため、誤った年度の名簿が使われることはないが、動作もしない）。`STUDENT_SPREADSHEET_ID`環境変数での上書きも可能だが、その場合は対応する`STUDENT_SPREADSHEET_ID_YEAR`環境変数を現在年度（`令和8年度`）と一致させて設定すること（codex review P1指摘: 前年度の値が環境変数に残ったまま放置されると年度チェックを素通りするため、2026-08-26に年度確認を必須化済み）
 2. `students`コレクションの年度分離、または`_backfill_all_files`の年度スコープ限定のいずれかが完了するまで、新サイトの管理者機能（同期・重複学生一覧）は使用しない
 3. 上記1・2が満たされるまでは、新サイトはFirestore直読みの閲覧系ページ（提出ファイル一覧等）のみに利用を限定する
 
@@ -223,6 +228,6 @@ Hostingの問題ではなくバックエンドのデータモデル・実装の�
 3. **Cloud Schedulerジョブのresume判断**: `carewell-classXX-taskYY`20ジョブはPAUSEDのまま令和8年度用config済み。個別確認のうえ段階的にresumeする（Step 2参照）。`student-sync-daily`は下記9・10の対応完了までresume禁止
 4. **上記「発見した既存バグ」5スクリプトのスキーマ修正**
 5. **№08・10**: 9/24以降にポータル上でコースが実際に現れるか再確認（現時点では申込開始日からの推測に過ぎない未検証の仮説）
-6. **`STUDENT_SPREADSHEET_ID`の年度スコープ化**（上記「Dashboard Hosting分離では解決しない既存の設計上の欠落」③、Issue #5で追跡）。再開ゲートの前提条件
+6. ~~`STUDENT_SPREADSHEET_ID`の年度スコープ化~~（上記「Dashboard Hosting分離では解決しない既存の設計上の欠落」③、Issue #5 Phase 1）: **メカニズムは2026-08-26に対応済み**。残るのは`STUDENT_SPREADSHEET_IDS_BY_YEAR`への令和8年度の実IDの設定（再開ゲートの前提条件、値そのものは人間の確認が必要）
 7. **`students`コレクション・`_backfill_all_files`の年度分離**（同①②）。再開ゲートの前提条件
 8. **Cloud Run/Hosting両ワークフローの依存関係化**（CIレベルで順序を強制する仕組み。現状は手順書での申し合わせのみ）
