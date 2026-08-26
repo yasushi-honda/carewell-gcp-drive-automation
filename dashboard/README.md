@@ -4,7 +4,7 @@ Firestoreに蓄積された提出ファイルのメタ情報を可視化するWe
 
 **バージョン**: Ver1（Phase 1完了）
 **リリース日**: 2025-10-13
-**公開URL**: https://carewell-automation.web.app
+**公開URL**: https://carewell-dashboard-2026.web.app
 
 ## 概要
 
@@ -234,7 +234,7 @@ npm install
 - ✅ Firebase Hosting デプロイ自動化
 - ✅ Hello World ページデプロイ
 
-**公開URL**: https://carewell-automation.web.app
+**公開URL**: https://carewell-dashboard-2026.web.app
 
 **ワークフロー**: `.github/workflows/deploy-dashboard.yml`
 

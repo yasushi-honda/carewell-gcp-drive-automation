@@ -11,7 +11,7 @@ export default defineConfig({
   workers: process.env.CI ? 1 : undefined,
   reporter: 'html',
   use: {
-    baseURL: process.env.BASE_URL || 'https://carewell-automation.web.app',
+    baseURL: process.env.BASE_URL || 'https://carewell-dashboard-2026.web.app',
     trace: 'on-first-retry',
     screenshot: 'only-on-failure',
   },

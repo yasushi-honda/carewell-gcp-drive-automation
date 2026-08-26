@@ -119,7 +119,7 @@ flowchart TD
 ### 1. Dashboard にデータが表示されない
 
 **症状**:
-- Dashboard https://carewell-automation.web.app/ でクラス・課題が空表示
+- Dashboard https://carewell-dashboard-2026.web.app/ でクラス・課題が空表示
 - Firestore にはデータがある
 
 **診断手順**:
@@ -671,10 +671,10 @@ gcloud scheduler jobs describe carewell-class01-task01 \
 
 ```bash
 # ブラウザで開く
-open https://carewell-automation.web.app/
+open https://carewell-dashboard-2026.web.app/
 
 # curlでステータス確認
-curl -I https://carewell-automation.web.app/
+curl -I https://carewell-dashboard-2026.web.app/
 ```
 
 ### Firestore 確認スクリプト

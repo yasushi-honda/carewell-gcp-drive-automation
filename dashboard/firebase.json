@@ -5,7 +5,7 @@
     "indexes": "firestore.indexes.json"
   },
   "hosting": {
-    "site": "carewell-automation",
+    "site": "carewell-dashboard-2026",
     "public": "dist",
     "ignore": [
       "firebase.json",

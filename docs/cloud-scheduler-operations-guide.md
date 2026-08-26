@@ -529,7 +529,7 @@ gcloud logging read "resource.type=cloud_scheduler_job AND \
 
 #### Carewell Dashboardでの確認
 
-現在開発中のダッシュボード: https://carewell-automation.web.app/
+現在開発中のダッシュボード: https://carewell-dashboard-2026.web.app/
 
 **確認項目:**
 - [ ] 各クラス/タスクのファイル提出数
