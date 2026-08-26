@@ -44,7 +44,7 @@ Kiro-style Spec Driven Development implementation using claude code slash comman
 - [ ] Cloud Run ログの確認コマンドは？ → `gcloud logging read ...`
 - [ ] Dashboard の URL は？ → `https://carewell-dashboard-2026.web.app/`
 - [ ] 受講生同期の自動実行タイミングは？ → 毎日 JST 02:00
-- [ ] 手動同期ボタンの出し方は？ → `?admin=true` パラメータ付きでアクセス
+- [ ] 手動同期ボタンの出し方は？ → 管理者許可リスト（Firestore `admins` コレクション）登録済みアカウントでDashboardにログイン（Issue #12、詳細: `docs/admin-authentication.md`）
 - [ ] 受講生を無効化する方法は？ → Google Sheets L列「無効」にチェック
 
 **次のステップ**: 実際の作業を開始する前に、必ず下記の「🚨 CRITICAL」セクションを読んでください。

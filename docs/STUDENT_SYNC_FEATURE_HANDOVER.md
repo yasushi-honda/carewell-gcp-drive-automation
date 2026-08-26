@@ -91,8 +91,8 @@ graph TB
     CR -->|Write| FS_S
     CR -->|Write| FS_F
 
-    ADMIN -->|?admin=true| DB
-    DB -->|POST /admin/sync-students-from-sheets<br/>No Auth (Public)| CR
+    ADMIN -->|Firebase Login| DB
+    DB -->|POST /admin/sync-students-from-sheets<br/>Authorization: Bearer Firebase ID token| CR
 
     FS_S -->|Real-time Listener| DB
     FS_F -->|Real-time Listener| DB
@@ -129,9 +129,9 @@ sequenceDiagram
     CR-->>CS: 200 OK {students_synced, files_backfilled}
 
     Note over Admin,DB: 手動同期
-    Admin->>DB: Access ?admin=true
+    Admin->>DB: Firebase Loginでログイン（管理者許可リスト登録済みのアカウント）
     Admin->>DB: Click "データ同期" button
-    DB->>CR: POST /admin/sync-students-from-sheets<br/>{"backfill": true}
+    DB->>CR: POST /admin/sync-students-from-sheets<br/>Authorization: Bearer Firebase ID token<br/>{"backfill": true}
     CR-->>DB: 200 OK {status, counts}
     DB->>Admin: Toast notification (success/error)
 ```
@@ -322,14 +322,16 @@ gcloud scheduler jobs resume carewell-student-sync-daily --location=asia-northea
 ### アクセス方法
 
 ```
-https://carewell-automation.web.app/?admin=true
+https://carewell-dashboard-2026.web.app/
 ```
+
+右上の「ログイン」ボタンから、`admins` コレクションに登録済みの Google アカウントでログインする（Issue #12、詳細は [docs/admin-authentication.md](admin-authentication.md) 参照）。
 
 ### 機能詳細
 
 | 項目 | 説明 |
 |------|------|
-| **表示条件** | URL パラメータ `?admin=true` でアクセス |
+| **表示条件** | Firebase Authentication でログイン済み、かつ管理者許可リスト（`admins` コレクション）に登録済み |
 | **ボタン位置** | ヘッダー右上（ナビゲーションの左） |
 | **ボタン色** | 緑色 (`bg-green-600`) |
 | **処理中表示** | スピナーアニメーション + 「同期中...」テキスト |
@@ -498,11 +500,12 @@ gantt
 
 ### 問題1: 同期ボタンが表示されない
 
-**原因**: 管理者モードになっていない
+**原因**: 管理者としてログインしていない、または管理者許可リストに未登録
 
 **解決**:
-1. URL に `?admin=true` を追加してアクセス
-2. ブラウザの開発者ツールで `sessionStorage.getItem('adminMode')` を確認
+1. 管理者として許可された Google アカウントでログインしているか確認
+2. `admins` コレクションにそのメールアドレスが登録されているか確認（`python scripts/seed_admins.py --list`）
+3. ブラウザの DevTools Console/Network で 401/403 エラーが出ていないか確認
 
 ### 問題2: 同期エラー「Failed to fetch」
 

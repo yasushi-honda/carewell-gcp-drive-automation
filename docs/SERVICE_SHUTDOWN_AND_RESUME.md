@@ -138,7 +138,7 @@ gcloud scheduler jobs resume "${JOB_NAME}" --location=asia-northeast1
    gcloud logging read "resource.type=cloud_run_revision AND resource.labels.service_name=carewell-file-collector" --limit 10
    ```
 3. Dashboard（https://carewell-dashboard-2026.web.app/ — 令和8年度用。旧URL https://carewell-automation.web.app/ は令和7年度の凍結アーカイブなので令和8年度データ確認には使わないこと）でデータ更新を確認
-4. **新サイトの「同期」ボタン・重複学生一覧は、下記「令和8年度（2026年度）再開ステータス」の再開ゲート（3条件）を満たすまで使用しないこと**
+4. **新サイトの「同期」ボタン・重複学生一覧は、下記「令和8年度（2026年度）再開ステータス」の再開ゲート（4条件）を満たすまで使用しないこと**
 
 ### Step 4: 必要に応じて
 
@@ -218,6 +218,7 @@ Hosting分離は「開いたURLで違う年度のUIが表示される」事故�
 1. `src/config/classes.py`の`STUDENT_SPREADSHEET_IDS_BY_YEAR`に令和8年度の正しい名簿スプレッドシートIDを設定するまで、新サイトの「同期」ボタンは押さない（未設定のままだと`ValueError`で失敗する設計のため、誤った年度の名簿が使われることはないが、動作もしない）。`STUDENT_SPREADSHEET_ID`環境変数での上書きも可能だが、その場合は対応する`STUDENT_SPREADSHEET_ID_YEAR`環境変数を現在年度（`令和8年度`）と一致させて設定すること（codex review P1指摘: 前年度の値が環境変数に残ったまま放置されると年度チェックを素通りするため、2026-08-26に年度確認を必須化済み）
 2. `students`コレクションの年度分離、または`_backfill_all_files`の年度スコープ限定のいずれかが完了するまで、新サイトの管理者機能（同期・重複学生一覧）は使用しない
 3. 上記1・2が満たされるまでは、新サイトはFirestore直読みの閲覧系ページ（提出ファイル一覧等）のみに利用を限定する
+4. **管理者ログイン認証（Issue #12、Firebase Authentication）が有効で、同期ボタン・重複学生一覧が実際に動作すること**（Firebase Authentication有効化・Googleプロバイダ設定・認可済みドメイン追加はdecision-maker作業、`admins`コレクションへの管理者投入は`scripts/seed_admins.py`。詳細: `docs/admin-authentication.md`。PR #13/#14/#15のマージが前提）
 
 Hostingの問題ではなくバックエンドのデータモデル・実装の問題のため、別途修正タスクとして起票を検討。
 

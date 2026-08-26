@@ -324,8 +324,8 @@ gcloud scheduler jobs delete carewell-student-sync-daily --location=asia-northea
 
 **手順**:
 
-1. **管理者モードでアクセス**:
-   - `https://carewell-automation.web.app/?admin=true` を開く
+1. **管理者としてログイン**:
+   - `https://carewell-dashboard-2026.web.app/` を開き、右上「ログイン」から管理者許可リスト登録済みアカウントでログイン（Issue #12、詳細: `docs/admin-authentication.md`）
 
 2. **同期ボタンをクリック**:
    - ヘッダー右上に緑色の「データ同期」ボタンが表示される

@@ -74,7 +74,7 @@ Sheets書き込み試行 (最大3回リトライ)
 **Google Sheets ↔ Firestore 自動同期**:
 
 - **自動同期**: 毎日 JST 02:00 に `carewell-student-sync-daily` ジョブが実行
-- **手動同期**: Dashboard 管理者モード (`?admin=true`) で「データ同期」ボタン
+- **手動同期**: Dashboard に管理者許可リスト登録済みアカウントでログイン後、「データ同期」ボタン（Issue #12、詳細: `docs/admin-authentication.md`）
 - **論理削除**: Google Sheets L列「無効」チェックボックス → `status: "inactive"`
 - **Backfill**: 受講生データ変更時、全ファイルの非正規化データも自動更新
 

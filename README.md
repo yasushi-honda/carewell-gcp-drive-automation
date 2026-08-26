@@ -26,7 +26,7 @@ Firestoreに蓄積された提出ファイルのメタ情報を、講師が直�
 - ✅ パフォーマンス最適化（コード分割・キャッシング）
 - ✅ CI/CD自動デプロイ
 
-**次のステップ（オプション）**: Phase 2 認証機能実装（Firebase Authentication、講師別クラスフィルタリング）
+**Phase 2 認証機能**: 管理者ログイン認証（Firebase Authentication、Issue #12）は実装済み（PR #13/#14/#15、マージ待ち）。詳細は [docs/admin-authentication.md](docs/admin-authentication.md) を参照。講師別クラスフィルタリングは未着手。
 
 詳細は [dashboard/README.md](dashboard/README.md) を参照してください。
 
@@ -218,7 +218,7 @@ playwright install chromium
 
 - 認証情報はSecret Managerで管理
 - Workload Identity Federationによる鍵なし認証
-- Cloud Run: `--allow-unauthenticated`でデプロイ（Dashboardからのブラウザ呼び出しに必要なため、Firebase IDトークンはCloud RunのIAMでは検証できない）。書き込み・削除系エンドポイント（`/cleanup`, `/admin/*`）はアプリケーション層（`src/auth.py`）でGoogle OIDC / Firebase IDトークンを検証し、未認証アクセスは401/403で拒否する（Issue #12対応）
+- Cloud Run: `--allow-unauthenticated`でデプロイ（Dashboardからのブラウザ呼び出しに必要なため、Firebase IDトークンはCloud RunのIAMでは検証できない）。書き込み・削除系エンドポイント（`/cleanup`, `/admin/sync-students-from-sheets`, `/admin/duplicate-students`）はアプリケーション層（`src/auth.py`）でGoogle OIDC / Firebase IDトークン＋管理者許可リストを検証し、未登録パスはdefault-denyで404、未認証アクセスは401/403で拒否する（Issue #12対応。詳細: [docs/admin-authentication.md](docs/admin-authentication.md)）
 - サービスアカウント最小権限の原則
 - 環境変数での認証情報保存は禁止
 

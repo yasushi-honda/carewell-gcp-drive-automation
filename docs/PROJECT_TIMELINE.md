@@ -57,7 +57,7 @@ gantt
   - Cloud Scheduler リクエストボディに `{"backfill": true}` 追加
 
 - **Dashboard 手動同期ボタン**
-  - 管理者モード (`?admin=true`) でのみ表示
+  - 管理者としてログイン（Firebase Authentication、Issue #12で `?admin=true` から移行）している場合のみ表示
   - スピナーアニメーション付きローディング
   - トースト通知による成功/失敗表示
 

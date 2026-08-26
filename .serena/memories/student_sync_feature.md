@@ -40,7 +40,7 @@ dashboard/src/composables/useStudentSync.ts  # API呼び出し
 
 ## Dashboard 手動同期
 
-1. `https://carewell-automation.web.app/?admin=true` でアクセス
+1. `https://carewell-dashboard-2026.web.app/` で管理者許可リスト登録済みアカウントでログイン（Issue #12、詳細: `docs/admin-authentication.md`）
 2. ヘッダー右上の「データ同期」ボタンをクリック
 3. スピナー表示 → トースト通知で結果確認
 
