@@ -52,22 +52,40 @@ def resolve_student_spreadsheet_id() -> str:
     """
     受講生名簿の同期元スプレッドシートIDを解決する。
 
-    STUDENT_SPREADSHEET_ID環境変数が明示設定されていればそれを優先する。
-    未設定の場合は現在年度（KNOWN_CLASSESから動的取得）に対応するIDを
-    STUDENT_SPREADSHEET_IDS_BY_YEARから引く。どちらも得られない場合は、
-    誤った年度のスプレッドシートへ暗黙にフォールバックすることを避けるため
+    STUDENT_SPREADSHEET_ID環境変数は、対応する年度を示す
+    STUDENT_SPREADSHEET_ID_YEAR環境変数が現在年度と一致する場合のみ採用する
+    （Cloud Run/実行環境に前年度の値が残ったまま放置され、年度チェックを
+    素通りして誤った名簿を同期する事故を防ぐため。年度指定なしの値を無条件に
+    信用しない）。一致しない、またはSTUDENT_SPREADSHEET_ID_YEARが未設定の場合は
     ValueErrorを送出する。
+
+    STUDENT_SPREADSHEET_ID自体が未設定の場合は、現在年度
+    （KNOWN_CLASSESから動的取得）に対応するIDをSTUDENT_SPREADSHEET_IDS_BY_YEAR
+    から引く。対応するIDがなければ、誤った年度のスプレッドシートへ暗黙に
+    フォールバックすることを避けるためValueErrorを送出する。
     """
+    current_year = get_current_academic_year_prefix()
     env_value = os.environ.get("STUDENT_SPREADSHEET_ID")
+
     if env_value:
+        env_year = os.environ.get("STUDENT_SPREADSHEET_ID_YEAR")
+        if env_year != current_year:
+            raise ValueError(
+                "STUDENT_SPREADSHEET_ID環境変数が設定されていますが、対応する"
+                f"年度を示すSTUDENT_SPREADSHEET_ID_YEAR環境変数が現在年度"
+                f"（{current_year}）と一致しません（実際の値: {env_year!r}）。"
+                "前年度の値が残っている可能性があるため、誤った年度への暗黙"
+                f"フォールバックを避けて停止します。STUDENT_SPREADSHEET_ID_YEARを"
+                f"{current_year!r}に設定するか、両方の環境変数を削除してください。"
+            )
         return env_value
 
-    current_year = get_current_academic_year_prefix()
     spreadsheet_id = STUDENT_SPREADSHEET_IDS_BY_YEAR.get(current_year)
     if not spreadsheet_id:
         raise ValueError(
             f"{current_year}の受講生名簿スプレッドシートIDが未設定です。"
-            "STUDENT_SPREADSHEET_ID環境変数を設定するか、"
-            "src/config/classes.pyのSTUDENT_SPREADSHEET_IDS_BY_YEARに追加してください。"
+            "STUDENT_SPREADSHEET_ID / STUDENT_SPREADSHEET_ID_YEAR環境変数を"
+            "設定するか、src/config/classes.pyのSTUDENT_SPREADSHEET_IDS_BY_YEAR"
+            "に追加してください。"
         )
     return spreadsheet_id

@@ -3,6 +3,9 @@ Unit tests for src/config/classes.py's year-aware student spreadsheet ID resolut
 
 Issue #5: STUDENT_SPREADSHEET_ID was a single global env var with no year concept,
 risking a silent sync against the wrong academic year's roster spreadsheet.
+codex review (P1, effort=high) additionally flagged that an unscoped env var
+override would still silently win even when it held a stale prior-year value,
+so the override now requires a matching STUDENT_SPREADSHEET_ID_YEAR companion.
 """
 
 import os
@@ -24,9 +27,32 @@ class TestGetCurrentAcademicYearPrefix:
 
 
 class TestResolveStudentSpreadsheetId:
-    def test_env_var_takes_priority_over_year_dict(self):
-        with patch.dict(os.environ, {"STUDENT_SPREADSHEET_ID": "env-override-id"}):
+    def test_env_var_takes_priority_when_year_matches(self):
+        with patch.dict(
+            os.environ,
+            {
+                "STUDENT_SPREADSHEET_ID": "env-override-id",
+                "STUDENT_SPREADSHEET_ID_YEAR": CURRENT_YEAR_PREFIX,
+            },
+        ):
             assert classes_config.resolve_student_spreadsheet_id() == "env-override-id"
+
+    def test_env_var_rejected_when_year_missing(self):
+        with patch.dict(os.environ, {"STUDENT_SPREADSHEET_ID": "stale-prior-year-id"}):
+            os.environ.pop("STUDENT_SPREADSHEET_ID_YEAR", None)
+            with pytest.raises(ValueError, match="STUDENT_SPREADSHEET_ID_YEAR"):
+                classes_config.resolve_student_spreadsheet_id()
+
+    def test_env_var_rejected_when_year_mismatches(self):
+        with patch.dict(
+            os.environ,
+            {
+                "STUDENT_SPREADSHEET_ID": "stale-prior-year-id",
+                "STUDENT_SPREADSHEET_ID_YEAR": "令和7年度",
+            },
+        ):
+            with pytest.raises(ValueError, match="STUDENT_SPREADSHEET_ID_YEAR"):
+                classes_config.resolve_student_spreadsheet_id()
 
     def test_falls_back_to_year_dict_when_env_var_unset(self):
         with patch.dict(os.environ, {}, clear=True):
