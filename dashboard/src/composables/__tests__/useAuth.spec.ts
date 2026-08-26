@@ -58,7 +58,9 @@ describe('useAuth', () => {
     const fakeUser = { email: 'Admin@Example.com' } as User;
     await getCallback()!(fakeUser);
 
-    expect(user.value).toBe(fakeUser);
+    // user.valueはVueのreadonly()でProxyラップされるため、toBeでの参照比較は
+    // 常に失敗する（内容が同じでも別オブジェクト扱い）。内容の一致で検証する。
+    expect(user.value?.email).toBe('Admin@Example.com');
     expect(isAdmin.value).toBe(true);
     expect(authReady.value).toBe(true);
   });
@@ -110,6 +112,34 @@ describe('useAuth', () => {
     expect(isAdmin.value).toBe(true);
 
     await getCallback()!(null);
+    expect(user.value).toBeNull();
+    expect(isAdmin.value).toBe(false);
+  });
+
+  it('古いadminチェックが新しいログアウトイベントの結果を上書きしない（レース条件の回帰テスト）', async () => {
+    let resolveFirstCheck!: (value: { exists: () => boolean }) => void;
+    const firstCheckPromise = new Promise<{ exists: () => boolean }>((resolve) => {
+      resolveFirstCheck = resolve;
+    });
+    vi.mocked(getDoc).mockReturnValueOnce(firstCheckPromise as any);
+
+    const getCallback = captureAuthCallback();
+    const { useAuth } = await import('../useAuth');
+    const { user, isAdmin } = useAuth();
+
+    // イベント1: 管理者としてログイン（Firestore確認がpendingのまま止まる）
+    const firstEventDone = getCallback()!({ email: 'admin@example.com' } as User);
+
+    // イベント2: 直後にログアウト（同期的にuser/isAdminがリセットされる）
+    await getCallback()!(null);
+    expect(user.value).toBeNull();
+    expect(isAdmin.value).toBe(false);
+
+    // イベント1のFirestore確認が今頃解決する（本来は管理者だった）
+    resolveFirstCheck({ exists: () => true });
+    await firstEventDone;
+
+    // 古いイベントの結果でisAdminが誤ってtrueに戻っていないこと
     expect(user.value).toBeNull();
     expect(isAdmin.value).toBe(false);
   });

@@ -44,13 +44,27 @@ async function checkAdmin(currentUser: User): Promise<boolean> {
   }
 }
 
+// onAuthStateChangedのコールバックはFirestore参照を含む非同期処理を持つため、
+// ログイン直後の素早いログアウト（またはアカウント切替）が発生すると、古いイベントの
+// checkAdmin()が後から解決して新しいイベントの結果を上書きしうる（例: 管理者としてログイン
+// →即座にログアウト、というシーケンスで、先行するadminチェックが後に解決しisAdminを
+// trueへ誤って戻す）。世代トークンで「自分が最新イベントか」を確認してから反映する。
+let authEventGeneration = 0;
+
 function ensureInitialized(): void {
   if (initialized) return;
   initialized = true;
 
   onAuthStateChanged(getAuthInstance(), async (currentUser) => {
+    const myGeneration = ++authEventGeneration;
     user.value = currentUser;
-    isAdmin.value = currentUser ? await checkAdmin(currentUser) : false;
+
+    const admin = currentUser ? await checkAdmin(currentUser) : false;
+    if (myGeneration === authEventGeneration) {
+      // 自分より新しいイベントが発生していなければ反映する
+      isAdmin.value = admin;
+    }
+
     authReady.value = true;
     resolveReady?.();
   });
