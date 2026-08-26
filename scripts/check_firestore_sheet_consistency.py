@@ -3,21 +3,42 @@
 Firestore と スプレッドシート の整合性チェックスクリプト
 
 Firestoreに存在するがスプレッドシートに存在しないレコードを検出する
+
+⚠️ 既知の不具合を修正済み（2026-08-26 codex review指摘、PR #3）:
+- 旧実装は単一のSPREADSHEET_ID（No8用）を全クラスと比較しており、No1〜7・9・10は
+  常に「欠落」と誤検出されていた → クラスごとのスプレッドシートIDマッピングに修正
+- 旧実装の短縮クラス名（"No1"等）はFirestoreの実際のドキュメントID（フルクラス名）と
+  一致していなかった → CLASS_CONFIGでフルクラス名を使うよう修正
+- 旧実装はハードコードされた絶対パスをsys.pathに追加していたが誤ったパスだった
+  （リポジトリ名のtypo）→ __file__基準の相対パスに修正
+
+⚠️ CLASS_CONFIGは令和8年度でのスプレッドシート流用可否が未検証のため空にしています。
+scripts/check_all_spreadsheets_consistency.py と同様に、確認・確定したクラスのみ
+コメントを解除して使うこと（詳細: docs/SERVICE_SHUTDOWN_AND_RESUME.md「令和8年度再開ステータス」）。
 """
 
+import os
 import sys
-sys.path.insert(0, "/Users/yyyhhh/carewell-gcp-drive-automation")
+
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from google.cloud import firestore
 from src.sheets_service import SheetsService
 
 # 設定
-SPREADSHEET_ID = "1Zm2ePE2gbKm8Yw_4B6vuO8HP3kfN2wZpFCQaNFHfcsk"
 DATABASE_NAME = "carewell-native"
 PROJECT_ID = "carewell-automation"
 
-# チェック対象のクラスと課題
-CLASSES = ["No1", "No2", "No3", "No4", "No5", "No8", "No9", "No10"]
+# クラス別スプレッドシートID と Firestoreクラス名のマッピング（令和8年度用は未確認のため空）
+# scripts/check_all_spreadsheets_consistency.py の CLASS_CONFIG と同じ形式・同じ理由
+CLASS_CONFIG = {
+    # "No1": {
+    #     "spreadsheet_id": "1R1bsr24uyFf67p7_0I0yUA47ap5uIrJE7n89A9NbRYI",
+    #     "firestore_name": "令和8年度 デジタル中核人材養成研修 №01",
+    # },
+    # ...（他クラスは scripts/check_all_spreadsheets_consistency.py 参照）
+}
+
 TASKS = ["課題①", "課題②"]
 
 
@@ -48,14 +69,14 @@ def get_firestore_records(db, class_name: str, task_id: str) -> dict:
     return records
 
 
-def get_spreadsheet_records(sheets_service, task_id: str) -> set:
+def get_spreadsheet_records(sheets_service, spreadsheet_id: str, task_id: str) -> set:
     """スプレッドシートから指定課題のレコードを取得（student_id_filenameのセット）"""
     records = set()
     try:
         # シート名はtask_id（例: "課題②"）
         escaped_name = task_id.replace("'", "''")
         result = sheets_service.service.spreadsheets().values().get(
-            spreadsheetId=SPREADSHEET_ID,
+            spreadsheetId=spreadsheet_id,
             range=f"'{escaped_name}'!A:H"
         ).execute()
 
@@ -100,44 +121,50 @@ def main():
         print(f"  ❌ Google Sheets 接続失敗: {e}")
         return
 
+    if not CLASS_CONFIG:
+        print()
+        print("⚠️  CLASS_CONFIG が空です。令和8年度でのスプレッドシート流用可否が確認・")
+        print("   確定したクラスをCLASS_CONFIGに追加してから実行してください。")
+        return
+
     print()
     print("-" * 70)
 
     total_missing = 0
     missing_records = []
 
-    for task_id in TASKS:
-        print(f"\n【{task_id}】チェック中...")
+    for short_name, config in CLASS_CONFIG.items():
+        spreadsheet_id = config["spreadsheet_id"]
+        firestore_name = config["firestore_name"]
+        print(f"\n【{short_name} ({firestore_name})】チェック中...")
 
-        # スプレッドシートのレコードを取得
-        sheet_records = get_spreadsheet_records(sheets_service, task_id)
-        print(f"  スプレッドシート: {len(sheet_records)} 件")
+        for task_id in TASKS:
+            # スプレッドシートのレコードを取得
+            sheet_records = get_spreadsheet_records(sheets_service, spreadsheet_id, task_id)
 
-        task_missing = 0
-
-        for class_name in CLASSES:
             # Firestoreのレコードを取得
-            firestore_records = get_firestore_records(db, class_name, task_id)
+            firestore_records = get_firestore_records(db, firestore_name, task_id)
 
             if not firestore_records:
                 continue
 
             # 差分チェック
+            task_missing = 0
             for key, record in firestore_records.items():
                 if key not in sheet_records:
                     task_missing += 1
                     total_missing += 1
                     missing_records.append({
-                        "class": class_name,
+                        "class": short_name,
                         "task": task_id,
                         **record
                     })
-                    print(f"  ⚠️  欠落: {class_name} - {record['student_name']} ({record['student_id']}) - {record['filename']}")
+                    print(f"  ⚠️  欠落: {task_id} - {record['student_name']} ({record['student_id']}) - {record['filename']}")
 
-        if task_missing == 0:
-            print(f"  ✅ 欠落なし")
-        else:
-            print(f"  ❌ {task_missing} 件の欠落を検出")
+            if task_missing == 0:
+                print(f"  ✅ {task_id}: 欠落なし")
+            else:
+                print(f"  ❌ {task_id}: {task_missing} 件の欠落を検出")
 
     print()
     print("=" * 70)

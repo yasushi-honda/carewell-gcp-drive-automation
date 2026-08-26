@@ -2,12 +2,19 @@
 """
 手動でスプレッドシートにレコードを追加するスクリプト
 
+⚠️ パス誤りを修正済み（2026-08-26 codex review指摘、PR #3。
+scripts/fix_missing_sheet_records.py と同じ不具合）:
+ハードコードされた絶対パスをsys.pathに追加していたが誤ったパスだった
+（リポジトリ名のtypo）→ __file__基準の相対パスに修正
+
 Usage:
     python scripts/manual_add_sheet_record.py
 """
 
+import os
 import sys
-sys.path.insert(0, "/Users/yyyhhh/carewell-gcp-drive-automation")
+
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from datetime import datetime
 from src.sheets_service import SheetsService

@@ -1,10 +1,19 @@
 #!/usr/bin/env python3
 """
 欠落スプレッドシートレコードを一括修正
+
+⚠️ 既知の不具合を修正済み（2026-08-26 codex review指摘、PR #3）:
+- ハードコードされた絶対パスをsys.pathに追加していたが誤ったパスだった
+  （リポジトリ名のtypo）→ __file__基準の相対パスに修正
+- 冪等性がなく、タイムアウト・中断・曖昧な結果の後に再実行すると同じレコードが
+  重複してappendされていた → 実行前に対象シートの既存composite_keyを読み取り、
+  既に存在するレコードはスキップするよう修正
 """
 
+import os
 import sys
-sys.path.insert(0, "/Users/yyyhhh/carewell-gcp-drive-automation")
+
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from src.sheets_service import SheetsService
 
@@ -63,6 +72,26 @@ MISSING_RECORDS = [
 ]
 
 
+def get_existing_composite_keys(service: SheetsService, spreadsheet_id: str, task_id: str) -> set:
+    """対象シートに既に存在するcomposite_key（B列）の集合を取得（冪等性チェック用）"""
+    keys = set()
+    try:
+        escaped_name = task_id.replace("'", "''")
+        result = (
+            service.service.spreadsheets()
+            .values()
+            .get(spreadsheetId=spreadsheet_id, range=f"'{escaped_name}'!B:B")
+            .execute()
+        )
+        values = result.get("values", [])
+        for row in values[1:]:  # ヘッダー行をスキップ
+            if row:
+                keys.add(row[0])
+    except Exception as e:
+        print(f"  ⚠️  既存レコード読み取りエラー（{task_id}）: {e}")
+    return keys
+
+
 def main():
     print("=" * 60)
     print("欠落スプレッドシートレコード一括修正")
@@ -81,10 +110,29 @@ def main():
     service = SheetsService()
     print()
 
+    # 冪等性チェック: (spreadsheet_id, task_id) の組み合わせごとに既存キーをキャッシュ
+    existing_keys_cache: dict = {}
+
     success_count = 0
+    skipped_count = 0
     failed = []
 
     for rec in MISSING_RECORDS:
+        cache_key = (rec["spreadsheet_id"], rec["task_id"])
+        if cache_key not in existing_keys_cache:
+            existing_keys_cache[cache_key] = get_existing_composite_keys(
+                service, rec["spreadsheet_id"], rec["task_id"]
+            )
+
+        composite_key = service._generate_composite_key(
+            rec["student_id"], rec["filename"], rec["submit_date"]
+        )
+
+        if composite_key in existing_keys_cache[cache_key]:
+            print(f"スキップ（既存）: {rec['class']} - {rec['student_name']}")
+            skipped_count += 1
+            continue
+
         print(f"追加中: {rec['class']} - {rec['student_name']}...", end=" ")
 
         result = service.append_record(
@@ -100,13 +148,14 @@ def main():
         if result:
             print("✅")
             success_count += 1
+            existing_keys_cache[cache_key].add(composite_key)
         else:
             print("❌")
             failed.append(rec)
 
     print()
     print("=" * 60)
-    print(f"結果: {success_count}/{len(MISSING_RECORDS)} 件成功")
+    print(f"結果: {success_count} 件追加 / {skipped_count} 件スキップ（既存） / {len(MISSING_RECORDS)} 件中")
 
     if failed:
         print()
@@ -114,7 +163,7 @@ def main():
         for rec in failed:
             print(f"  - {rec['class']} / {rec['student_name']}")
     else:
-        print("✅ すべてのレコードを正常に追加しました！")
+        print("✅ 追加対象のレコードをすべて正常に処理しました！")
 
     print("=" * 60)
 
