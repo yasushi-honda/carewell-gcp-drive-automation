@@ -59,6 +59,13 @@ def resolve_student_spreadsheet_id() -> str:
     信用しない）。一致しない、またはSTUDENT_SPREADSHEET_ID_YEARが未設定の場合は
     ValueErrorを送出する。
 
+    注意（codex review P2指摘）: `.github/workflows/deploy.yml`の通常デプロイは
+    `gcloud run deploy --set-env-vars "GCP_PROJECT=..."`のみを指定しており、
+    Cloud Runの`--set-env-vars`は既存の環境変数を丸ごと置き換える仕様のため、
+    gcloud CLI等で手動設定したSTUDENT_SPREADSHEET_ID/STUDENT_SPREADSHEET_ID_YEAR
+    は次回の自動デプロイで消える。恒久的な値はSTUDENT_SPREADSHEET_IDS_BY_YEARに
+    コードとして追加すること。環境変数はあくまで一時的な手動オーバーライド用。
+
     STUDENT_SPREADSHEET_ID自体が未設定の場合は、現在年度
     （KNOWN_CLASSESから動的取得）に対応するIDをSTUDENT_SPREADSHEET_IDS_BY_YEAR
     から引く。対応するIDがなければ、誤った年度のスプレッドシートへ暗黙に
