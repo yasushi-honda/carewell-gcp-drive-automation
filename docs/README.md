@@ -16,7 +16,7 @@ Carewell Webサービスから学生の提出ファイルを自動取得し、Go
 | サービス | URL |
 |---------|-----|
 | **Dashboard**（令和8年度） | https://carewell-dashboard-2026.web.app/ |
-| **Dashboard (管理者)** | https://carewell-dashboard-2026.web.app/?admin=true |
+| **Dashboard (管理者)** | 同上URL。右上「ログイン」から管理者許可リスト登録済みアカウントでログイン（Issue #12、詳細: `docs/admin-authentication.md`） |
 | **Dashboard（令和7年度・凍結アーカイブ）** | https://carewell-automation.web.app/（今後デプロイしない） |
 | **GitHub** | https://github.com/yasushi-honda/carewell-gcp-drive-automation |
 | **Cloud Run** | carewell-file-collector (asia-northeast1) |
