@@ -16,6 +16,8 @@ dist/
 !requirements.json
 !dashboard/firebase.json
 !dashboard/firestore.indexes.json
+!tests/rules/package.json
+!tests/rules/firebase.json
 *.key
 *.pem
 .env
@@ -54,3 +56,10 @@ dashboard/.firebase
 dashboard/firebase-debug.log
 dashboard/firestore-debug.log
 dashboard/package-lock.json
+
+# Firestore rules tests (tests/rules/) - Issue #12
+tests/rules/node_modules/
+tests/rules/package-lock.json
+tests/rules/firebase-debug.log
+tests/rules/firestore-debug.log
+tests/rules/.firebase/

@@ -193,3 +193,37 @@ jobs:
           flags: dashboard-tests
           name: codecov-dashboard
         if: always()
+
+  rules-tests:
+    name: Firestore Rules Tests
+    runs-on: ubuntu-latest
+    # best-effort: 本リポジトリはGitHub ActionsでのFirestore Emulator起動が
+    # 過去に原因不明で失敗した既知の未解決問題がある（コミットa9b8139で
+    # integration-testsジョブが無効化された経緯）。firebase emulators:exec
+    # （readiness待機を内蔵）に切り替えたことで直る見込みだが、安定性が
+    # 実証されるまではマージブロックの対象にしない。
+    continue-on-error: true
+    defaults:
+      run:
+        working-directory: tests/rules
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Setup Java (Firestore Emulator requirement)
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Run Firestore rules tests
+        run: npm run test:rules
