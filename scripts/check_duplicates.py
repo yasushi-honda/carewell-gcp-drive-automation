@@ -10,6 +10,13 @@ Firestore重複チェックスクリプト
   2. drive_file_id の重複（同じGoogle Driveファイル）
   3. 親ドキュメントとサブコレクションの整合性
 
+⚠️ 既知の不具合（2026-08-26発見、令和8年度対応とは無関係）:
+このスクリプトは db.collection(class_name).document(task_id).collection("documents")
+という旧スキーマを対象にしている。現行の本番書込み先（src/firestore_service.py）は
+submissions/{class_name}/tasks/{task_id}/files/{...} のため、このスクリプトは年度・クラスに
+関わらず現行の本番データを対象にできていない。修正されるまで出力結果を信頼しないこと。
+詳細: docs/SERVICE_SHUTDOWN_AND_RESUME.md「令和8年度（2026年度）再開ステータス」
+
 Usage:
     python scripts/check_duplicates.py                    # 全クラスをチェック
     python scripts/check_duplicates.py --class-name "..."  # 特定クラスのみ

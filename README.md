@@ -125,7 +125,7 @@ POST https://carewell-file-collector-imczapxkba-an.a.run.app
 
 ```json
 {
-  "class_name": "令和7年度 デジタル中核人材養成研修 №01",
+  "class_name": "令和8年度 デジタル中核人材養成研修 №01",
   "task_id": "課題①",
   "task_pattern": "課題①業務分析　※～11/3〆切",
   "drive_folder_id": "1abc...xyz",
@@ -262,7 +262,7 @@ playwright install chromium
 - ✅ 一時ファイル自動クリーンアップ
 - ✅ 総件数照合機能（データ完全性チェック）
 - ✅ Cloud Scheduler自動実行基盤
-  - ファイル収集: 16ジョブ（8クラス × 2課題）
+  - ファイル収集: 16ジョブ（8クラス × 2課題、令和7年度時点）。令和8年度は10クラス（№06・07追加）×2課題=20ジョブを計画中、詳細は`docs/SERVICE_SHUTDOWN_AND_RESUME.md`参照
   - 申し込み状況取得: 8ジョブ（8クラス）⚠️別システム・絶対削除禁止
 
 ### 未実装機能（今後のタスク）
@@ -277,9 +277,11 @@ playwright install chromium
 
 ## Cloud Scheduler運用状態
 
-### 現在の構成
+> ⚠️ **2026-04-03に全ジョブPAUSED（課金停止）**。以下の表は令和7年度運用当時のENABLED/PAUSED状態のスナップショットであり最新ではない。現在の正確な状態・令和8年度（2026年度）への再開状況は `docs/SERVICE_SHUTDOWN_AND_RESUME.md` を参照すること。
 
-**合計24ジョブ**が稼働中：
+### 構成（令和7年度時点）
+
+**合計24ジョブ**が稼働していた：
 - **ファイル収集用（本システム）**: 16ジョブ（8クラス × 2課題）
 - **申し込み状況取得用**: 8ジョブ（8クラス）⚠️別システム・絶対削除禁止
 
@@ -482,7 +484,7 @@ Playwrightのデフォルトタイムアウトは180秒に設定されていま�
 ./scripts/test-all-patterns.sh
 ```
 
-8クラス × 2課題 = 16パターンを本番環境でテストします。
+8クラス × 2課題 = 16パターンを本番環境でテストします（令和7年度時点の対象。2026-08-26時点で`CLASSES`は空にし無効化中、詳細は`docs/SERVICE_SHUTDOWN_AND_RESUME.md`参照）。
 
 ### Firestoreデータクリーンアップ
 

@@ -10,7 +10,7 @@ vi.mock('../useFirestore', () => ({
 
 // Mock classes config
 vi.mock('../../config/classes', () => ({
-  KNOWN_CLASSES: ['令和7年度 デジタル中核人材養成研修 №01'],
+  KNOWN_CLASSES: ['令和8年度 デジタル中核人材養成研修 №01'],
   KNOWN_TASK_IDS: ['課題①', '課題②', '課題③'],
 }));
 
@@ -55,7 +55,7 @@ describe('useClassList', () => {
     expect(error.value).toBeNull();
     expect(classes.value).toHaveLength(1);
     expect(classes.value[0]).toEqual({
-      name: '令和7年度 デジタル中核人材養成研修 №01',
+      name: '令和8年度 デジタル中核人材養成研修 №01',
       taskCount: 3,
       fileCount: 10, // 5 + 3 + 2
       lastUpdated: '2025-10-13T12:00:00.000Z', // Latest timestamp
@@ -81,7 +81,7 @@ describe('useClassList', () => {
 
     expect(classes.value).toHaveLength(1);
     expect(classes.value[0]).toEqual({
-      name: '令和7年度 デジタル中核人材養成研修 №01',
+      name: '令和8年度 デジタル中核人材養成研修 №01',
       taskCount: 1,
       fileCount: 5,
       lastUpdated: '2025-10-13T12:00:00.000Z',

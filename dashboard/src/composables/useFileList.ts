@@ -27,7 +27,7 @@ interface UseFileListReturn {
  *
  * @example
  * const { files, filteredFiles, loading, error, fetchFiles, setSearch, setSortColumn } =
- *   useFileList('令和7年度 デジタル中核人材養成研修 №01', '課題①');
+ *   useFileList('令和8年度 デジタル中核人材養成研修 №01', '課題①');
  * await fetchFiles();
  * setSearch('森平');
  */

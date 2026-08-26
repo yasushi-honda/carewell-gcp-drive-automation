@@ -20,7 +20,7 @@ interface UseTaskListReturn {
  * @returns 課題一覧の状態と取得関数
  *
  * @example
- * const { tasks, loading, error, fetchTasks } = useTaskList('令和7年度 デジタル中核人材養成研修 №01');
+ * const { tasks, loading, error, fetchTasks } = useTaskList('令和8年度 デジタル中核人材養成研修 №01');
  * await fetchTasks();
  */
 export function useTaskList(className: string): UseTaskListReturn {

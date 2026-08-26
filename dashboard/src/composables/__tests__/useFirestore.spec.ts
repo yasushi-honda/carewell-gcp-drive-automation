@@ -102,7 +102,7 @@ describe('useFirestore', () => {
       vi.mocked(doc).mockReturnValue({ path: 'class/task' } as any);
       vi.mocked(getDoc).mockResolvedValue(mockDocSnap as any);
 
-      const result = await getTaskDocument('令和7年度 デジタル中核人材養成研修 №01', '課題①');
+      const result = await getTaskDocument('令和8年度 デジタル中核人材養成研修 №01', '課題①');
 
       expect(result).toEqual({
         task_id: '課題①',
@@ -123,7 +123,7 @@ describe('useFirestore', () => {
       vi.mocked(doc).mockReturnValue({ path: 'class/task' } as any);
       vi.mocked(getDoc).mockResolvedValue(mockDocSnap as any);
 
-      const result = await getTaskDocument('令和7年度 デジタル中核人材養成研修 №01', '課題①');
+      const result = await getTaskDocument('令和8年度 デジタル中核人材養成研修 №01', '課題①');
 
       expect(result).toBeNull();
     });
@@ -132,7 +132,7 @@ describe('useFirestore', () => {
       vi.mocked(getDoc).mockRejectedValue(new Error('Firestore error'));
 
       await expect(
-        getTaskDocument('令和7年度 デジタル中核人材養成研修 №01', '課題①')
+        getTaskDocument('令和8年度 デジタル中核人材養成研修 №01', '課題①')
       ).rejects.toThrow('Firestore error');
     });
   });

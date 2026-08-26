@@ -6,14 +6,14 @@ describe('ClassCard', () => {
   it('should render class information correctly', () => {
     const wrapper = mount(ClassCard, {
       props: {
-        className: '令和7年度 デジタル中核人材養成研修 №01',
+        className: '令和8年度 デジタル中核人材養成研修 №01',
         taskCount: 5,
         fileCount: 25,
         lastUpdated: '2025-10-13T10:00:00.000Z',
       },
     });
 
-    expect(wrapper.text()).toContain('令和7年度 デジタル中核人材養成研修 №01');
+    expect(wrapper.text()).toContain('令和8年度 デジタル中核人材養成研修 №01');
     expect(wrapper.text()).toContain('5');
     expect(wrapper.text()).toContain('25');
   });

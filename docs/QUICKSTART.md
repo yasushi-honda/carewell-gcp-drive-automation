@@ -30,7 +30,7 @@ Carewell Webサービスから学生の提出ファイルを自動取得し、Go
 
 ### 基本スペック
 
-- **クラス数**: 8クラス (№01, 02, 03, 04, 05, 08, 09, 10)
+- **クラス数**: 令和7年度は8クラス (№01, 02, 03, 04, 05, 08, 09, 10)。令和8年度は10クラス (№06・07追加) を計画中、詳細は`docs/SERVICE_SHUTDOWN_AND_RESUME.md`参照
 - **課題数**: 各クラス2課題 (課題①, 課題②)
 - **実行頻度**: 毎時:00と:30 (30分間隔)
 - **対象URL**: https://jaccw-carewel.study.jp/
@@ -155,7 +155,7 @@ graph TB
 ```mermaid
 erDiagram
     SUBMISSIONS {
-        string class_name PK "例: 令和7年度 デジタル中核人材養成研修 №01"
+        string class_name PK "例: 令和8年度 デジタル中核人材養成研修 №01"
     }
 
     TASKS {
@@ -274,7 +274,7 @@ submissions/{class_name}/tasks/{task_id}/files/{composite_key}
 ```python
 # MUST pass all parameters
 record_upload(
-    class_name="令和7年度...",
+    class_name="令和8年度...",
     task_id="課題①",
     task_pattern="課題①業務分析 ※～11/3〆切",  # ⚠️ よく忘れられる
     student_name="...",

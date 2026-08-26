@@ -24,13 +24,15 @@
 
 ### システム構成
 
-**合計24ジョブ**が稼働中：
-- **ファイル収集用**: 16ジョブ（8クラス × 2課題）← 本ドキュメントの対象
+> ⚠️ **2026-04-03に全ジョブPAUSED（課金停止）**。以下は令和7年度運用当時の構成。令和8年度（2026年度）の最新状況は `docs/SERVICE_SHUTDOWN_AND_RESUME.md` を参照。
+
+**合計25ジョブ**（学生同期含む）が稼働していた：
+- **ファイル収集用**: 令和7年度16ジョブ（8クラス × 2課題）← 本ドキュメントの対象。令和8年度は10クラス（№06・07追加）計画で20ジョブへ拡大予定（未作成）
 - **申し込み状況取得用**: 8ジョブ（8クラス）⚠️**別システム・絶対削除禁止**
 
 #### ファイル収集システム（本ドキュメントの対象）
 
-- **ジョブ数**: 16ジョブ（8クラス × 2課題）、最大40ジョブまで拡張可能
+- **ジョブ数**: 令和7年度16ジョブ（8クラス × 2課題）、最大40ジョブまで拡張可能
 - **実行間隔**: 30分ごと（各時間の0分と30分、オフセット付き）
 - **タイムゾーン**: Asia/Tokyo（日本標準時）
 - **実行時間帯**: 24時間365日稼働
@@ -81,7 +83,7 @@
 CLASS_NUM="10"
 TASK_NUM="01"
 TASK_NAME="課題①"
-CLASS_NAME="令和7年度 デジタル中核人材養成研修 №${CLASS_NUM}"
+CLASS_NAME="令和8年度 デジタル中核人材養成研修 №${CLASS_NUM}"
 DRIVE_FOLDER_ID="1xxxxxxxxxxxxxxxxxxxxxxxxxxxxx"  # Google DriveのフォルダID
 SPREADSHEET_ID="1xxxxxxxxxxxxxxxxxxxxxxxxxxxxx"   # Google SheetsのID
 ```
@@ -287,7 +289,7 @@ cat current_job_config.json | jq '.httpTarget.body' -r | base64 -d | jq .
 # 新しいリクエストボディを作成
 NEW_REQUEST_BODY=$(cat <<EOF
 {
-  "class_name": "令和7年度 デジタル中核人材養成研修 №01",
+  "class_name": "令和8年度 デジタル中核人材養成研修 №01",
   "task_id": "課題①",
   "task_pattern": "課題①",
   "drive_folder_id": "1NEW_FOLDER_ID_HERE",
@@ -317,7 +319,7 @@ gcloud scheduler jobs run carewell-class01-task01 \
 # ログで確認（1-2分待機後）
 gcloud logging read "resource.type=cloud_run_revision AND \
   resource.labels.service_name=carewell-file-collector AND \
-  jsonPayload.class_name=\"令和7年度 デジタル中核人材養成研修 №01\"" \
+  jsonPayload.class_name=\"令和8年度 デジタル中核人材養成研修 №01\"" \
   --limit 5
 ```
 
@@ -876,7 +878,7 @@ ERROR: Processed too many files (100+) in single execution
 ```bash
 # 1. 影響範囲を確認
 JOB_NAME="carewell-class01-task01"
-CLASS_NAME="令和7年度 デジタル中核人材養成研修 №01"
+CLASS_NAME="令和8年度 デジタル中核人材養成研修 №01"
 TASK_ID="課題①"
 
 # Firestoreでドキュメント数を確認
@@ -1179,6 +1181,8 @@ gcloud logging read "resource.type=cloud_run_revision AND \
 ---
 
 ## コスト分析
+
+> 📌 以下の試算は令和7年度（16ジョブ）を基準にした当時のものです。令和8年度は10クラス（№06・07追加）計画で基準が20ジョブに変わるため、シナリオ数値は目安として16分の20倍程度で概算してください。「シナリオ3: 最大40ジョブ」等の拡張シナリオは本試算の考え方自体は今も有効です。
 
 ### 現在のコスト構造
 
@@ -1611,7 +1615,7 @@ gcloud scheduler jobs run carewell-class01-task01 --location=asia-northeast1
 
 ### A. Cronスケジュール一覧表
 
-現在の16ジョブのスケジュール配置：
+令和7年度16ジョブのスケジュール配置（2026-04-03時点で全PAUSED）：
 
 | 時刻 | Cron式 | 配置ジョブ |
 |------|--------|-----------|
@@ -1621,6 +1625,8 @@ gcloud scheduler jobs run carewell-class01-task01 --location=asia-northeast1
 | XX:15, XX:45 | `15,45 * * * *` | class02-task02, class05-task02, class10-task02 |
 | XX:20, XX:50 | `20,50 * * * *` | class03-task01, class08-task01 |
 | XX:25, XX:55 | `25,55 * * * *` | class03-task02, class08-task02 |
+
+> 📌 令和8年度で№06・07（4ジョブ）を追加する場合、上表で最も空いている `20,50 * * * *` / `25,55 * * * *` への配置が候補（各スロット3-4ジョブまで対応可能）。実際の配置はジョブ作成時に確定すること。
 
 **利用可能なスロット（将来の拡張用）:**
 - 各スロットに最大3-4ジョブ配置可能

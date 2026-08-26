@@ -8,11 +8,19 @@ Use this when file_count becomes inaccurate due to:
 - Manual document edits
 - System errors
 
+⚠️ KNOWN BUG (found 2026-08-26, unrelated to the 令和8年度 year-string update):
+This script targets db.collection(class_name).document(task_id).collection("documents"),
+which is the OLD pre-migration schema. The current production writer
+(src/firestore_service.py) uses submissions/{class_name}/tasks/{task_id}/files/{...}
+instead. This script does NOT operate on current production data for ANY class/year.
+--execute performs writes and must NOT be run until fixed. See
+docs/SERVICE_SHUTDOWN_AND_RESUME.md "令和8年度（2026年度）再開ステータス" for tracking.
+
 Usage:
     python scripts/fix_file_count.py --dry-run              # Preview mismatches
     python scripts/fix_file_count.py --execute              # Fix all mismatches
-    python scripts/fix_file_count.py --execute --class-name "令和7年度 デジタル中核人材養成研修 №01"  # Fix specific class
-    python scripts/fix_file_count.py --execute --class-name "令和7年度 デジタル中核人材養成研修 №01" --task-id "課題①"  # Fix specific task
+    python scripts/fix_file_count.py --execute --class-name "令和8年度 デジタル中核人材養成研修 №01"  # Fix specific class
+    python scripts/fix_file_count.py --execute --class-name "令和8年度 デジタル中核人材養成研修 №01" --task-id "課題①"  # Fix specific task
 """
 
 import argparse

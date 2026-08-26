@@ -6,6 +6,14 @@ This script creates parent documents for existing file uploads in Firestore.
 It scans all known classes and tasks, counts files in subcollections,
 and creates parent documents with metadata.
 
+⚠️ KNOWN BUG (found 2026-08-26, unrelated to the 令和8年度 year-string update):
+This script targets db.collection(class_name).document(task_id).collection("documents"),
+which is the OLD pre-migration schema. The current production writer
+(src/firestore_service.py) uses submissions/{class_name}/tasks/{task_id}/files/{...}
+instead. This script does NOT operate on current production data for ANY class/year
+and should NOT be executed until fixed. See docs/SERVICE_SHUTDOWN_AND_RESUME.md
+"令和8年度（2026年度）再開ステータス" for tracking.
+
 Usage:
     python scripts/migrate_parent_documents.py --dry-run   # Preview only
     python scripts/migrate_parent_documents.py --execute   # Actually migrate
