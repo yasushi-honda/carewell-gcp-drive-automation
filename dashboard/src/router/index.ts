@@ -1,4 +1,5 @@
 import { createRouter, createWebHistory } from 'vue-router'
+import { useAuth } from '../composables/useAuth'
 
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
@@ -45,8 +46,17 @@ const router = createRouter({
       path: '/admin/duplicates',
       name: 'duplicates',
       component: () => import('../views/DuplicatesView.vue'),
+      meta: { requiresAdmin: true },
     },
   ],
+})
+
+// 管理者専用ルートのガード（多層防御。本質的な保護はバックエンド/Firestoreルール側）
+router.beforeEach(async (to) => {
+  if (!to.meta.requiresAdmin) return true
+  const { isAdmin, waitUntilReady } = useAuth()
+  await waitUntilReady()
+  return isAdmin.value ? true : { path: '/' }
 })
 
 export default router

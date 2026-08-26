@@ -41,7 +41,7 @@ export default defineConfig({
       output: {
         manualChunks: {
           'vue-vendor': ['vue', 'vue-router'],
-          'firebase-vendor': ['firebase/app', 'firebase/firestore']
+          'firebase-vendor': ['firebase/app', 'firebase/firestore', 'firebase/auth']
         },
         chunkFileNames: 'assets/[name]-[hash].js',
         entryFileNames: 'assets/[name]-[hash].js',

@@ -373,6 +373,7 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
+import { useAuth } from '../composables/useAuth'
 
 interface StudentData {
   name: string
@@ -403,6 +404,8 @@ const error = ref<string | null>(null)
 const expandedItems = ref<number[]>([])
 
 const CLOUD_RUN_URL = 'https://carewell-file-collector-imczapxkba-an.a.run.app'
+
+const { getIdToken } = useAuth()
 
 // 比較用フィールド定義
 const comparisonFields = [
@@ -453,13 +456,25 @@ const fetchDuplicates = async () => {
   error.value = null
 
   try {
+    const token = await getIdToken()
+    if (!token) {
+      throw new Error('管理者ログインが必要です')
+    }
+
     const response = await fetch(`${CLOUD_RUN_URL}/admin/duplicate-students`, {
       method: 'GET',
       headers: {
         'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
       },
     })
 
+    if (response.status === 401) {
+      throw new Error('セッションが切れました。再ログインしてください')
+    }
+    if (response.status === 403) {
+      throw new Error('管理者権限がありません')
+    }
     if (!response.ok) {
       throw new Error(`HTTP error! status: ${response.status}`)
     }

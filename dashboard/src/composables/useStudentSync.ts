@@ -6,6 +6,7 @@
 // await syncStudents();
 
 import { ref, readonly } from 'vue';
+import { useAuth } from './useAuth';
 
 /**
  * 同期結果の型定義
@@ -37,6 +38,7 @@ export function useStudentSync() {
   const syncing = ref(false);
   const syncResult = ref<SyncResult | null>(null);
   const syncError = ref<string | null>(null);
+  const { getIdToken } = useAuth();
 
   /**
    * 学生データを Google Sheets から Firestore に同期
@@ -55,14 +57,26 @@ export function useStudentSync() {
     try {
       console.log('[useStudentSync] Starting sync with backfill:', backfill);
 
+      const token = await getIdToken();
+      if (!token) {
+        throw new Error('管理者ログインが必要です');
+      }
+
       const response = await fetch(SYNC_API_URL, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify({ backfill }),
       });
 
+      if (response.status === 401) {
+        throw new Error('セッションが切れました。再ログインしてください');
+      }
+      if (response.status === 403) {
+        throw new Error('管理者権限がありません');
+      }
       if (!response.ok) {
         const errorText = await response.text();
         throw new Error(`HTTP ${response.status}: ${errorText}`);
