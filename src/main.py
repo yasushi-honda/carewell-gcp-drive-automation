@@ -814,7 +814,7 @@ def _add_cors_headers(response_data, status_code=200):
         Tuple of (response_data, status_code, headers)
     """
     headers = {
-        "Access-Control-Allow-Origin": "https://carewell-automation.web.app",
+        "Access-Control-Allow-Origin": "https://carewell-dashboard-2026.web.app",
         "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
         "Access-Control-Allow-Headers": "Content-Type, Authorization",
         "Access-Control-Max-Age": "3600",

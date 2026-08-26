@@ -117,7 +117,7 @@ graph TB
     end
 
     subgraph "Dashboard"
-        FH[Firebase Hosting<br/>carewell-automation.web.app]
+        FH[Firebase Hosting<br/>carewell-dashboard-2026.web.app]
         VUE[Vue.js 3 Dashboard<br/>提出状況可視化]
     end
 
@@ -345,7 +345,7 @@ gcloud scheduler jobs describe JOB_NAME \
 
 ### Dashboard 確認
 ```
-https://carewell-automation.web.app/
+https://carewell-dashboard-2026.web.app/
 ```
 
 ---

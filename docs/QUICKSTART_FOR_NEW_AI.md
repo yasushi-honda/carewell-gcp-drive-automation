@@ -72,7 +72,7 @@ graph TB
     end
 
     subgraph "フロントエンド"
-        I[Dashboard<br/>Firebase Hosting<br/>https://carewell-automation.web.app/]
+        I[Dashboard<br/>Firebase Hosting<br/>https://carewell-dashboard-2026.web.app/]
     end
 
     A -->|POST /| C
@@ -117,7 +117,7 @@ graph TB
 
 | 項目 | 値 |
 |------|-----|
-| **URL** | https://carewell-automation.web.app/ |
+| **URL** | https://carewell-dashboard-2026.web.app/ |
 | **デプロイ** | GitHub Actions (自動) |
 
 ---
@@ -199,7 +199,7 @@ graph TB
    gcloud logging read "resource.type=cloud_run_revision AND
      resource.labels.service_name=carewell-file-collector" --limit=50
    ```
-4. **Dashboard で状態確認**: https://carewell-automation.web.app/
+4. **Dashboard で状態確認**: https://carewell-dashboard-2026.web.app/
 5. **Firestore Console で確認**: https://console.firebase.google.com/project/carewell-automation/firestore
 
 詳細: [docs/EMERGENCY_RESPONSE.md](EMERGENCY_RESPONSE.md)（次セクション参照）
@@ -326,7 +326,7 @@ gcloud logging read "resource.type=cloud_scheduler_job" --limit=50
 
 ### 3. Dashboard で確認
 
-https://carewell-automation.web.app/
+https://carewell-dashboard-2026.web.app/
 
 ### 4. Firestore Console で確認
 

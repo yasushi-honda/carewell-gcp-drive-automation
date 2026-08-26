@@ -37,7 +37,7 @@
 
 ### 症状
 
-- https://carewell-automation.web.app/ にアクセスできない
+- https://carewell-dashboard-2026.web.app/ にアクセスできない
 - 500エラーまたは白い画面
 
 ### 対応手順
@@ -467,7 +467,7 @@ https://github.com/yasushi-honda/carewell-gcp-drive-automation/actions
 
 ```bash
 # Dashboard を開く
-https://carewell-automation.web.app/
+https://carewell-dashboard-2026.web.app/
 
 # ハードリフレッシュ（Cmd+Shift+R / Ctrl+Shift+R）
 # 新しいクラスが表示されることを確認

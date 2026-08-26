@@ -11,10 +11,13 @@
     <header class="bg-white shadow">
       <div class="max-w-7xl mx-auto py-6 px-4 sm:px-6 lg:px-8">
         <div class="flex items-center justify-between">
-          <router-link to="/" class="cursor-pointer">
+          <router-link to="/" class="cursor-pointer flex items-center gap-3">
             <h1 class="text-3xl font-bold text-gray-900 hover:text-gray-700 transition-colors">
               Carewell Dashboard
             </h1>
+            <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-sm font-medium bg-blue-100 text-blue-800">
+              令和8年度
+            </span>
           </router-link>
           <div class="flex items-center space-x-4">
             <!-- 管理者モード: 同期ボタン -->

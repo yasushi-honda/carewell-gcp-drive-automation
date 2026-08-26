@@ -34,7 +34,7 @@ Dashboard には**2つの異なるクラス表示機能**があります。そ�
 
 ### A. ホームページのクラス一覧カード（`/`）
 
-**URL**: https://carewell-automation.web.app/
+**URL**: https://carewell-dashboard-2026.web.app/
 
 **表示内容**:
 ```
@@ -72,8 +72,8 @@ export const KNOWN_CLASSES = [
 ### B. 学生詳細・グループページのクラス表示
 
 **URL 例**:
-- 学生詳細: https://carewell-automation.web.app/students/N0102490
-- グループ一覧: https://carewell-automation.web.app/class/令和8年度%20デジタル中核人材養成研修%20№05/groups
+- 学生詳細: https://carewell-dashboard-2026.web.app/students/N0102490
+- グループ一覧: https://carewell-dashboard-2026.web.app/class/令和8年度%20デジタル中核人材養成研修%20№05/groups
 
 **表示内容**:
 - 学生詳細ページ: 「クラス: No5」
@@ -174,8 +174,8 @@ curl -X POST \
 ```
 
 **この時点で反映される場所**:
-- ✅ 学生詳細ページ（例: https://carewell-automation.web.app/students/N9999999）
-- ✅ グループページ（例: https://carewell-automation.web.app/class/...№10/groups）
+- ✅ 学生詳細ページ（例: https://carewell-dashboard-2026.web.app/students/N9999999）
+- ✅ グループページ（例: https://carewell-dashboard-2026.web.app/class/...№10/groups）
 
 **まだ反映されない場所**:
 - ❌ ホームページのクラス一覧カード
@@ -220,7 +220,7 @@ git push origin main
 
 **確認**:
 - GitHub Actions: https://github.com/yasushi-honda/carewell-gcp-drive-automation/actions
-- デプロイ完了後、Dashboard を開く: https://carewell-automation.web.app/
+- デプロイ完了後、Dashboard を開く: https://carewell-dashboard-2026.web.app/
 - ハードリフレッシュ（Cmd+Shift+R / Ctrl+Shift+R）
 
 ---

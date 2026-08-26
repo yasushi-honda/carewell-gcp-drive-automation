@@ -156,7 +156,7 @@ Carewell Automation Root/
 **役割**: Dashboard の配信
 
 **設定**:
-- **URL**: https://carewell-automation.web.app/
+- **URL**: https://carewell-dashboard-2026.web.app/
 - **デプロイ**: GitHub Actions (自動)
 - **リージョン**: グローバル (CDN)
 

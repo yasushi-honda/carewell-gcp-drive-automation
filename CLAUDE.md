@@ -42,7 +42,7 @@ Kiro-style Spec Driven Development implementation using claude code slash comman
 - [ ] Cloud Scheduler ジョブ数は？ → 現状25ジョブ全てPAUSED（ファイル収集16+レガシーpattern8+student-sync1）。令和8年度のファイル収集は計画上20ジョブ（10クラス×2課題）だが未作成
 - [ ] 問題発生時に最初にやることは？ → CLAUDE.md CRITICAL を読む
 - [ ] Cloud Run ログの確認コマンドは？ → `gcloud logging read ...`
-- [ ] Dashboard の URL は？ → `https://carewell-automation.web.app/`
+- [ ] Dashboard の URL は？ → `https://carewell-dashboard-2026.web.app/`
 - [ ] 受講生同期の自動実行タイミングは？ → 毎日 JST 02:00
 - [ ] 手動同期ボタンの出し方は？ → `?admin=true` パラメータ付きでアクセス
 - [ ] 受講生を無効化する方法は？ → Google Sheets L列「無効」にチェック
@@ -113,7 +113,7 @@ Dashboard (`dashboard/`ディレクトリ) の開発では、以下のルール�
    - 本番ビルド
    - Firestore Security Rulesデプロイ
    - Firebase Hostingデプロイ
-4. **動作確認**: https://carewell-automation.web.app/ で確認
+4. **動作確認**: https://carewell-dashboard-2026.web.app/ で確認
 
 ### 理由
 - CI/CDパイプラインで全て自動化済み
@@ -163,7 +163,7 @@ Note: Optional for new features or small additions. You can proceed directly to 
 2. **Understand Environment Constraints**
    - ⚠️ Local Firestore access may fail (DNS resolution issues)
    - ✅ Use Cloud Run logs for verification: `gcloud logging read "resource.type=cloud_run_revision..."`
-   - ✅ Use Dashboard for visual verification: https://carewell-automation.web.app/
+   - ✅ Use Dashboard for visual verification: https://carewell-dashboard-2026.web.app/
    - ✅ Production environment is the source of truth
 
 3. **Plan Before Executing**
@@ -191,7 +191,7 @@ gcloud logging read "resource.type=cloud_run_revision AND
 gcloud scheduler jobs describe JOB_NAME --location=asia-northeast1
 
 # Dashboard (Visual Verification)
-# https://carewell-automation.web.app/
+# https://carewell-dashboard-2026.web.app/
 ```
 
 ## Critical Configuration & Design Document Reference

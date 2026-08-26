@@ -54,7 +54,7 @@ gh run list --limit 3
 gh run watch [run-id]
 ```
 
-**デプロイ先**: https://carewell-automation.web.app/
+**デプロイ先**: https://carewell-dashboard-2026.web.app/
 
 ## 🔄 デバッグワークフロー
 
@@ -65,7 +65,7 @@ gh run watch [run-id]
 4. GitHub Actionsが再実行される
 
 ### 動作確認
-- **本番環境で確認**: https://carewell-automation.web.app/
+- **本番環境で確認**: https://carewell-dashboard-2026.web.app/
 - ブラウザのDevToolsで動作確認
 - FirestoreデータはFirebase Consoleで確認
 
