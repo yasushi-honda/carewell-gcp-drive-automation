@@ -72,7 +72,9 @@ MISSING_RECORDS = [
 ]
 
 
-def get_existing_composite_keys(service: SheetsService, spreadsheet_id: str, task_id: str) -> set:
+def get_existing_composite_keys(
+    service: SheetsService, spreadsheet_id: str, task_id: str
+) -> set:
     """対象シートに既に存在するcomposite_key（B列）の集合を取得（冪等性チェック用）"""
     keys = set()
     try:
@@ -155,7 +157,9 @@ def main():
 
     print()
     print("=" * 60)
-    print(f"結果: {success_count} 件追加 / {skipped_count} 件スキップ（既存） / {len(MISSING_RECORDS)} 件中")
+    print(
+        f"結果: {success_count} 件追加 / {skipped_count} 件スキップ（既存） / {len(MISSING_RECORDS)} 件中"
+    )
 
     if failed:
         print()

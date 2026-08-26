@@ -17,6 +17,7 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from datetime import datetime
+
 from src.sheets_service import SheetsService
 
 # 追加するレコードの情報
@@ -46,7 +47,7 @@ def main():
 
     # 確認
     confirm = input("このレコードを追加しますか？ [y/N]: ")
-    if confirm.lower() != 'y':
+    if confirm.lower() != "y":
         print("キャンセルしました")
         return
 
