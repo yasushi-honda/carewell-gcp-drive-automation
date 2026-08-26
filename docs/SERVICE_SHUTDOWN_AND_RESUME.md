@@ -176,7 +176,7 @@ gcloud scheduler jobs resume "${JOB_NAME}" --location=asia-northeast1
 - 令和8年度用Google Driveフォルダ・記録用スプレッドシート10クラス分を新規作成（2026年フォルダ、`受講者リスト`は対象外）
 - **Dashboard Hosting分離**（2026-08-26）: 令和7年度分ダッシュボードとURLが衝突しない年度取り違え事故防止のため、新Hostingサイト`carewell-dashboard-2026`を作成し、`dashboard/firebase.json`のデプロイ先・`src/main.py`のCORS許可オリジン・`dashboard/playwright.config.ts`のE2E baseURLを新URLへ切替。画面ヘッダーに「令和8年度」バッジを追加。旧サイト`carewell-automation`はCIの標準経路から外し凍結アーカイブ化。GitHub Actions 5ワークフローを再有効化し、実デプロイ・CORS実効化も完了（新サイト稼働開始）
 - **Cloud Scheduler令和8年度対応**（2026-08-26）: 全10クラス分のDrive/Sheets（2026年フォルダ・記録用スプレッドシート）を新規作成し、令和7年度の使い回しはしない方針で確定。`carewell-classXX-taskYY`既存16ジョブのmessage-bodyを令和8年度用（新Drive/Sheets ID、`task_pattern`は暫定的に短縮形）へ更新、`carewell-class06/07`用の新規4ジョブも実行設定を既存ピアジョブから複製して作成。全20ジョブ（+`student-sync-daily`）ともPAUSEDのまま維持、resumeは未実施
-- `carewell-automation-pattern1〜10`（申し込み状況取得用の別システム、`docs/cloud-scheduler-operations-guide.md`に既存記載あり）はENABLEDのまま不変。「25ジョブ全てPAUSED」というドキュメント上の従来記載が誤りだったことが判明・訂正済み（詳細は「停止したリソース一覧 > 1. Cloud Scheduler」参照）
+- `carewell-automation-pattern1〜10`（申し込み状況取得用の別システム、`docs/cloud-scheduler-operations-guide.md`に既存記載あり）はENABLEDのまま不変。「25ジョブ全てPAUSED」というドキュメント上の従来記載が誤りだったことが判明・訂正済み（詳細は「停止したリソース一覧 > 1. Cloud Scheduler」参照）。**管理リポジトリも特定済み**: `carewell-moushikomi-csv`（同一マシン上にローカルclone確認済み）の`CLAUDE.md`に「carewell-automation-pattern1〜10 (Team1〜10) RESUMED/ADDED for 令和8年度シーズン（pattern1〜5,8〜10は2026-08-06、pattern6・7は2026-08-10追加）」「carewell-classNN-taskNN / carewell-student-sync-daily は別サービス（carewell-file-collector）宛の別システムのジョブで本リポジトリのスコープ外」との相互に一致する記載があり、双方のドキュメントで境界線の認識が一致していることを確認済み（2026-08-26）
 
 ### ⚠️ 今回のクロスレビューで発見した既存バグ（年度対応とは無関係）
 
@@ -226,4 +226,3 @@ Hostingの問題ではなくバックエンドのデータモデル・実装の�
 6. **`STUDENT_SPREADSHEET_ID`の年度スコープ化**（上記「Dashboard Hosting分離では解決しない既存の設計上の欠落」③、Issue #5で追跡）。再開ゲートの前提条件
 7. **`students`コレクション・`_backfill_all_files`の年度分離**（同①②）。再開ゲートの前提条件
 8. **Cloud Run/Hosting両ワークフローの依存関係化**（CIレベルで順序を強制する仕組み。現状は手順書での申し合わせのみ）
-9. **`carewell-automation-pattern1〜10`の管理リポジトリの特定**（「申し込み状況取得用の別システム」であることは`docs/cloud-scheduler-operations-guide.md`の既存記載と一致し確認済みだが、具体的にどのリポジトリが管理しているかは未確認。判明次第、本ドキュメントの「停止したリソース一覧」から正式に対象外と明記するか、管理範囲を再整理する）
