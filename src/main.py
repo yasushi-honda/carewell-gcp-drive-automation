@@ -526,6 +526,16 @@ def sync_students_from_sheets(request):
         logger.info(f"Student sync completed: {response}")
         return response, 200
 
+    except ValueError as e:
+        # 同期元スプレッドシートID未設定等の設定不備。詳細はログにのみ残し、
+        # 未認証で到達可能なこのエンドポイントのレスポンスには内部構成の詳細
+        # （ファイルパス・環境変数名等）を含めない（silent-failure-hunterレビュー指摘）。
+        logger.error(f"Student sync configuration error: {str(e)}", exc_info=True)
+        return {
+            "status": "error",
+            "error": "受講生名簿の同期設定が未完了です。管理者に連絡してください。",
+        }, 500
+
     except Exception as e:
         logger.error(f"Error during student sync: {str(e)}", exc_info=True)
         return {"status": "error", "error": str(e)}, 500
@@ -573,6 +583,19 @@ def get_duplicate_students(request):
         }
 
         return _add_cors_headers(response, 200)
+
+    except ValueError as e:
+        # 同期元スプレッドシートID未設定等の設定不備。詳細はログにのみ残し、
+        # 未認証で到達可能なこのエンドポイントのレスポンスには内部構成の詳細
+        # （ファイルパス・環境変数名等）を含めない（silent-failure-hunterレビュー指摘）。
+        logger.error(f"Duplicate students configuration error: {str(e)}", exc_info=True)
+        return _add_cors_headers(
+            {
+                "status": "error",
+                "error": "受講生名簿の同期設定が未完了です。管理者に連絡してください。",
+            },
+            500,
+        )
 
     except Exception as e:
         logger.error(f"Error getting duplicate students: {str(e)}", exc_info=True)
