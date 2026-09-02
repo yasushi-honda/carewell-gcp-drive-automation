@@ -39,7 +39,10 @@ KNOWN_TASK_IDS = ["課題①", "課題②"]
 # 誤った年度の名簿を同期しうるリスクがあった（resolve_student_spreadsheet_id参照）。
 STUDENT_SPREADSHEET_IDS_BY_YEAR = {
     "令和7年度": "1AQ12-h3n_NmN2kWxi4Z_g354X0wmUyMKAPeAsXJwu_w",
-    # "令和8年度": "<令和8年度の正しい名簿スプレッドシートIDを設定してください>",
+    # 令和8年度分は「ケアウェル自動化システム/課題レポート/2026年/受講者リスト」に
+    # 2025年分と同じ列構成(A:氏名〜L:無効、シート名「統合_受講者リスト」)で新規作成済み。
+    # 名簿データ本体の入力は貴団体側の対応待ち（2026-09-02時点、ヘッダー行のみ）。
+    "令和8年度": "1PvzMbjhZ4zpLsL6lfljJNHVEkbEkqtGRM4kNyB6ZA2M",
 }
 
 
