@@ -10,7 +10,7 @@ import time  # ✅ 追加: 診断ログで使用（将来の拡張用に追加�
 from flask import Request
 
 import auth
-from config.classes import resolve_student_spreadsheet_id
+from config.classes import KNOWN_CLASSES, KNOWN_TASK_IDS, resolve_student_spreadsheet_id
 from firestore_service import FirestoreService
 from google_drive_service import GoogleDriveService
 from playwright_automation import PlaywrightAutomationEngine
@@ -738,19 +738,27 @@ def _backfill_all_files(firestore_service):
         error_count = 0
         errors = []
 
-        # Iterate through all class/task combinations
-        # NOTE: This is a simple implementation that scans all submissions
-        # For large datasets, consider using Firestore collection group queries
+        # Iterate through the current academic year's known class/task
+        # combinations only (KNOWN_CLASSES/KNOWN_TASK_IDS, from
+        # src/config/classes.py). Two reasons this must not be a blind
+        # `submissions_ref.stream()` scan:
+        # 1. `submissions/{class_name}` parent documents are never written
+        #    directly (only their `tasks/{task_id}` descendants are) — see
+        #    classes.py's own note that "Firestore subcollections exist even
+        #    without parent documents" — so a top-level collection stream
+        #    does not reliably enumerate classes at all.
+        # 2. Prior academic years' class data is retained in Firestore
+        #    (not deleted at year-end), so an unscoped scan would overwrite
+        #    prior-year files' denormalized student fields with the current
+        #    year's roster data (Issue #5 Phase 2).
         submissions_ref = firestore_service.db.collection("submissions")
 
-        for class_doc in submissions_ref.stream():
-            class_name = class_doc.id
+        for class_name in KNOWN_CLASSES:
             logger.info(f"Processing class: {class_name}")
 
             tasks_ref = submissions_ref.document(class_name).collection("tasks")
 
-            for task_doc in tasks_ref.stream():
-                task_id = task_doc.id
+            for task_id in KNOWN_TASK_IDS:
                 logger.info(f"Processing task: {class_name}/{task_id}")
 
                 files_ref = tasks_ref.document(task_id).collection("files")
