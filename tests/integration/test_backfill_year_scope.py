@@ -100,11 +100,11 @@ class TestBackfillYearScope:
         )
 
         current_file = current_file_ref.get().to_dict()
-        assert current_file["student_group"] == "今年度グループ", (
-            "current-year file should be backfilled with current roster data"
-        )
+        assert (
+            current_file["student_group"] == "今年度グループ"
+        ), "current-year file should be backfilled with current roster data"
 
         prior_file = prior_file_ref.get().to_dict()
-        assert prior_file["student_group"] == "旧グループ", (
-            "prior-year file must remain untouched by a current-year sync"
-        )
+        assert (
+            prior_file["student_group"] == "旧グループ"
+        ), "prior-year file must remain untouched by a current-year sync"
