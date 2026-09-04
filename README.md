@@ -176,6 +176,20 @@ pip install -r requirements.txt
 playwright install chromium
 ```
 
+### pre-commit（コミット前の自動フォーマットチェック）
+
+black/isortのフォーマット崩れがCIで検出される事象が繰り返し発生していたため、
+コミット前にローカルで自動チェック・修正する仕組みを導入している。
+初回セットアップ時に1度だけ実行すること:
+
+```bash
+pip install -r requirements-dev.txt
+pre-commit install
+```
+
+以降、`git commit`のたびにblack/isortが自動実行される（フォーマット崩れがあれば
+自動修正され、コミットは一旦中断されるので`git add`し直して再コミットする）。
+
 ### 環境変数
 
 - `GCP_PROJECT`: GCPプロジェクトID（デフォルト: carewell-automation）
