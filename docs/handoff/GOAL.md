@@ -1,5 +1,5 @@
 ---
-updated: 2026-09-04
+updated: 2026-09-09
 ---
 
 ## 現在のミッション
@@ -39,3 +39,6 @@ Issue #18（出欠確認シートへの課題提出状況の自動反映、令�
 - （2026-09-04）handoff時の同根再発スキャンで、black/isortのフォーマット崩れによる「style: fix formatting」系の反応的修正コミットが過去10回以上（2025-11〜2026-09、直近PR #9→#23が9日間隔）反復していたことを検出。根本原因（コミット前のローカル強制チェック不在）に対応するため、pre-commit hookを導入しPR #25マージ済み（`.pre-commit-config.yaml`、black 24.1.1/isort 5.13.2をrequirements-dev.txtと完全一致でpin、README.mdにセットアップ手順追記）。codex review指摘0件、実機動作確認済み（フォーマット崩れファイルでコミットがブロックされることを確認）
 - （2026-09-04）5ヶ月前から放置されていた陳腐化PR #2（mainから21コミット遅れ・mergeable=CONFLICTING）をクローズ。内容（`docs/SERVICE_SHUTDOWN_AND_RESUME.md`）は既にPR #3/#4/#8/#10/#11/#16経由でmainに反映済みと確認のうえで実施
 - （2026-09-04）ブランチ操作中に`git reset --hard`で未コミット変更を2回誤破棄する事故（実害はいずれも軽微・検証済み）。グローバルmemory（`feedback_destructive_git_command_bundling.md`）に恒久対応を記録し、Claude Code本体への製品フィードバックも下書き済み（`/feedback`で内容確認・送信可）。詳細はグローバル設定リポジトリ側セッションとのクロスセッション連携で検証済み、hook自体の改修は不要と判断
+- （2026-09-09）gcloud named configuration `carewell-automation` のアカウントが別プロジェクト（`monthly-pay-tax`）のGitHub Actions用WIFサービスアカウント（`github-actions-deployer@monthly-pay-tax.iam.gserviceaccount.com`、トークン期限切れで再認証不可）になっていたことを発見。decision-maker確認のうえ`system@jaccw.or.jp`に修正し、`gcloud auth login`で再認証・`gcloud logging read`での動作確認済み。原因（いつ・なぜ書き換わったか）は未調査
+- （2026-09-09）Git衛生対応: `.envrc`・`.playwright-mcp/`が未追跡のまま`.gitignore`未登録だったため追加。Serenaツールのバージョンアップに伴う`.serena/project.yml`の自動マイグレーション（機能的な値の変更なし）と合わせてコミット・push（370dd0a、CI green確認済み）
+- （2026-09-09）Dashboard（https://carewell-dashboard-2026.web.app/）で提出状況を再確認、8クラス（№01〜07・09）とも提出ファイル数0件で変化なし。先方（jaccw）の名簿データ到着（№01は9/11目途）待ちが継続
