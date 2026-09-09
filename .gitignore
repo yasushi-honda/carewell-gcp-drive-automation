@@ -22,6 +22,7 @@ dist/
 *.pem
 .env
 .env.local
+.envrc
 
 # IDE
 .vscode/
@@ -41,6 +42,7 @@ htmlcov/
 # Playwright
 playwright-report/
 test-results/
+.playwright-mcp/
 
 # Firebase
 firebase-debug.log
