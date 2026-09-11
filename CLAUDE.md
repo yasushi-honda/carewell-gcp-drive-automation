@@ -291,6 +291,7 @@ Before committing changes to Firestore-related code:
 | 13 | Firestore Index Missing | 2025-11-10 | 25分タイムアウト | ✅ **全インデックスを `firestore.indexes.json` で管理（IaC 徹底）** |
 | 14 | Dashboard Class Display Confusion | 2025-11-18 | 誤解による作業 | ✅ **Dashboard の2つのクラス表示機能の違いを理解**（詳細: `docs/DASHBOARD_CLASS_DISPLAY.md`） |
 | 15 | Sheets Sync Silent Failure | 2025-01-28 | 5件データ欠落 | ✅ **外部API呼び出しはリトライ + ステータス追跡必須** |
+| 16 | External File Dependency Before Self-Check | 2026-09-11 | 外部作業用ファイルへの永続依存を検討しかけた | ✅ **クライアント/委託先に依頼・外部ファイルに依存する前に、自プロジェクト群内の既存データソースを確認**（詳細: `docs/common-mistakes.md` #16） |
 
 ### 🚨 最重要パターン
 
@@ -324,6 +325,12 @@ Before committing changes to Firestore-related code:
 - インシデント #15（Google Sheets同期）
 - 教訓: **外部API呼び出しはリトライ + ステータス追跡 + 定期整合性チェック**
 - 参照: `src/sheets_retry.py`, `scripts/check_all_spreadsheets_consistency.py`
+
+**パターン8: 自社内データソース優先確認の欠如**
+- インシデント #16（受講者リストへの日介番号供給元）
+- 事象: クライアントから届いた社内作業用ファイルにIMPORTRANGEで永続依存する設計を検討しかけたが、実際には別プロジェクト `carewell-moushikomi-csv` の公式申込データ（jaccw自社管理・Team1〜10タブ）に同じ日介番号情報が既に存在し、突合で246/254件が完全一致（日介番号の食い違いゼロ）することが判明
+- 教訓: **外部（クライアント/委託先）へのデータ依頼・外部ファイルへの数式依存を検討する前に、まず自プロジェクト群内で既に保有・管理している公式データソースがないか確認する。ただし過剰な調査は不要 — 「他に確認すべき自社内ソースの候補があるか」を一度立ち止まって考える程度で十分**
+- 参照: `carewell-moushikomi-csv/CLAUDE.md`「令和8年度シーズン運用状況」（申込状況スプレッドシートID、Team1〜10=№01〜10対応）
 
 **詳細な教訓・解決策・チェックリストは `docs/common-mistakes.md` を参照**
 
