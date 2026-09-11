@@ -10,10 +10,18 @@ import sys
 sys.path.insert(0, "scripts")
 
 from merge_student_roster import (  # noqa: E402
+    APPLICATION_HEADER_PREFIX,
+    CLIENT_SOURCE_HEADER,
+    ValidationError,
+    _find_key_duplicates,
+    _rstrip_blank_rows,
     match_students,
     normalize_key,
+    parse_application_data,
+    parse_client_source,
     validate_expected_count,
     validate_group_mapping,
+    validate_nichikai_uniqueness,
     validate_required_fields,
     validate_student_number_sequence,
     validate_student_number_uniqueness,
@@ -43,6 +51,239 @@ def app_row(**overrides):
     }
     base.update(overrides)
     return base
+
+
+APPLICATION_FULL_HEADER = APPLICATION_HEADER_PREFIX + [
+    "会員番号",
+    "所属都道府県会",
+    "所属部門",
+    "E-mail①",
+    "E-mail②",
+    "送付先郵便番号",
+    "送付先住所",
+    "勤務先法人名称",
+    "勤務先名称",
+]
+
+
+class TestParseClientSource:
+    def test_valid_row_is_parsed(self):
+        rows = [
+            CLIENT_SOURCE_HEADER,
+            ["A", "先生", "A001", "山田 太郎", "やまだ たろう", "介護老人保健施設", ""],
+        ]
+        parsed = parse_client_source(rows, "テスト")
+        assert parsed == [
+            {
+                "group": "A",
+                "sub_teacher": "先生",
+                "student_number": "A001",
+                "name": "山田 太郎",
+                "kana": "やまだ たろう",
+                "service_type": "介護老人保健施設",
+            }
+        ]
+
+    def test_completely_blank_row_is_skipped(self):
+        rows = [
+            CLIENT_SOURCE_HEADER,
+            ["A", "先生", "A001", "山田 太郎", "やまだ たろう", "介護老人保健施設", ""],
+            ["", "", "", "", "", "", ""],
+        ]
+        parsed = parse_client_source(rows, "テスト")
+        assert len(parsed) == 1
+
+    def test_partially_filled_row_raises(self):
+        # 受講者番号・グループはあるが氏名が空(取得漏れ等)は異常系として検知する
+        rows = [
+            CLIENT_SOURCE_HEADER,
+            ["A", "先生", "A001", "", "", "介護老人保健施設", ""],
+        ]
+        try:
+            parse_client_source(rows, "テスト")
+            assert False, "ValidationErrorが送出されるべき"
+        except ValidationError as e:
+            assert "部分的" in str(e)
+
+    def test_header_mismatch_raises(self):
+        rows = [["不正な", "ヘッダー"]]
+        try:
+            parse_client_source(rows, "テスト")
+            assert False, "ValidationErrorが送出されるべき"
+        except ValidationError:
+            pass
+
+    def test_empty_input_raises(self):
+        try:
+            parse_client_source([], "テスト")
+            assert False, "ValidationErrorが送出されるべき"
+        except ValidationError:
+            pass
+
+
+class TestParseApplicationData:
+    def test_valid_row_is_parsed(self):
+        rows = [
+            APPLICATION_FULL_HEADER,
+            [
+                "山田 太郎",
+                "やまだ たろう",
+                "N0000001",
+                "",
+                "",
+                "",
+                "",
+                "",
+                "",
+                "",
+                "社会福祉法人テスト会",
+                "テスト施設",
+            ],
+        ]
+        parsed = parse_application_data(rows, "テスト")
+        assert parsed == [
+            {
+                "name": "山田 太郎",
+                "kana": "やまだ たろう",
+                "nichikai": "N0000001",
+                "company": "社会福祉法人テスト会",
+                "office": "テスト施設",
+            }
+        ]
+
+    def test_completely_blank_row_is_skipped(self):
+        rows = [
+            APPLICATION_FULL_HEADER,
+            [
+                "山田 太郎",
+                "やまだ たろう",
+                "N0000001",
+                "",
+                "",
+                "",
+                "",
+                "",
+                "",
+                "",
+                "社会福祉法人テスト会",
+                "テスト施設",
+            ],
+            [""] * 12,
+        ]
+        parsed = parse_application_data(rows, "テスト")
+        assert len(parsed) == 1
+
+    def test_empty_company_and_office_is_allowed(self):
+        # company/officeは申込データ原本にも空欄がありうる正当なデータ
+        rows = [
+            APPLICATION_FULL_HEADER,
+            [
+                "山田 太郎",
+                "やまだ たろう",
+                "N0000001",
+                "",
+                "",
+                "",
+                "",
+                "",
+                "",
+                "",
+                "",
+                "",
+            ],
+        ]
+        parsed = parse_application_data(rows, "テスト")
+        assert parsed[0]["company"] == ""
+        assert parsed[0]["office"] == ""
+
+    def test_partially_filled_row_raises(self):
+        # 氏名はあるが日介番号が空(取得漏れ等)は異常系として検知する
+        rows = [
+            APPLICATION_FULL_HEADER,
+            ["山田 太郎", "やまだ たろう", "", "", "", "", "", "", "", "", ""],
+        ]
+        try:
+            parse_application_data(rows, "テスト")
+            assert False, "ValidationErrorが送出されるべき"
+        except ValidationError as e:
+            assert "部分的" in str(e)
+
+    def test_company_office_column_mismatch_raises(self):
+        bad_header = APPLICATION_HEADER_PREFIX + [""] * 7 + ["違う列", "違う列2"]
+        rows = [bad_header]
+        try:
+            parse_application_data(rows, "テスト")
+            assert False, "ValidationErrorが送出されるべき"
+        except ValidationError as e:
+            assert "会社/事業所列" in str(e)
+
+    def test_header_prefix_mismatch_raises(self):
+        rows = [["不正な", "ヘッダー"]]
+        try:
+            parse_application_data(rows, "テスト")
+            assert False, "ValidationErrorが送出されるべき"
+        except ValidationError:
+            pass
+
+
+class TestFindKeyDuplicates:
+    def test_no_duplicates_passes(self):
+        rows = [
+            client_row(),
+            client_row(student_number="A002", name="佐藤 花子", kana="さとう はなこ"),
+        ]
+        assert _find_key_duplicates(rows, "テスト") == []
+
+    def test_duplicate_key_within_rows_fails(self):
+        rows = [
+            client_row(student_number="A001"),
+            client_row(student_number="A002"),  # 同じ氏名+ふりがな
+        ]
+        issues = _find_key_duplicates(rows, "テスト")
+        assert len(issues) == 1
+        assert "テスト" in issues[0]
+
+
+class TestValidateNichikaiUniqueness:
+    def test_no_duplicate_nichikai_passes(self):
+        merged = [
+            {"student_number": "A001", "nichikai": "N0000001"},
+            {"student_number": "A002", "nichikai": "N0000002"},
+        ]
+        assert validate_nichikai_uniqueness(merged) == []
+
+    def test_duplicate_nichikai_across_different_students_fails(self):
+        # 氏名+ふりがなキーは別でも、申込データ側の日介番号自体が重複していれば
+        # 2名が同一日介番号にマッピングされうる(_find_key_duplicatesでは検出不可)
+        merged = [
+            {"student_number": "A001", "nichikai": "N0000001"},
+            {"student_number": "A002", "nichikai": "N0000001"},
+        ]
+        issues = validate_nichikai_uniqueness(merged)
+        assert len(issues) == 1
+        assert "A001" in issues[0] and "A002" in issues[0]
+
+
+class TestRstripBlankRows:
+    def test_trailing_blank_rows_are_removed(self):
+        rows = [["a", "b"], ["c", "d"], ["", ""], ["", ""]]
+        assert _rstrip_blank_rows(rows) == [["a", "b"], ["c", "d"]]
+
+    def test_non_trailing_blank_row_is_preserved(self):
+        # 途中の空行は除去対象ではない(末尾のみが対象)
+        rows = [["a", "b"], ["", ""], ["c", "d"]]
+        assert _rstrip_blank_rows(rows) == rows
+
+    def test_all_blank_rows_become_empty_list(self):
+        rows = [["", ""], ["", ""]]
+        assert _rstrip_blank_rows(rows) == []
+
+    def test_no_blank_rows_is_unchanged(self):
+        rows = [["a", "b"], ["c", "d"]]
+        assert _rstrip_blank_rows(rows) == rows
+
+    def test_empty_input_returns_empty(self):
+        assert _rstrip_blank_rows([]) == []
 
 
 class TestNormalizeKey:
@@ -124,6 +365,18 @@ class TestMatchStudents:
         )
         assert merged == []
         assert unmatched == ["A099"]
+
+    def test_ambiguous_direct_match_is_unmatched_not_arbitrarily_paired(self):
+        # 申込データ側に同一正規化キー(氏名+ふりがな)を持つ行が2件以上ある場合、
+        # どちらかを勝手に選ばず未突合として扱う(誤った日介番号を割り当てない)
+        c = client_row(student_number="A001", name="山田 太郎", kana="やまだ たろう")
+        dup_a = app_row(name="山田 太郎", kana="やまだ たろう", nichikai="N0000001")
+        dup_b = app_row(name="山田 太郎", kana="やまだ たろう", nichikai="N0000002")
+        merged, unmatched, exc_issues, exc_used = match_students(
+            [c], [dup_a, dup_b], {}
+        )
+        assert merged == []
+        assert unmatched == ["A001"]
 
     def test_exception_table_rescues_unmatched_row(self):
         c = client_row(
