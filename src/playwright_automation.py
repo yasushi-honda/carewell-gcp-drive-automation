@@ -78,6 +78,11 @@ class CarewellSelectors:
     SUBMISSION_TABLE = "table#ctl00_masterMain_gvwMain"
     SUBMISSION_ROW = "tr.standard_table_tr"
 
+    # 提出0件時にサイトが表示する正規メッセージ(2026-09-11実機確認)。
+    # 提出0件の場合はtr.standard_grid_itemが出現せずこのテキストのみが表示されるため、
+    # このメッセージの有無で「本当に0件」と「取得失敗によるタイムアウト」を区別する。
+    NO_SUBMISSIONS_TEXT = "提出されたレポートはありません"
+
     # Pagination selectors
     PAGINATION_SELECT = 'select[name="ctl00$masterMain$dpgMain$dpgMain$ctl00$ddlPage"]'
 
@@ -576,15 +581,34 @@ class PlaywrightAutomationEngine:
                     )
                     self.logger.info("✓ Step 2 complete: Table tbody found")
 
-                    # Step 3: Wait for table rows
-                    self.logger.info(
-                        "Step 3: Waiting for table rows (tr.standard_grid_item)..."
+                    # Step 2.5: 提出0件の正規メッセージを確認(2026-09-11追加)
+                    # 提出0件の場合、tr.standard_grid_itemは出現せず
+                    # CarewellSelectors.NO_SUBMISSIONS_TEXT のみが表示される。
+                    # このメッセージの有無を先に確認することで、Step3のタイムアウトが
+                    # 「本当に0件」なのか「別の原因で取得に失敗しているだけ」なのかを
+                    # 区別できなかった既知の脆弱性(success・0件の誤検知)を解消する。
+                    confirmed_zero_submissions = (
+                        list_frame.get_by_text(
+                            CarewellSelectors.NO_SUBMISSIONS_TEXT, exact=False
+                        ).count()
+                        > 0
                     )
-                    list_frame.wait_for_selector(
-                        "#ctl00_masterMain_gvwMain tbody tr.standard_grid_item",
-                        timeout=60000,
-                    )
-                    self.logger.info("✓ Step 3 complete: Table rows found")
+
+                    if confirmed_zero_submissions:
+                        self.logger.info(
+                            f"✓ 「{CarewellSelectors.NO_SUBMISSIONS_TEXT}」を検出。"
+                            "提出0件が確定しました(取得失敗によるタイムアウトではありません)"
+                        )
+                    else:
+                        # Step 3: Wait for table rows
+                        self.logger.info(
+                            "Step 3: Waiting for table rows (tr.standard_grid_item)..."
+                        )
+                        list_frame.wait_for_selector(
+                            "#ctl00_masterMain_gvwMain tbody tr.standard_grid_item",
+                            timeout=60000,
+                        )
+                        self.logger.info("✓ Step 3 complete: Table rows found")
 
                 except Exception as wait_error:
                     self.logger.error(
@@ -598,22 +622,29 @@ class PlaywrightAutomationEngine:
                     )
                     raise
 
-                # Wait for table links to become fully interactive
-                # After ASP.NET __doPostBack page transition, JavaScript event handlers
-                # need time to initialize before links become clickable
-                self.logger.info(
-                    "Waiting for table links to become fully interactive (10 seconds)..."
-                )
-                time.sleep(10)
-                self.logger.info("✓ Table links should now be interactive")
+                if confirmed_zero_submissions:
+                    # 提出が存在しないため行取得・インタラクティブ待機は不要
+                    rows = []
+                    self.logger.info(
+                        f"Found {len(rows)} submission rows on page {current_page} (確定済み0件)"
+                    )
+                else:
+                    # Wait for table links to become fully interactive
+                    # After ASP.NET __doPostBack page transition, JavaScript event handlers
+                    # need time to initialize before links become clickable
+                    self.logger.info(
+                        "Waiting for table links to become fully interactive (10 seconds)..."
+                    )
+                    time.sleep(10)
+                    self.logger.info("✓ Table links should now be interactive")
 
-                # First pass: Extract all basic submission info from current page
-                rows = list_frame.locator(
-                    "#ctl00_masterMain_gvwMain tbody tr.standard_grid_item"
-                ).all()
-                self.logger.info(
-                    f"Found {len(rows)} submission rows on page {current_page}"
-                )
+                    # First pass: Extract all basic submission info from current page
+                    rows = list_frame.locator(
+                        "#ctl00_masterMain_gvwMain tbody tr.standard_grid_item"
+                    ).all()
+                    self.logger.info(
+                        f"Found {len(rows)} submission rows on page {current_page}"
+                    )
 
                 # Wait for individual row links to become fully interactive
                 # After table rendering, JavaScript event handlers need additional time
