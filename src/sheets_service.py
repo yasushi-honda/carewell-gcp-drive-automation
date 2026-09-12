@@ -84,9 +84,17 @@ class SheetsService:
                     return
 
             # Sheet doesn't exist, create it
+            # hidden=True: サブ講師の誤操作防止のため、課題提出記録タブは
+            # 既定で非表示にする(クライアント要望、2026-09-12)
             logger.info(f"Creating new sheet: {sheet_name}")
             request_body = {
-                "requests": [{"addSheet": {"properties": {"title": sheet_name}}}]
+                "requests": [
+                    {
+                        "addSheet": {
+                            "properties": {"title": sheet_name, "hidden": True}
+                        }
+                    }
+                ]
             }
 
             self.service.spreadsheets().batchUpdate(
