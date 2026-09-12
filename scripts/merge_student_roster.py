@@ -43,6 +43,13 @@ APPLICATION_SPREADSHEET_ID = (
 # 発見したIDをここに追記する運用とする(Codex指摘H4: 名前検索を毎回の識別子にしない)。
 KNOWN_ATTENDANCE_FILE_IDS = {
     "01": "10pXxlqzIvWNGt0QZQpgcsgguOvW372RVS2eSkGpMws4",
+    "02": "138wCXPyD8JeSbnYhC2-UYi1haJB9OqA61JipwKrm-Uc",
+    "03": "1I9t6CzePqaPQxsHfv5r8H2zrBoXRss65flJKZbqk-uU",
+    "04": "1rRHdPa5QEuvKG4uI8tKZpocpobzLaubLi1D0cGgWGl4",
+    "05": "1F45fZ0-q8-sncS6evRaJ31_hZLaFR3p6Jr5tXq0Byz8",
+    "06": "16tpctLo8x_Bn_oLy2sfHv8qyHxGmnqyJufp6-AJJ2Rs",
+    "07": "1ooY1O5eurA7MWXN7u8l8A-WytBRTVM62jwBUPSDR62A",
+    "09": "1kTR2myJocAeDajT8Tr3Uy6_Kg7pbCVueVgLmJTdSy-U",
 }
 
 CLIENT_SOURCE_TAB = "№{class_num}リスト"
