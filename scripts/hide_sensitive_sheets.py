@@ -26,12 +26,12 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from src.gcp_sa_auth import call_with_reauth, get_impersonated_service  # noqa: E402
 from scripts.merge_student_roster import (  # noqa: E402
     ROSTER_TARGET_TAB,
     _build_sheets_service,
     resolve_attendance_spreadsheet_id,
 )
+from src.gcp_sa_auth import call_with_reauth, get_impersonated_service  # noqa: E402
 
 TARGET_CLASSES = ["01", "02", "03", "04", "05", "06", "07", "09"]
 
@@ -45,6 +45,7 @@ TASK1_SCOPES = ["https://www.googleapis.com/auth/spreadsheets"]
 
 def _build_task1_sheets_service():
     return get_impersonated_service("sheets", "v4", TASK1_SA_EMAIL, TASK1_SCOPES)
+
 
 TASK1_SUBMISSION_SPREADSHEET_IDS = {
     "01": "1sg4YWQ1hHgzFWFXNbOVFXiWTXUhzvjPpejaMArwLQRc",
@@ -61,7 +62,9 @@ TASK1_TAB_NAME = "課題①"
 COMPANY_OFFICE_COLUMN_RANGE = (3, 5)  # 0-indexed [start, end) = D,E列
 
 
-def _get_sheet_properties_list(spreadsheet_id: str, build_service_fn=_build_sheets_service) -> list[dict]:
+def _get_sheet_properties_list(
+    spreadsheet_id: str, build_service_fn=_build_sheets_service
+) -> list[dict]:
     meta = call_with_reauth(
         build_service_fn,
         lambda svc: svc.spreadsheets()
@@ -78,7 +81,9 @@ def _find_sheet(properties_list: list[dict], title: str) -> dict | None:
     return matches[0] if matches else None
 
 
-def _batch_update(spreadsheet_id: str, requests: list[dict], build_service_fn=_build_sheets_service) -> None:
+def _batch_update(
+    spreadsheet_id: str, requests: list[dict], build_service_fn=_build_sheets_service
+) -> None:
     call_with_reauth(
         build_service_fn,
         lambda svc: svc.spreadsheets()
@@ -136,11 +141,11 @@ def process_class(class_num: str, commit: bool, backup_dir: Path) -> dict:
     result = {"class": class_num, "roster": None, "task1": None}
 
     # --- 「受講者リスト」タブ ---
+    # API呼び出し全体を1つのtry/exceptで保護する。8クラスを順次処理するため、
+    # 1クラスでの例外(権限不足・一時的なAPIエラー等)が他クラスの処理や
+    # manifest.json書き込みまで止めてしまわないようにする。
     try:
         attendance_id = resolve_attendance_spreadsheet_id(class_num)
-    except Exception as e:  # noqa: BLE001
-        result["roster"] = {"status": "error", "detail": f"ID解決失敗: {e}"}
-    else:
         roster_props_list = _get_sheet_properties_list(attendance_id)
         roster_sheet = _find_sheet(roster_props_list, ROSTER_TARGET_TAB)
         if roster_sheet is None:
@@ -168,51 +173,65 @@ def process_class(class_num: str, commit: bool, backup_dir: Path) -> dict:
                 result["roster"] = {
                     "status": "applied",
                     "spreadsheet_id": attendance_id,
-                    "after_hidden": after_sheet.get("hidden", False) if after_sheet else None,
+                    "after_hidden": (
+                        after_sheet.get("hidden", False) if after_sheet else None
+                    ),
                 }
+    except Exception as e:  # noqa: BLE001
+        result["roster"] = {"status": "error", "detail": str(e)}
 
     # --- 「課題①」タブ ---
     task1_id = TASK1_SUBMISSION_SPREADSHEET_IDS.get(class_num)
     if task1_id is None:
         result["task1"] = {"status": "skipped", "detail": "spreadsheet_id未登録"}
     else:
-        task1_props_list = _get_sheet_properties_list(
-            task1_id, build_service_fn=_build_task1_sheets_service
-        )
-        task1_sheet = _find_sheet(task1_props_list, TASK1_TAB_NAME)
-        if task1_sheet is None:
-            result["task1"] = {
-                "status": "skipped",
-                "detail": f"「{TASK1_TAB_NAME}」タブが未作成(spreadsheet_id={task1_id})",
-            }
-        else:
-            backup_path = backup_dir / f"class{class_num}_task1_before.json"
-            backup_path.write_text(
-                json.dumps(task1_sheet, ensure_ascii=False, indent=2)
+        try:
+            task1_props_list = _get_sheet_properties_list(
+                task1_id, build_service_fn=_build_task1_sheets_service
             )
-            requests = plan_task1_requests(task1_sheet)
-            if not commit:
+            task1_sheet = _find_sheet(task1_props_list, TASK1_TAB_NAME)
+            if task1_sheet is None:
                 result["task1"] = {
-                    "status": "dry-run",
-                    "spreadsheet_id": task1_id,
-                    "before_hidden": task1_sheet.get("hidden", False),
-                    "planned_requests": len(requests),
+                    "status": "skipped",
+                    "detail": f"「{TASK1_TAB_NAME}」タブが未作成(spreadsheet_id={task1_id})",
                 }
-            elif not requests:
-                result["task1"] = {"status": "already_hidden", "spreadsheet_id": task1_id}
             else:
-                _batch_update(
-                    task1_id, requests, build_service_fn=_build_task1_sheets_service
+                backup_path = backup_dir / f"class{class_num}_task1_before.json"
+                backup_path.write_text(
+                    json.dumps(task1_sheet, ensure_ascii=False, indent=2)
                 )
-                after_props_list = _get_sheet_properties_list(
-                    task1_id, build_service_fn=_build_task1_sheets_service
-                )
-                after_sheet = _find_sheet(after_props_list, TASK1_TAB_NAME)
-                result["task1"] = {
-                    "status": "applied",
-                    "spreadsheet_id": task1_id,
-                    "after_hidden": after_sheet.get("hidden", False) if after_sheet else None,
-                }
+                requests = plan_task1_requests(task1_sheet)
+                if not commit:
+                    result["task1"] = {
+                        "status": "dry-run",
+                        "spreadsheet_id": task1_id,
+                        "before_hidden": task1_sheet.get("hidden", False),
+                        "planned_requests": len(requests),
+                    }
+                elif not requests:
+                    result["task1"] = {
+                        "status": "already_hidden",
+                        "spreadsheet_id": task1_id,
+                    }
+                else:
+                    _batch_update(
+                        task1_id,
+                        requests,
+                        build_service_fn=_build_task1_sheets_service,
+                    )
+                    after_props_list = _get_sheet_properties_list(
+                        task1_id, build_service_fn=_build_task1_sheets_service
+                    )
+                    after_sheet = _find_sheet(after_props_list, TASK1_TAB_NAME)
+                    result["task1"] = {
+                        "status": "applied",
+                        "spreadsheet_id": task1_id,
+                        "after_hidden": (
+                            after_sheet.get("hidden", False) if after_sheet else None
+                        ),
+                    }
+        except Exception as e:  # noqa: BLE001
+            result["task1"] = {"status": "error", "detail": str(e)}
 
     return result
 
@@ -220,7 +239,9 @@ def process_class(class_num: str, commit: bool, backup_dir: Path) -> dict:
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
-        "--commit", action="store_true", help="実際に非表示化を適用する(省略時はdry-run)"
+        "--commit",
+        action="store_true",
+        help="実際に非表示化を適用する(省略時はdry-run)",
     )
     parser.add_argument(
         "--class",

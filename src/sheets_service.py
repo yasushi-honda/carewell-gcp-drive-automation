@@ -91,7 +91,9 @@ class SheetsService:
             sheet_properties = {"title": sheet_name}
             if sheet_name == "課題①":
                 sheet_properties["hidden"] = True
-            request_body = {"requests": [{"addSheet": {"properties": sheet_properties}}]}
+            request_body = {
+                "requests": [{"addSheet": {"properties": sheet_properties}}]
+            }
 
             self.service.spreadsheets().batchUpdate(
                 spreadsheetId=spreadsheet_id, body=request_body
