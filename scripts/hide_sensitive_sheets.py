@@ -251,6 +251,13 @@ def main() -> int:
     )
     args = parser.parse_args()
 
+    if args.class_num and args.class_num not in TARGET_CLASSES:
+        print(
+            f"[エラー] クラス{args.class_num}は対象外です。"
+            f"本スクリプトの対象はTARGET_CLASSES={TARGET_CLASSES}のみです。"
+        )
+        return 1
+
     classes = [args.class_num] if args.class_num else TARGET_CLASSES
 
     scratch_dir = Path.home() / ".claude" / "scratch" / "hide_sensitive_sheets"
