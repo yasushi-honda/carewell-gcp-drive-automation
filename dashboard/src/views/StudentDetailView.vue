@@ -94,18 +94,6 @@
             <div class="text-xs font-medium text-gray-500 uppercase tracking-wider mb-2">グループ</div>
             <div class="text-lg font-semibold text-gray-900">{{ student.group }}</div>
           </div>
-
-          <!-- 会社 -->
-          <div class="bg-gray-50 rounded-lg p-4 border border-gray-200 md:col-span-2">
-            <div class="text-xs font-medium text-gray-500 uppercase tracking-wider mb-2">会社</div>
-            <div class="text-lg font-semibold text-gray-900">{{ student.company || '-' }}</div>
-          </div>
-
-          <!-- 事業所 -->
-          <div class="bg-gray-50 rounded-lg p-4 border border-gray-200 md:col-span-2 lg:col-span-3">
-            <div class="text-xs font-medium text-gray-500 uppercase tracking-wider mb-2">事業所</div>
-            <div class="text-lg font-semibold text-gray-900">{{ student.office || '-' }}</div>
-          </div>
         </div>
 
         <!-- サービス種別 -->

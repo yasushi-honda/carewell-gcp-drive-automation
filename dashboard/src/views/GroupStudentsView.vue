@@ -87,9 +87,6 @@
                 </div>
               </th>
               <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                勤務先
-              </th>
-              <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                 サービス種別
               </th>
             </tr>
@@ -121,9 +118,6 @@
                 {{ student.furigana }}
               </td>
               <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                {{ getWorkplace(student) }}
-              </td>
-              <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                 {{ student.service_type }}
               </td>
             </tr>
@@ -147,7 +141,6 @@ import { ref, computed } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { useStudents } from '../composables/useStudents';
 import { convertToShortClassName } from '../config/classes';
-import type { Student } from '../types/models';
 import Breadcrumb from '../components/Breadcrumb.vue';
 import LoadingSkeleton from '../components/LoadingSkeleton.vue';
 import ErrorAlert from '../components/ErrorAlert.vue';
@@ -167,19 +160,6 @@ const sortOrder = ref<'asc' | 'desc' | null>(null);
 const shortClassName = convertToShortClassName(className);
 
 const { students, loading, error } = useStudents();
-
-// 勤務先表示関数
-const getWorkplace = (student: Student): string => {
-  if (student.company && student.office) {
-    return `${student.company} - ${student.office}`;
-  } else if (student.company) {
-    return student.company;
-  } else if (student.office) {
-    return student.office;
-  } else {
-    return '-';
-  }
-};
 
 // フィルタリング（クラス、グループ、検索クエリ）
 const filteredStudents = computed(() => {
