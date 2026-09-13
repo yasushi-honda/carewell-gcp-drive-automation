@@ -118,12 +118,6 @@
                 scope="col"
                 class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
               >
-                勤務先
-              </th>
-              <th
-                scope="col"
-                class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
-              >
                 クラス
               </th>
               <th
@@ -165,9 +159,6 @@
               </td>
               <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                 {{ student.serial_number || '-' }}
-              </td>
-              <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                {{ getWorkplace(student) }}
               </td>
               <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                 {{ student.class_name || '-' }}
@@ -338,18 +329,6 @@ const toggleSortSerialNumber = () => {
     sortBy.value = null;
     sortOrder.value = null;
   }
-};
-
-const getWorkplace = (student: any) => {
-  // 勤務先を「会社 - 事業所」形式で表示
-  if (student.company && student.office) {
-    return `${student.company} - ${student.office}`;
-  } else if (student.company) {
-    return student.company;
-  } else if (student.office) {
-    return student.office;
-  }
-  return '-';
 };
 
 const navigateToDetail = (studentId: string) => {
