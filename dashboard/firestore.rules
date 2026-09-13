@@ -35,6 +35,18 @@ service cloud.firestore {
       allow write: if false;
     }
 
+    // 提出ファイル(collectionGroupクエリ用): 受講生詳細ページの提出履歴表示は
+    // collectionGroup('files')で全クラス・全課題を横断検索する。上のmatch
+    // /submissions/{document=**}は起点パスが固定された「path-specific」ルールのため、
+    // Firestoreの仕様上collectionGroupクエリには適用されない。コレクションID自体を
+    // ワイルドカードにした専用ルールが必要（2026-08-27のIssue #12対応でこの点が
+    // 見落とされ、以降「提出履歴」機能がMissing or insufficient permissionsで
+    // 機能しなくなっていた）。
+    match /{path=**}/files/{fileId} {
+      allow read: if true;
+      allow write: if false;
+    }
+
     // 🚨 default-deny。
     // 旧ルールの `match /{document=**} { allow read: if true; }` は Firestore の
     // permissive union（いずれか1つのmatchがallowなら通る）により、admins コレクション
