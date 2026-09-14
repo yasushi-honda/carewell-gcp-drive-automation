@@ -37,6 +37,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
 from google.cloud import firestore  # noqa: E402
 
+from config.classes import resolve_firestore_database_id  # noqa: E402
 from firestore_service import FirestoreService  # noqa: E402
 
 RED = "\033[0;31m"
@@ -72,7 +73,10 @@ def load_emails_from_file(path: str) -> list:
 
 
 def cmd_list(db):
-    print(f"{BLUE}=== admins コレクション（database=carewell-native）==={NC}")
+    print(
+        f"{BLUE}=== admins コレクション"
+        f"（database={resolve_firestore_database_id()}）==={NC}"
+    )
     docs = list(db.collection(ADMINS_COLLECTION).stream())
     if not docs:
         print(f"{YELLOW}管理者は0件です{NC}")
@@ -182,7 +186,8 @@ def main():
     print(f"モード: {(YELLOW + 'ドライラン' if dry_run else GREEN + '実行') + NC}")
     print()
 
-    firestore_service = FirestoreService()  # database="carewell-native" を内部で固定
+    # database は resolve_firestore_database_id() で年度解決される
+    firestore_service = FirestoreService()
     db = firestore_service.db
 
     if args.list:

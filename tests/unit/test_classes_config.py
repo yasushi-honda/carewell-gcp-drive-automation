@@ -119,3 +119,27 @@ class TestResolveFirestoreDatabaseId:
                 assert (
                     classes_config.resolve_firestore_database_id() == "current-year-db"
                 )
+
+    def test_production_dict_has_no_duplicate_database_ids_across_years(self):
+        """
+        本番のFIRESTORE_DATABASE_IDS_BY_YEAR自体を対象にした回帰テスト（他のテストは
+        辞書をpatch.dictで差し替えているため、実際の値そのものは検証していなかった）。
+        2つの年度が同じDB名を指す設定は、まさに今回の事故（令和7年度・令和8年度が
+        carewell-nativeを共有）そのものであり、これを機械的に検知する。
+        """
+        values = list(classes_config.FIRESTORE_DATABASE_IDS_BY_YEAR.values())
+        assert len(values) == len(set(values)), (
+            "FIRESTORE_DATABASE_IDS_BY_YEARの複数年度が同じDB名を指しています: "
+            f"{classes_config.FIRESTORE_DATABASE_IDS_BY_YEAR!r}"
+        )
+
+    def test_production_dict_resolves_current_year_to_expected_database(self):
+        """
+        本番のFIRESTORE_DATABASE_IDS_BY_YEAR（未patch）を対象に、現在年度が
+        期待するDB名に解決されることを固定検証する。
+        """
+        assert (
+            classes_config.FIRESTORE_DATABASE_IDS_BY_YEAR.get(CURRENT_YEAR_PREFIX)
+            == "carewell-2026"
+        )
+        assert classes_config.resolve_firestore_database_id() == "carewell-2026"

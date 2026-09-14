@@ -30,10 +30,12 @@ Prevent configuration mistakes and design specification violations when working 
   （`resolve_student_spreadsheet_id()`とは異なり、DB接続先の誤上書きは
   Firestore Rulesを経由しないAdmin SDK書き込みで前年度DBを汚染しうるため、
   正当なユースケースがない限り持たせない。`/plan-crossreview`でのcodex指摘）
-- ❌ 前年度DB（例: `carewell-native`）は年度切替完了後、クライアントSDKからの
-  読み書きをFirestore Rulesで全面denyにする（`dashboard/firestore-legacy-frozen.rules`）。
-  ただしAdmin SDK/gcloud等のサーバー側アクセスはこれを迂回できる点に注意
-  （プロジェクトIAM権限を持つ主体に限られるため別途のIAM再設計は不要と判断済み）
+- ✅ 前年度DB（例: `carewell-native`）は、新DB稼働・管理者再投入・実機検証が完了してから、
+  クライアントSDKからの読み書きをFirestore Rulesで全面denyにする（`dashboard/firestore-legacy-frozen.rules`、
+  別PR(PR-2)で対応。**2026-09-14時点ではまだ未実施**——`dashboard/firebase.json`には
+  `carewell-native`のエントリ自体がまだ存在しない）。ただしAdmin SDK/gcloud等のサーバー側
+  アクセスはこれを迂回できる点に注意（プロジェクトIAM権限を持つ主体に限られるため
+  別途のIAM再設計は不要と判断済み）
 
 **Reference documents:**
 
@@ -46,7 +48,8 @@ Prevent configuration mistakes and design specification violations when working 
 - `src/config/classes.py`: `FIRESTORE_DATABASE_IDS_BY_YEAR` / `resolve_firestore_database_id()`
 - `src/firestore_service.py` Line 20: `firestore.Client(database=resolve_firestore_database_id())`
 - `dashboard/src/config/firebase.ts`: `getFirestore(firebaseApp, '<年度のDB名>')`
-- `dashboard/firebase.json`: `firestore`配列（年度ごとのDB + 前年度の凍結ルール）
+- `dashboard/firebase.json`: `firestore`配列（年度ごとのDB。前年度の凍結ルールは
+  PR-2で追加予定、2026-09-14 PR-1時点では新DBのエントリのみ）
 
 ### Rule 2: Collection Path Structure is FIXED
 

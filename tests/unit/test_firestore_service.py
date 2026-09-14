@@ -24,18 +24,35 @@ class TestFirestoreService:
 
         self.FirestoreService = FirestoreService
 
+    @patch("firestore_service.resolve_firestore_database_id")
     @patch("firestore_service.firestore.Client")
-    def test_init(self, mock_client):
+    def test_init(self, mock_client, mock_resolve_db_id):
         """Test FirestoreService initialization."""
+        # 2026-09-14 year-separation change: FirestoreService no longer hardcodes
+        # a database literal, it resolves it via resolve_firestore_database_id().
+        # Mocking the resolver here (rather than calling the real function to
+        # build the expectation) keeps this a correctness check on the wiring:
+        # it would fail if firestore_service.py stopped calling the resolver,
+        # independent of whatever value the real resolver happens to return.
+        mock_resolve_db_id.return_value = "mocked-database-id"
+
         service = self.FirestoreService()
 
-        # Verify Firestore client was created with the current academic year's
-        # database (resolved via resolve_firestore_database_id(), 2026-09-14
-        # year-separation change — no longer a hardcoded literal).
-        from config.classes import resolve_firestore_database_id
-
-        mock_client.assert_called_once_with(database=resolve_firestore_database_id())
+        mock_resolve_db_id.assert_called_once()
+        mock_client.assert_called_once_with(database="mocked-database-id")
         assert service.db is not None
+
+    def test_init_propagates_error_when_no_database_for_current_year(self):
+        """
+        resolve_firestore_database_id()がValueErrorを送出した場合、FirestoreService
+        の初期化もそのまま失敗すること（途中で握りつぶされないこと）を確認する。
+        """
+        with patch(
+            "firestore_service.resolve_firestore_database_id",
+            side_effect=ValueError("no database configured for this year"),
+        ):
+            with pytest.raises(ValueError, match="no database configured"):
+                self.FirestoreService()
 
     def test_update_task_metadata_creates_new_document(self):
         """Test that _update_task_metadata creates a new parent document."""
