@@ -51,3 +51,9 @@ Issue #18（出欠確認シートへの課題提出状況の自動反映、令�
   - Dashboard管理者アカウントとしてjaccw側4名（inomata/matsushita/system/tanimoto@jaccw.or.jp）を`admins`コレクションに登録。管理者機能3つ（データ同期・重複一覧・受講生の辞退切替）を実際にログインして実機検証済み（辞退切替は実データで切替→復帰まで確認、データ同期は名簿本体未入力のため0件同期だが正常動作を確認）
   - クライアント向け完了報告・管理者機能ガイドをhtml-briefで作成・送付済み
   - html-briefスキルの既知バグ（`<ol>`の番号がクリップボードコピー時に失われる）をグローバルテンプレート（`~/.claude/skills/html-brief/assets/template.html`・`SKILL.md`）で修正
+- （2026-09-14、同セッション継続）DB分離後、令和8年度「受講生一覧」に実データを流し込む新経路を設計・実装。令和7年度が使っていたVSTACK/IMPORTRANGE集約方式は「本当に踏襲すべきか」とdecision-maker自身から再検討を求められ、より良い方式へバージョンアップする方針で合意:
+  - PR #32（DB分離、先セッション分）に続き、PR #33「出欠管理名簿からFirestoreへ直接同期する新経路」をplan-crossreview（grip+codex、v1→v2→v3の2巡）・実装後レビュー（codex + pr-review-toolkit並列6エージェント + evaluator）を経てマージ。各クラスの`受講者リスト`タブを直接読み取り、二段階fail-closed設計（収集フェーズで異常があれば書込み一切なしで中断）でFirestoreへ同期する。会社・事業所列は取得レンジから物理的に除外（PII対応）
+  - 本番で実行し、№01クラス254名分がFirestore（`carewell-2026`データベース）・Dashboard「受講生一覧」双方に正しく反映されていることを実機確認済み（他7クラスは名簿データ未着のため空欄のまま、№08・10はクラス未設定のため対象外、いずれも異常ではなく想定通り）
+  - Cloud Schedulerジョブ`carewell-attendance-roster-sync`を新規作成（15分間隔、ENABLED）。継続的な反映を手動ボタンのみに頼らない方針をdecision-makerと確認済み（「手動更新のみは有り得ない、理想はリアルタイム、無理ならコストも考慮した定期反映」との方針を受け、Apps Script onEdit等の真のリアルタイム化は新規認証機構が必要で複雑度・リスクが高いため見送り、Cloud Scheduler頻度を上げる方式を採用。Schedulerの課金はジョブ単位でありSheets APIクォータにも十分余裕があるためコスト増なし）
+  - `docs/SERVICE_SHUTDOWN_AND_RESUME.md`・`CLAUDE.md`のCloud Schedulerジョブ数記載を実態（全32ジョブ、ENABLED19/PAUSED13）に合わせて更新
+  - クライアント（jaccw 猪股様）向けに、完了報告（html-brief）と、既存Slackスレッドの続報として返信文案（html-brief）を作成・提示済み

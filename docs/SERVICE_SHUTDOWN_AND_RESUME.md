@@ -177,6 +177,7 @@ gcloud scheduler jobs resume "${JOB_NAME}" --location=asia-northeast1
 - **Dashboard Hosting分離**（2026-08-26）: 令和7年度分ダッシュボードとURLが衝突しない年度取り違え事故防止のため、新Hostingサイト`carewell-dashboard-2026`を作成し、`dashboard/firebase.json`のデプロイ先・`src/main.py`のCORS許可オリジン・`dashboard/playwright.config.ts`のE2E baseURLを新URLへ切替。画面ヘッダーに「令和8年度」バッジを追加。旧サイト`carewell-automation`はCIの標準経路から外し凍結アーカイブ化。GitHub Actions 5ワークフローを再有効化し、実デプロイ・CORS実効化も完了（新サイト稼働開始）
 - **Cloud Scheduler令和8年度対応**（2026-08-26）: 全10クラス分のDrive/Sheets（2026年フォルダ・記録用スプレッドシート）を新規作成し、令和7年度の使い回しはしない方針で確定。`carewell-classXX-taskYY`既存16ジョブのmessage-bodyを令和8年度用（新Drive/Sheets ID、`task_pattern`は暫定的に短縮形）へ更新、`carewell-class06/07`用の新規4ジョブも実行設定を既存ピアジョブから複製して作成。全20ジョブ（+`student-sync-daily`）ともPAUSEDのまま維持、resumeは未実施
 - `carewell-automation-pattern1〜10`（申し込み状況取得用の別システム、`docs/cloud-scheduler-operations-guide.md`に既存記載あり）はENABLEDのまま不変。「25ジョブ全てPAUSED」というドキュメント上の従来記載が誤りだったことが判明・訂正済み（詳細は「停止したリソース一覧 > 1. Cloud Scheduler」参照）。**管理リポジトリも特定済み**: `carewell-moushikomi-csv`（同一マシン上にローカルclone確認済み）の`CLAUDE.md`に「carewell-automation-pattern1〜10 (Team1〜10) RESUMED/ADDED for 令和8年度シーズン（pattern1〜5,8〜10は2026-08-06、pattern6・7は2026-08-10追加）」「carewell-classNN-taskNN / carewell-student-sync-daily は別サービス（carewell-file-collector）宛の別システムのジョブで本リポジトリのスコープ外」との相互に一致する記載があり、双方のドキュメントで境界線の認識が一致していることを確認済み（2026-08-26）
+- **出欠管理名簿→Firestore同期の新エンドポイント用ジョブを新規作成**（2026-09-14、PR #33）: `carewell-attendance-roster-sync`（15分間隔`*/15 * * * *`、ENABLED、`/admin/sync-students-from-attendance-rosters`宛、`carewell-automation-sa`のOIDC認証）。旧ジョブ`student-sync-daily`のretargetではなく新規ジョブとして作成した（旧ジョブは対象URLを変更せずPAUSEDのまま放置、実質的に不要になったが削除は未実施）。fail-closed設計のため、いずれかのクラスの名簿読み取りに異常があれば書き込みをスキップするのみで、誤データの反映リスクはない。実機で本実行しNo1クラス254名分がFirestore（`carewell-2026`）・Dashboard「受講生一覧」双方に正しく反映されていることを確認済み。2026-09-14時点のジョブ総数は32件（ENABLED 19 / PAUSED 13、内訳は`gcloud scheduler jobs list --location=asia-northeast1`で確認可能）
 
 ### ⚠️ 今回のクロスレビューで発見した既存バグ（年度対応とは無関係）
 
@@ -229,7 +230,7 @@ Hostingの問題ではなくバックエンドのデータモデル・実装の�
 
 1. **№06・07の「課題②」実在確認**（実機テストで確認できたのは全クラス課題①のみ。課題②ジョブはresume前に確認必須、Step 2参照）
 2. **実際の`task_pattern`文字列の年度別確定**（現在は暫定的に`task_id`と同じ短縮形「課題①」「課題②」を設定済み。締切日入りの正式な表示名（例:「課題①業務分析　※～11/3〆切」相当の令和8年度版）はポータルへログインできる人間の確認が必要）
-3. **Cloud Schedulerジョブのresume判断**: `carewell-classXX-taskYY`20ジョブはPAUSEDのまま令和8年度用config済み。個別確認のうえ段階的にresumeする（Step 2参照）。`student-sync-daily`は、指す先の`/admin/sync-students-from-sheets`が令和8年度中は無効化されているため、新エンドポイントへのretarget完了までresume禁止（詳細: 上記Step 2「Cloud Scheduler ジョブ再開」内の該当箇条書き）
+3. **Cloud Schedulerジョブのresume判断**: `carewell-classXX-taskYY`20ジョブはPAUSEDのまま令和8年度用config済み。個別確認のうえ段階的にresumeする（Step 2参照）。`student-sync-daily`は、指す先の`/admin/sync-students-from-sheets`が令和8年度中は無効化されているため、resume禁止のままでよい（2026-09-14更新: retargetはせず、新エンドポイント宛の別ジョブ`carewell-attendance-roster-sync`を新規作成して代替済み。`student-sync-daily`自体は用済みのため、削除するか令和7年度の記録として残すかはdecision-maker判断待ち）
 4. **上記「発見した既存バグ」5スクリプトのスキーマ修正**
 5. **№08・10**: 9/24以降にポータル上でコースが実際に現れるか再確認（現時点では申込開始日からの推測に過ぎない未検証の仮説）
 6. ~~`STUDENT_SPREADSHEET_ID`の年度スコープ化~~（上記「Dashboard Hosting分離では解決しない既存の設計上の欠落」③、Issue #5 Phase 1）: **メカニズムは2026-08-26に対応済み**。残るのは`STUDENT_SPREADSHEET_IDS_BY_YEAR`への令和8年度の実IDの設定（再開ゲートの前提条件、値そのものは人間の確認が必要）

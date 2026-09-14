@@ -39,7 +39,7 @@ Kiro-style Spec Driven Development implementation using claude code slash comman
 - [ ] Firestore のデータベース名は？ → 年度ごとに分離済み。`src/config/classes.py`の`resolve_firestore_database_id()`で解決（現在＝令和8年度は`carewell-2026`。令和7年度以前の`carewell-native`は別DBとして残存中——クライアント読み取りのdeny-all化はPR-2で実施予定、まだ未実施。2026-09-14 PR-1対応、詳細: `docs/SERVICE_SHUTDOWN_AND_RESUME.md`「年度切替チェックリスト」）
 - [ ] 正しいコレクションパスは？ → `submissions/{class}/tasks/{task}/files/`
 - [ ] 現在のクラス数は？ → 令和8年度（2026年度）は10クラス (№01〜10、№06・07は今年度から追加) を計画中。ただしDrive/Sheets保存先が未検証のため`src/config/classes.py`のscripts側エントリは無効化中（詳細: `docs/SERVICE_SHUTDOWN_AND_RESUME.md`「令和8年度再開ステータス」）
-- [ ] Cloud Scheduler ジョブ数は？ → 現状25ジョブ全てPAUSED（ファイル収集16+レガシーpattern8+student-sync1）。令和8年度のファイル収集は計画上20ジョブ（10クラス×2課題）だが未作成
+- [ ] Cloud Scheduler ジョブ数は？ → 全32ジョブ（ENABLED19/PAUSED13、2026-09-14時点）。ファイル収集は課題①8ジョブ(№01〜07・09)がENABLED(2026-08-31 resume済み)・課題②8ジョブはPAUSED継続（様子見）、№08・10は未作成。レガシー`pattern1〜10`（別システム管理・触らない）は全てENABLED。旧`student-sync-daily`はPAUSED（令和8年度は無効化）、新規`carewell-attendance-roster-sync`（出欠管理名簿→Firestore同期、15分間隔）がENABLED。詳細: `docs/SERVICE_SHUTDOWN_AND_RESUME.md`
 - [ ] 問題発生時に最初にやることは？ → CLAUDE.md CRITICAL を読む
 - [ ] Cloud Run ログの確認コマンドは？ → `gcloud logging read ...`
 - [ ] Dashboard の URL は？ → `https://carewell-dashboard-2026.web.app/`
