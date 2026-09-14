@@ -118,8 +118,8 @@ def _get_firebase_app():
 def is_admin_email(email: str) -> bool:
     """admins/{email.lower()} の存在で管理者判定する。
 
-    Firestore の carewell-native データベースを FirestoreService 経由で参照する
-    （DB名を2箇所目にハードコードしない）。
+    Firestore の現在年度用データベース（resolve_firestore_database_id()で解決）を
+    FirestoreService 経由で参照する（DB名を2箇所目にハードコードしない）。
 
     例外時（Firestore一時障害等）は必ず False を返す（fail-closed）。
     誤って fail-open にすると、Firestore障害中に誰でも管理者として通ってしまう。

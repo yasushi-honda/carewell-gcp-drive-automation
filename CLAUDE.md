@@ -36,7 +36,7 @@ Kiro-style Spec Driven Development implementation using claude code slash comman
 
 以下の質問に答えられれば、オンボーディング完了です：
 
-- [ ] Firestore のデータベース名は？ → `carewell-native`
+- [ ] Firestore のデータベース名は？ → 年度ごとに分離済み。`src/config/classes.py`の`resolve_firestore_database_id()`で解決（現在＝令和8年度は`carewell-2026`。令和7年度以前の`carewell-native`は別DBとして残存中——クライアント読み取りのdeny-all化はPR-2で実施予定、まだ未実施。2026-09-14 PR-1対応、詳細: `docs/SERVICE_SHUTDOWN_AND_RESUME.md`「年度切替チェックリスト」）
 - [ ] 正しいコレクションパスは？ → `submissions/{class}/tasks/{task}/files/`
 - [ ] 現在のクラス数は？ → 令和8年度（2026年度）は10クラス (№01〜10、№06・07は今年度から追加) を計画中。ただしDrive/Sheets保存先が未検証のため`src/config/classes.py`のscripts側エントリは無効化中（詳細: `docs/SERVICE_SHUTDOWN_AND_RESUME.md`「令和8年度再開ステータス」）
 - [ ] Cloud Scheduler ジョブ数は？ → 現状25ジョブ全てPAUSED（ファイル収集16+レガシーpattern8+student-sync1）。令和8年度のファイル収集は計画上20ジョブ（10クラス×2課題）だが未作成
@@ -210,10 +210,13 @@ gcloud scheduler jobs describe JOB_NAME --location=asia-northeast1
 
 #### Firestore Configuration
 
-- **Database Name**: `carewell-native` (NEVER use `(default)`)
-  - Reference: `.kiro/specs/firestore-schema-improvement/requirements.md` Line 1-10
-  - Reference: `docs/firestore-schema-improvement-implementation.md` Line 529
-  - All environments (test, production) MUST use `carewell-native`
+- **Database Name**: NEVER hardcode a literal. Resolve via `resolve_firestore_database_id()`
+  in `src/config/classes.py` (year-scoped: `令和8年度`=`carewell-2026`, `令和7年度`=`carewell-native`).
+  Deny-all client rules for the prior year's DB are a separate follow-up (PR-2), not yet applied
+  as of the 2026-09-14 PR-1 cutover. NEVER use `(default)`
+  - Reference: `.kiro/steering/firestore-critical-config.md` Rule 1
+  - Reference: `docs/SERVICE_SHUTDOWN_AND_RESUME.md`「年度切替チェックリスト」
+  - Test (unit/integration, emulator): `carewell-native`のままでよい（本番DB選択とは無関係）
 
 - **Collection Path Structure**:
 
@@ -260,7 +263,7 @@ gcloud scheduler jobs describe JOB_NAME --location=asia-northeast1
 Before committing changes to Firestore-related code:
 
 - [ ] Read the design document sections listed above
-- [ ] Verify database name is `carewell-native` (NOT `(default)`)
+- [ ] Verify database name is resolved via `resolve_firestore_database_id()` (NOT a hardcoded literal, NOT `(default)`)
 - [ ] Verify collection path uses correct structure
 - [ ] Verify all required parameters are passed (especially `task_pattern`)
 - [ ] Check if parent document fields match design specification

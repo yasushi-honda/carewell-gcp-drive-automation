@@ -6,13 +6,19 @@ Dashboard デプロイ前に、全クラス・全課題のデータが
 新スキーマに存在するか確認します。
 """
 
+import os
+import sys
 from collections import defaultdict
 
 from google.cloud import firestore
 
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+from src.config.classes import resolve_firestore_database_id  # noqa: E402
+
 # Firestore設定
 PROJECT_ID = "carewell-automation"
-DATABASE_NAME = "carewell-native"
+DATABASE_NAME = resolve_firestore_database_id()
 
 # 全クラス・課題リスト（src/config/classes.py の KNOWN_CLASSES と同期。読み取り専用スクリプトのため
 # 令和8年度全10クラスに更新済み。旧№10欠落の不備もここで解消）

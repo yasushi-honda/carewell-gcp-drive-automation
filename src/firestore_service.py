@@ -7,6 +7,8 @@ from typing import Optional
 
 from google.cloud import firestore
 
+from config.classes import resolve_firestore_database_id
+
 logger = logging.getLogger(__name__)
 
 
@@ -17,7 +19,7 @@ class FirestoreService:
 
     def __init__(self):
         """Initialize Firestore client with Native Mode database"""
-        self.db = firestore.Client(database="carewell-native")
+        self.db = firestore.Client(database=resolve_firestore_database_id())
         self.collection_name = "uploaded_files"
 
     def _generate_composite_key(

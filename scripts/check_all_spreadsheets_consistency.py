@@ -11,10 +11,11 @@ sys.path.insert(0, "/Users/yyyhhh/carewell-gcp-drive-automation")
 
 from google.cloud import firestore
 
+from src.config.classes import resolve_firestore_database_id
 from src.sheets_service import SheetsService
 
 # 設定
-DATABASE_NAME = "carewell-native"
+DATABASE_NAME = resolve_firestore_database_id()
 PROJECT_ID = "carewell-automation"
 
 # クラス別スプレッドシートID と Firestoreクラス名のマッピング
