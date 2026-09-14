@@ -164,6 +164,12 @@ describe('firestore.rules', () => {
       }
     });
 
+    // 注意: match /{path=**}/files/{fileId} は"files"という名前を持つ任意階層の
+    // サブコレクション全てにread権限を与える(dashboard/firestore.rulesのコメント参照)。
+    // submissions配下に限定するget/list分離を実機検証したが、Firestoreの仕様上
+    // collectionGroupクエリのlist操作を特定サブツリーに絞り込むことはできないため
+    // 断念した。この制約はテストでは検証不能なため、ルール側のコメントで明記している。
+
     it('admins get = 拒否（再帰ワイルドカードのトラップの回帰テスト）', async () => {
       await seedAdmin(ADMIN_EMAIL);
       await assertFails(getDoc(doc(unauthedDb(), 'admins', ADMIN_EMAIL)));

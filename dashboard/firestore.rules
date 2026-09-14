@@ -38,10 +38,24 @@ service cloud.firestore {
     // 提出ファイル(collectionGroupクエリ用): 受講生詳細ページの提出履歴表示は
     // collectionGroup('files')で全クラス・全課題を横断検索する。上のmatch
     // /submissions/{document=**}は起点パスが固定された「path-specific」ルールのため、
-    // Firestoreの仕様上collectionGroupクエリには適用されない。コレクションID自体を
-    // ワイルドカードにした専用ルールが必要（2026-08-27のIssue #12対応でこの点が
-    // 見落とされ、以降「提出履歴」機能がMissing or insufficient permissionsで
-    // 機能しなくなっていた）。
+    // Firestoreの仕様上collectionGroupクエリには適用されない（2026-08-27のIssue #12
+    // 対応でこの点が見落とされ、以降「提出履歴」機能がMissing or insufficient
+    // permissionsで機能しなくなっていた）。
+    //
+    // 🚨 codex review指摘・実機検証済みの既知の制約: このルールは"files"という名前を持つ
+    // 任意階層のサブコレクション全てにread権限を与えてしまい、submissions配下に限定
+    // できない。以下2つの代替案を実機で試したが、いずれもFirestoreの仕様上機能しなかった:
+    //   1. match /submissions/{class}/tasks/{task}/files/{fileId}のように祖先パスの
+    //      深さを固定する → collectionGroupクエリのlist操作自体が拒否される
+    //      （祖先パスが可変長ワイルドカード{path=**}でないと、Firestoreはcollection
+    //      group全体のlist権限を評価できない仕様のため）
+    //   2. list権限だけ広く許可し、get権限をsubmissions配下に限定する → list実行時は
+    //      個々のドキュメントのget権限が再評価されず、クエリにマッチした全ドキュメント
+    //      がそのまま返ってしまう（get限定の効果がない）
+    // 結論: 現時点で"files"という名前のサブコレクションはsubmissions配下にしか存在しない
+    // ため実害はないが、将来別の場所に"files"という名前のサブコレクションを追加する場合は
+    // このルールが意図せず公開範囲を広げる。追加する際は、このルールをリネーム等で
+    // 無害化してから新コレクションを追加すること。
     match /{path=**}/files/{fileId} {
       allow read: if true;
       allow write: if false;
