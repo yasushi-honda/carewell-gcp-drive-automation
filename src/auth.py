@@ -43,6 +43,7 @@ ALLOWED_OIDC_AUDIENCES = frozenset(
         CLOUD_RUN_BASE_URL,
         f"{CLOUD_RUN_BASE_URL}/",
         f"{CLOUD_RUN_BASE_URL}/admin/sync-students-from-sheets",
+        f"{CLOUD_RUN_BASE_URL}/admin/sync-students-from-attendance-rosters",
     }
 )
 ADMINS_COLLECTION = "admins"
@@ -60,6 +61,10 @@ ROUTE_POLICY = {
     ("POST", "/"): (SCHEME_SCHEDULER,),
     ("POST", "/cleanup"): (SCHEME_FIREBASE_ADMIN,),
     ("POST", "/admin/sync-students-from-sheets"): (
+        SCHEME_SCHEDULER,
+        SCHEME_FIREBASE_ADMIN,
+    ),
+    ("POST", "/admin/sync-students-from-attendance-rosters"): (
         SCHEME_SCHEDULER,
         SCHEME_FIREBASE_ADMIN,
     ),

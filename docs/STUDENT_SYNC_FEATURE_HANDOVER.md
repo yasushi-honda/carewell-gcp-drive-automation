@@ -6,6 +6,17 @@
 
 ---
 
+> ⚠️ **2026-09-14更新: このドキュメントの大部分は令和7年度時点の旧アーキテクチャを記述しています。**
+> 令和8年度は「統合_受講者リスト」経由の同期（`/admin/sync-students-from-sheets`、下記「機能概要」
+> 「システム構成図」「データフロー図」「Dashboard 手動同期機能」「処理フロー図」が説明している方式）
+> は**無効化**されており、代わりにクラス別出欠管理ファイル（`{No}_受講者リスト_出欠管理`）経由の
+> 新エンドポイント`/admin/sync-students-from-attendance-rosters`に統一されています
+> （`src/main.py`の`_sync_students_from_attendance_rosters()`、`sync_students_from_sheets()`の
+> 年度ガード参照）。以下の図・コード例は**令和7年度以前の参考資料**として読み、現行の実装は
+> 該当ソースファイルを直接確認してください。「Cloud Scheduler 設定」節の追記も参照。
+
+---
+
 ## 目次
 
 1. [機能概要](#機能概要)
@@ -298,6 +309,14 @@ file_doc.reference.update(update_data)
 | **サービスアカウント** | `carewell-automation-sa@carewell-automation.iam.gserviceaccount.com` |
 | **タイムアウト** | 180秒 |
 | **リトライ** | 最大3回、バックオフ 10-300秒 |
+
+> ⚠️ **2026-09-14更新**: このジョブが指す`/admin/sync-students-from-sheets`（統合_受講者リスト経由）は、
+> 令和8年度は無効化されている（`src/main.py`の`sync_students_from_sheets()`が年度ガードで409を返す）。
+> 出欠管理名簿（クラス別受講者リスト）経由の新エンドポイント`/admin/sync-students-from-attendance-rosters`
+> に統一されたため。このジョブは現在他の全ジョブ同様PAUSED状態（`docs/SERVICE_SHUTDOWN_AND_RESUME.md`
+> 参照）のため即時の実害はないが、**このジョブを将来resumeする前に、必ずURLを新エンドポイントへ
+> retarget（または本ジョブを削除し新規ジョブを作成）すること**。retargetせずresumeすると、毎日409を
+> 返すだけで実際には何も同期されない（codex実装レビュー指摘、2026-09-14 attendance-roster-sync PR）。
 
 ### 確認コマンド
 

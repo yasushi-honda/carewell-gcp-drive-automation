@@ -210,13 +210,44 @@ const showNotification = (type: 'success' | 'error', title: string, message: str
  */
 const handleSync = async () => {
   try {
-    const result = await syncStudents({ backfill: true })
+    const result = await syncStudents()
 
-    if (result.status === 'success') {
+    if (result.status === 'success' || result.status === 'partial_failure') {
+      const classes = result.classes || []
+      const totalSynced = classes.reduce((sum, c) => sum + (c.synced || 0), 0)
+      const totalWithdrawn = classes.reduce((sum, c) => sum + (c.withdrawn || 0), 0)
+      const totalFailed = classes.reduce((sum, c) => sum + (c.write_failed || 0), 0)
+      const notConfigured = result.not_configured_classes || []
+      const parts = [`受講生: ${totalSynced}件同期`]
+      if (totalWithdrawn > 0) parts.push(`退会検出: ${totalWithdrawn}件`)
+      if (notConfigured.length > 0) parts.push(`未準備クラス: ${notConfigured.join('、')}`)
+      if (result.status === 'partial_failure') {
+        parts.push(`書込み失敗: ${totalFailed}件`)
+        showNotification('error', '同期一部失敗', parts.join(' / '))
+      } else {
+        showNotification('success', '同期完了', parts.join(' / '))
+      }
+    } else if (result.status === 'aborted') {
+      // フェーズAで異常を検出し、Firestoreへは書き込まずに中断した状態
+      // (fail-closed)。診断情報を要約して表示する。
+      const reasons: string[] = []
+      if (result.error_classes && result.error_classes.length > 0) {
+        reasons.push(
+          `読み取り異常: ${result.error_classes.map((c) => c.class_name).join('、')}`
+        )
+      }
+      if (result.malformed_rows && result.malformed_rows.length > 0) {
+        reasons.push(
+          `データ不備: ${result.malformed_rows.map((r) => r.class_name).join('、')}`
+        )
+      }
+      if (result.duplicate_student_ids && result.duplicate_student_ids.length > 0) {
+        reasons.push(`日介番号重複: ${result.duplicate_student_ids.length}件`)
+      }
       showNotification(
-        'success',
-        '同期完了',
-        `受講生: ${result.students_synced}件同期、ファイル: ${result.files_backfilled || 0}件更新`
+        'error',
+        '同期中断',
+        `異常が検出されたため書き込みを行いませんでした。${reasons.join(' / ')}`
       )
     } else {
       showNotification('error', '同期エラー', result.error || '不明なエラーが発生しました')

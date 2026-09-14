@@ -132,3 +132,38 @@ def resolve_firestore_database_id() -> str:
             "src/config/classes.pyのFIRESTORE_DATABASE_IDS_BY_YEARに追加してください。"
         )
     return database_id
+
+
+# クラス別出欠管理ファイル({No}_受講者リスト_出欠管理)のスプレッドシートID。
+# scripts/merge_student_roster.pyのKNOWN_ATTENDANCE_FILE_IDSと同一内容を正本として
+# ここに一元管理する（元は両ファイルに重複定義されており、ドリフトのリスクが
+# あったため統合。plan-crossreview対応、2026-09-14）。
+# №08・10は課程未作成のため意図的に不在（`_sync_students_from_attendance_rosters`が
+# not_configured_classesとしてレスポンスに明示する）。
+ATTENDANCE_ROSTER_FILE_IDS = {
+    "01": "10pXxlqzIvWNGt0QZQpgcsgguOvW372RVS2eSkGpMws4",
+    "02": "138wCXPyD8JeSbnYhC2-UYi1haJB9OqA61JipwKrm-Uc",
+    "03": "1I9t6CzePqaPQxsHfv5r8H2zrBoXRss65flJKZbqk-uU",
+    "04": "1rRHdPa5QEuvKG4uI8tKZpocpobzLaubLi1D0cGgWGl4",
+    "05": "1F45fZ0-q8-sncS6evRaJ31_hZLaFR3p6Jr5tXq0Byz8",
+    "06": "16tpctLo8x_Bn_oLy2sfHv8qyHxGmnqyJufp6-AJJ2Rs",
+    "07": "1ooY1O5eurA7MWXN7u8l8A-WytBRTVM62jwBUPSDR62A",
+    "09": "1kTR2myJocAeDajT8Tr3Uy6_Kg7pbCVueVgLmJTdSy-U",
+}
+
+# クラス別出欠管理ファイルの「受講者リスト」タブのヘッダー(A〜J列、10列)。
+# scripts/merge_student_roster.pyと共有し、同スクリプトはここからimportする
+# （ランタイムコードがscripts配下の定数に依存するのは責務が逆であるため、
+# 共有モジュール側に定義を寄せた。plan-crossreview codex指摘対応）。
+ATTENDANCE_ROSTER_HEADER = [
+    "氏名",
+    "ふりがな",
+    "日介番号",
+    "会社",
+    "事業所",
+    "サービス種別",
+    "入所・居宅系",
+    "グループ",
+    "受講者番号",
+    "受講者番号（グループ付き）",
+]
