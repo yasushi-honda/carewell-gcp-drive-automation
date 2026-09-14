@@ -14,7 +14,20 @@ import {
   assertFails,
   type RulesTestEnvironment,
 } from '@firebase/rules-unit-testing';
-import { doc, getDoc, getDocs, collection, setDoc, updateDoc, deleteDoc } from 'firebase/firestore';
+import {
+  doc,
+  getDoc,
+  getDocs,
+  collection,
+  collectionGroup,
+  query,
+  where,
+  setDoc,
+  updateDoc,
+  deleteDoc,
+  initializeFirestore,
+} from 'firebase/firestore';
+import { initializeApp, deleteApp } from 'firebase/app';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
@@ -22,6 +35,7 @@ import { dirname, resolve } from 'node:path';
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const RULES_PATH = resolve(__dirname, '../../dashboard/firestore.rules');
 
+const PROJECT_ID = 'demo-carewell-rules-test';
 const ADMIN_EMAIL = 'admin@example.com';
 const NON_ADMIN_EMAIL = 'nobody@example.com';
 
@@ -29,7 +43,7 @@ let testEnv: RulesTestEnvironment;
 
 beforeAll(async () => {
   testEnv = await initializeTestEnvironment({
-    projectId: 'demo-carewell-rules-test',
+    projectId: PROJECT_ID,
     firestore: {
       rules: readFileSync(RULES_PATH, 'utf8'),
       host: 'localhost',
@@ -58,6 +72,34 @@ async function seedStudent(id: string, data: Record<string, unknown>) {
   });
 }
 
+// collectionGroupの回帰テストは、RulesTestContextのcompat Firestoreを追加生成せずに
+// Emulatorのownerトークンでシードする。withSecurityRulesDisabled()と同じ権限で、
+// compatラッパーの初期化状態との干渉を避ける。
+async function seedCollectionGroupFile(
+  path: string,
+  data: { filename: string; student_id: string }
+) {
+  const response = await fetch(
+    `http://localhost:8080/v1/projects/${PROJECT_ID}/databases/(default)/documents/${path}`,
+    {
+      method: 'PATCH',
+      headers: {
+        Authorization: 'Bearer owner',
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        fields: {
+          filename: { stringValue: data.filename },
+          student_id: { stringValue: data.student_id },
+        },
+      }),
+    }
+  );
+  if (!response.ok) {
+    throw new Error(`collectionGroup用シードに失敗しました: ${await response.text()}`);
+  }
+}
+
 function adminDb(email: string) {
   return testEnv
     .authenticatedContext(email, { email, email_verified: true })
@@ -66,6 +108,20 @@ function adminDb(email: string) {
 
 function unauthedDb() {
   return testEnv.unauthenticatedContext().firestore();
+}
+
+// collectionGroupクエリはcompatラッパーを経由せず、modular SDKの専用Appで実行する。
+// 接続先は initializeFirestore() の時点で一度だけ設定する。
+async function unauthedDbForCollectionGroup() {
+  const app = initializeApp(
+    { projectId: PROJECT_ID },
+    `collection-group-test-${Date.now()}-${Math.random()}`
+  );
+  const db = initializeFirestore(app, {
+    host: 'localhost:8080',
+    ssl: false,
+  });
+  return { db, cleanup: () => deleteApp(app) };
 }
 
 describe('firestore.rules', () => {
@@ -86,6 +142,33 @@ describe('firestore.rules', () => {
         getDoc(doc(unauthedDb(), 'submissions/ClassA/tasks/Task1/files/File1'))
       );
     });
+
+    it('submissions配下のfilesへのcollectionGroupクエリ read = 成功（受講生詳細ページの提出履歴表示で使用。回帰テスト: match /submissions/{document=**}はpath-specificのためcollectionGroupクエリに適用されない仕様の穴を検出する）', async () => {
+      await seedCollectionGroupFile('submissions/ClassA/tasks/Task1/files/File1', {
+        filename: 'x.pdf',
+        student_id: 'N0001',
+      });
+      await seedCollectionGroupFile('submissions/ClassB/tasks/Task2/files/File2', {
+        filename: 'y.pdf',
+        student_id: 'N0002',
+      });
+      const { db, cleanup } = await unauthedDbForCollectionGroup();
+      try {
+        const q = query(collectionGroup(db, 'files'), where('student_id', '==', 'N0001'));
+        const snapshot = await assertSucceeds(getDocs(q));
+        if (snapshot.size !== 1) {
+          throw new Error(`期待した件数と異なります: expected=1 actual=${snapshot.size}`);
+        }
+      } finally {
+        await cleanup();
+      }
+    });
+
+    // 注意: match /{path=**}/files/{fileId} は"files"という名前を持つ任意階層の
+    // サブコレクション全てにread権限を与える(dashboard/firestore.rulesのコメント参照)。
+    // submissions配下に限定するget/list分離を実機検証したが、Firestoreの仕様上
+    // collectionGroupクエリのlist操作を特定サブツリーに絞り込むことはできないため
+    // 断念した。この制約はテストでは検証不能なため、ルール側のコメントで明記している。
 
     it('admins get = 拒否（再帰ワイルドカードのトラップの回帰テスト）', async () => {
       await seedAdmin(ADMIN_EMAIL);
