@@ -9,11 +9,19 @@ import { ref, readonly } from 'vue';
 import { useAuth } from './useAuth';
 
 /**
+ * クラス別読み取り結果のstatus。Python側 src/sheets_service.py の
+ * RosterReadResult.status（RosterStatus = Literal["ok","empty","read_error",
+ * "schema_error"]）と値域を一致させる。BE/FEを繋ぐ唯一の静的検証点のため、
+ * 素の`string`ではなくUnion型にする（type-design-analyzer指摘対応）。
+ */
+export type RosterStatus = 'ok' | 'empty' | 'read_error' | 'schema_error';
+
+/**
  * クラス別の同期結果（/admin/sync-students-from-attendance-rosters のレスポンス）
  */
 export interface ClassSyncSummary {
   class_name: string;
-  status: string; // "ok" | "empty" | "read_error" | "schema_error"
+  status: RosterStatus;
   student_count?: number; // フェーズAのみ実行時(dry_run/aborted)に含まれる
   synced?: number;
   created?: number;
@@ -24,7 +32,7 @@ export interface ClassSyncSummary {
 
 export interface ErrorClassInfo {
   class_name: string;
-  status: string;
+  status: RosterStatus;
   error: string | null;
 }
 

@@ -5,7 +5,7 @@ Google Sheets Service for recording uploaded files
 import logging
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import List, Optional
+from typing import List, Literal, Optional
 
 from google.auth import default
 from googleapiclient.discovery import build
@@ -13,6 +13,8 @@ from googleapiclient.discovery import build
 from config.classes import ATTENDANCE_ROSTER_HEADER
 
 logger = logging.getLogger(__name__)
+
+RosterStatus = Literal["ok", "empty", "read_error", "schema_error"]
 
 
 @dataclass
@@ -29,7 +31,7 @@ class RosterReadResult:
     """
 
     class_name: str
-    status: str
+    status: RosterStatus
     students: List[dict] = field(default_factory=list)
     malformed_rows: List[dict] = field(default_factory=list)
     error_detail: Optional[str] = None
@@ -398,7 +400,7 @@ class SheetsService:
                     }
                 )
 
-            status = "ok" if students else "empty"
+            status: RosterStatus = "ok" if students else "empty"
             return RosterReadResult(
                 class_name=class_name,
                 status=status,
