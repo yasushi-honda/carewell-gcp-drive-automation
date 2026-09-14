@@ -121,8 +121,9 @@ export function useStudentSync() {
       if (response.status === 403) {
         throw new Error('管理者権限がありません');
       }
-      // 409は「フェーズAで異常検出→書込み中断」の正常な業務レスポンスでもあるため
-      // (aborted)、ここではHTTPエラーとして弾かず、通常通りJSONをパースして返す。
+      // 409は正常な業務レスポンスでもあるため(status="aborted": フェーズAで異常検出
+      // →書込み中断／status="partial_failure": フェーズBは実行されたが一部書込みが
+      // 失敗、のいずれか)、ここではHTTPエラーとして弾かず、通常通りJSONをパースして返す。
       if (!response.ok && response.status !== 409) {
         const errorText = await response.text();
         throw new Error(`HTTP ${response.status}: ${errorText}`);

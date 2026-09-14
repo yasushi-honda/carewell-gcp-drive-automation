@@ -568,7 +568,18 @@ class FirestoreService:
             if preserve_existing_status:
                 existing = doc_ref.get()
                 if existing.exists:
-                    doc_data.pop("status", None)
+                    existing_data = existing.to_dict() or {}
+                    if existing_data.get("auto_withdrawn"):
+                        # reconcile(退会検出)が自動的にwithdrawn化した受講者が
+                        # 名簿に再登場した。Dashboardからの手動「辞退」操作
+                        # (auto_withdrawnフィールドなし)とは区別し、こちらは
+                        # 自動的にactiveへ復帰させる（pr-review-toolkit
+                        # code-reviewer指摘対応: 自動withdrawn化に対する
+                        # 自動復帰経路が無いと、誤検出が永久に固定化される）
+                        doc_data["status"] = "active"
+                        doc_data["auto_withdrawn"] = False
+                    else:
+                        doc_data.pop("status", None)
                 else:
                     doc_data["status"] = "active"
 
@@ -612,12 +623,23 @@ class FirestoreService:
         出欠名簿から消えた受講者をstatus="withdrawn"に更新する（削除はしない
         — 提出履歴等の参照整合性を保つため）。
 
+        auto_withdrawn=Trueを併せて記録する。Dashboardから手動で「辞退」設定
+        された場合(auto_withdrawnフィールドなし)と区別するためで、この
+        フラグが立っている場合に限り、その受講者が名簿に再登場した際
+        create_student()側が自動的にactiveへ復帰させる（誤って自動withdrawn
+        化された受講者が、手動操作なしでは永久にwithdrawnのまま固定される
+        事故を防ぐ — pr-review-toolkit code-reviewer指摘対応、2026-09-14）。
+
         Returns:
             True if successful, False otherwise
         """
         try:
             self.db.collection("students").document(student_id).set(
-                {"status": "withdrawn", "last_updated": firestore.SERVER_TIMESTAMP},
+                {
+                    "status": "withdrawn",
+                    "auto_withdrawn": True,
+                    "last_updated": firestore.SERVER_TIMESTAMP,
+                },
                 merge=True,
             )
             return True

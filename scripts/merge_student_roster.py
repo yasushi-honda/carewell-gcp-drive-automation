@@ -528,7 +528,8 @@ def resolve_attendance_spreadsheet_id(class_num: str) -> str:
         )
     file_id = files[0]["id"]
     print(
-        f"[情報] 発見したファイルID={file_id} をKNOWN_ATTENDANCE_FILE_IDSに追記してください"
+        f"[情報] 発見したファイルID={file_id} をsrc/config/classes.pyの"
+        f"ATTENDANCE_ROSTER_FILE_IDSに追記してください"
     )
     return file_id
 

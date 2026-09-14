@@ -901,7 +901,14 @@ def _sync_students_from_attendance_rosters(
                 )
 
         withdrawn = 0
-        if not write_error_ids:
+        # 現在の名簿が0件(status="empty")のクラスではreconcileを実行しない。
+        # クライアント側の操作ミス等で名簿タブのデータ行が全削除された場合、
+        # ガードなしだとその1回の同期で当該クラスの既存在籍者全員が
+        # withdrawn化されてしまう(common-mistakes.mdパターン9と同種の
+        # 「0件を無条件に信頼する」事故。pr-review-toolkit code-reviewer
+        # 指摘対応、2026-09-14)。トレードオフとして、あるクラスの最後の
+        # 1名が正当に退会したケースは自動検出されず、手動対応が必要になる。
+        if not write_error_ids and r.students:
             try:
                 existing_ids = firestore_service.get_student_ids_by_class_and_source(
                     r.class_name, "attendance_roster"

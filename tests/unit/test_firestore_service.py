@@ -583,7 +583,10 @@ class TestCreateStudent:
             assert "sync_source" not in doc_data
 
     def test_preserve_existing_status_true_keeps_existing_status(self):
-        """preserve_existing_status=Trueで既存ドキュメントがある場合、statusを上書きしない。"""
+        """
+        preserve_existing_status=Trueで既存ドキュメントがあり、それがDashboard
+        からの手動操作(auto_withdrawnフィールドなし)の場合、statusを上書きしない。
+        """
         with patch("firestore_service.firestore.Client") as mock_client:
             mock_db = Mock()
             mock_client.return_value = mock_db
@@ -591,6 +594,8 @@ class TestCreateStudent:
             mock_db.collection.return_value.document.return_value = mock_doc_ref
             mock_snapshot = Mock()
             mock_snapshot.exists = True
+            # auto_withdrawnフィールドが無い = Dashboardからの手動操作を模擬
+            mock_snapshot.to_dict.return_value = {"status": "withdrawn"}
             mock_doc_ref.get.return_value = mock_snapshot
 
             service = self.FirestoreService()
@@ -602,6 +607,38 @@ class TestCreateStudent:
 
             doc_data = mock_doc_ref.set.call_args[0][0]
             assert "status" not in doc_data
+
+    def test_preserve_existing_status_true_auto_recovers_auto_withdrawn_student(self):
+        """
+        reconcile(退会検出)が自動的にwithdrawn化した受講者(auto_withdrawn=True)
+        が名簿に再登場した場合、Dashboardからの手動「辞退」操作とは区別し、
+        自動的にactiveへ復帰させる。復帰時はauto_withdrawnフラグもFalseに
+        戻す（pr-review-toolkit code-reviewer指摘対応: 自動withdrawn化に対する
+        自動復帰経路が無いと、誤検出が永久に固定化されるバグがあった）。
+        """
+        with patch("firestore_service.firestore.Client") as mock_client:
+            mock_db = Mock()
+            mock_client.return_value = mock_db
+            mock_doc_ref = Mock()
+            mock_db.collection.return_value.document.return_value = mock_doc_ref
+            mock_snapshot = Mock()
+            mock_snapshot.exists = True
+            mock_snapshot.to_dict.return_value = {
+                "status": "withdrawn",
+                "auto_withdrawn": True,
+            }
+            mock_doc_ref.get.return_value = mock_snapshot
+
+            service = self.FirestoreService()
+            service.create_student(
+                {"student_id": "N001", "name": "山田太郎"},
+                preserve_existing_status=True,
+                sync_source="attendance_roster",
+            )
+
+            doc_data = mock_doc_ref.set.call_args[0][0]
+            assert doc_data["status"] == "active"
+            assert doc_data["auto_withdrawn"] is False
 
     def test_preserve_existing_status_true_new_student_gets_active(self):
         """preserve_existing_status=Trueで新規学生の場合、status="active"になる。"""
@@ -705,6 +742,10 @@ class TestMarkStudentWithdrawn:
             assert result is True
             call_args = mock_doc_ref.set.call_args
             assert call_args[0][0]["status"] == "withdrawn"
+            # auto_withdrawn=Trueも併せて記録する。手動の「辞退」操作
+            # (このフィールドを持たない)と区別し、名簿再登場時の自動復帰を
+            # 可能にするため(create_student()のpreserve_existing_status参照)
+            assert call_args[0][0]["auto_withdrawn"] is True
             assert call_args[1]["merge"] is True
 
     def test_returns_false_on_error(self):

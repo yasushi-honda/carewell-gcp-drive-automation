@@ -167,6 +167,40 @@ class TestPhaseAAbortConditions:
         # No1/No2の2クラスとも設定済みのため、未設定クラスは0件になるはず
         assert result["not_configured_classes"] == []
 
+    def test_not_configured_classes_reports_actual_gap(self):
+        """
+        本番相当の状況(KNOWN_CLASSESが10クラス分あるが、ATTENDANCE_ROSTER_FILE_IDS
+        には一部しか設定されていない、実際に№08・10が意図的に不在なのと同型)を
+        再現し、not_configured_classesの差分計算(all_class_nums - 設定済みキー)
+        自体が正しく機能することを検証する（pr-review-toolkit pr-test-analyzer
+        指摘対応: 従来のテストは常に差分0件になる構成だったため、差分計算ロジック
+        自体は一度も実行されずに緑になっていた）。
+        """
+        with patch.dict(
+            main.ATTENDANCE_ROSTER_FILE_IDS, {"01": "id-01", "02": "id-02"}, clear=True
+        ), patch("main.KNOWN_CLASSES", ["dummy"] * 10):
+            sheets_service = Mock()
+            sheets_service.get_attendance_roster_data.side_effect = [
+                RosterReadResult(class_name="No1", status="empty", students=[]),
+                RosterReadResult(class_name="No2", status="empty", students=[]),
+            ]
+            firestore_service = Mock()
+
+            result = main._sync_students_from_attendance_rosters(
+                sheets_service, firestore_service
+            )
+
+            assert result["not_configured_classes"] == [
+                "No3",
+                "No4",
+                "No5",
+                "No6",
+                "No7",
+                "No8",
+                "No9",
+                "No10",
+            ]
+
 
 class TestDryRun:
     def test_dry_run_never_writes_even_when_all_ok(self, patched_config):
@@ -187,6 +221,32 @@ class TestDryRun:
         assert result["dry_run"] is True
         firestore_service.create_student.assert_not_called()
         firestore_service.mark_student_withdrawn.assert_not_called()
+
+    def test_dry_run_detects_anomalies_as_aborted(self, patched_config):
+        """
+        dry_run=Trueはpreflight用途(読み取り権限・ヘッダー一致の事前確認)で
+        使われる想定のため、異常検出時にstatus="aborted"を正しく返せることが
+        重要。dry_run=Trueかつ全クラス正常、という組み合わせしかテストして
+        いなかった場合、まさにこのpreflightの主目的（異常を検知できるか）が
+        検証されないままになる（pr-review-toolkit pr-test-analyzer指摘対応）。
+        """
+        sheets_service = Mock()
+        sheets_service.get_attendance_roster_data.side_effect = [
+            RosterReadResult(
+                class_name="No1", status="read_error", error_detail="403 Forbidden"
+            ),
+            RosterReadResult(class_name="No2", status="empty", students=[]),
+        ]
+        firestore_service = Mock()
+
+        result = main._sync_students_from_attendance_rosters(
+            sheets_service, firestore_service, dry_run=True
+        )
+
+        assert result["status"] == "aborted"
+        assert result["dry_run"] is True
+        assert result["error_classes"][0]["class_name"] == "No1"
+        firestore_service.create_student.assert_not_called()
 
 
 class TestPhaseBWrite:
@@ -222,6 +282,38 @@ class TestPhaseBWrite:
         for call in firestore_service.create_student.call_args_list:
             assert call.kwargs["preserve_existing_status"] is True
             assert call.kwargs["sync_source"] == "attendance_roster"
+
+    def test_empty_roster_skips_reconcile_entirely(self, patched_config):
+        """
+        現在の名簿が0件(status="empty")のクラスでは、reconcileを一切実行しない。
+
+        クライアント側の操作ミス等で名簿タブのデータ行が全削除された場合、
+        このガードが無いと、既存在籍者全員が1回の同期でwithdrawn化されて
+        しまう(common-mistakes.mdパターン9と同種の「0件を無条件に信頼する」
+        事故。pr-review-toolkit code-reviewer指摘対応、2026-09-14)。
+        """
+        sheets_service = Mock()
+        sheets_service.get_attendance_roster_data.side_effect = [
+            # No1の名簿が(本来20名程度在籍のところ)何らかの理由で0件になった
+            RosterReadResult(class_name="No1", status="empty", students=[]),
+            RosterReadResult(class_name="No2", status="empty", students=[]),
+        ]
+        firestore_service = Mock()
+        # No1には既存在籍者が20名いる想定だが、reconcile自体が実行されない
+        # ため get_student_ids_by_class_and_source は呼ばれないはず
+        firestore_service.get_student_ids_by_class_and_source.return_value = {
+            f"N{i:03d}": "active" for i in range(20)
+        }
+
+        result = main._sync_students_from_attendance_rosters(
+            sheets_service, firestore_service
+        )
+
+        assert result["status"] == "success"
+        firestore_service.get_student_ids_by_class_and_source.assert_not_called()
+        firestore_service.mark_student_withdrawn.assert_not_called()
+        no1_summary = next(c for c in result["classes"] if c["class_name"] == "No1")
+        assert no1_summary["withdrawn"] == 0
 
     def test_reconcile_marks_students_missing_from_roster_as_withdrawn(
         self, patched_config
@@ -368,11 +460,20 @@ class TestPhaseBWrite:
         withdrawn化され、その後のNo2書込みがpreserve_existing_status=Trueに
         よりwithdrawnステータスを引き継いでしまうバグがあった
         （codex実装レビュー指摘P1、2026-09-14修正）。
+
+        No1の現在名簿にはN001以外の学生(N002)を残し、No1のreconcile自体は
+        実行される状態にしている（"空ロスターではreconcileをスキップする"
+        別のガード(pr-review-toolkit code-reviewer指摘対応)によって
+        このテストの再現条件が意図せず迂回されないようにするため）。
         """
         sheets_service = Mock()
         sheets_service.get_attendance_roster_data.side_effect = [
-            # No1の現在名簿にはN001はもういない(No2へ異動済み)
-            RosterReadResult(class_name="No1", status="empty", students=[]),
+            # No1の現在名簿にはN001はもういない(No2へ異動済み)が、N002は在籍中
+            RosterReadResult(
+                class_name="No1",
+                status="ok",
+                students=[_student("N002", class_name="No1")],
+            ),
             RosterReadResult(
                 class_name="No2",
                 status="ok",
@@ -385,7 +486,7 @@ class TestPhaseBWrite:
         # No1側の既存ドキュメント: N001がまだclass_name="No1"のまま残っている
         firestore_service.get_student_ids_by_class_and_source.side_effect = (
             lambda class_name, sync_source: (
-                {"N001": "active"} if class_name == "No1" else {}
+                {"N001": "active", "N002": "active"} if class_name == "No1" else {}
             )
         )
 
