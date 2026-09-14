@@ -29,8 +29,12 @@ class TestFirestoreService:
         """Test FirestoreService initialization."""
         service = self.FirestoreService()
 
-        # Verify Firestore client was created with correct database
-        mock_client.assert_called_once_with(database="carewell-native")
+        # Verify Firestore client was created with the current academic year's
+        # database (resolved via resolve_firestore_database_id(), 2026-09-14
+        # year-separation change — no longer a hardcoded literal).
+        from config.classes import resolve_firestore_database_id
+
+        mock_client.assert_called_once_with(database=resolve_firestore_database_id())
         assert service.db is not None
 
     def test_update_task_metadata_creates_new_document(self):

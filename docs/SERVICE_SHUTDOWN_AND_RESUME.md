@@ -194,10 +194,13 @@ gcloud scheduler jobs resume "${JOB_NAME}" --location=asia-northeast1
 Hosting分離は「開いたURLで違う年度のUIが表示される」事故は防ぐが、バックエンドが年度という
 概念を持たないために生じる以下のリスクは**一切解決しない**:
 
-1. **① 読み取り側**: `dashboard/src/composables/useStudents.ts:40` は `students` コレクションを
+1. **① 読み取り側**: ~~`dashboard/src/composables/useStudents.ts:40` は `students` コレクションを
    年度条件なしで全件購読する。`students/{student_id}` は年度非依存の短縮形クラス名
    （`"No5"`等、`src/firestore_service.py:498-537`）で保存されるため、両サイトが同一Firestoreを
-   見る限り年度混在した表示になりうる
+   見る限り年度混在した表示になりうる~~
+   **2026-09-14 対応済み**: まさにこのリスクが実際に発生（jaccw指摘、「受講生一覧」に令和7年度の
+   受講者が表示）。読み取り側の年度スコープ限定ではなく、**データベースそのものを年度ごとに分離**
+   する方式で解消した。詳細は本ファイル下部「年度切替チェックリスト」参照
 2. **② 書き込み側**: 新サイトの「同期」ボタン（`dashboard/src/App.vue`の`handleSync`）は
    `syncStudents({ backfill: true })` を呼び、`src/main.py`の`_backfill_all_files`は
    `submissions`コレクションを年度条件なしで全クラス走査する。押した瞬間、令和7年度の
@@ -230,5 +233,53 @@ Hostingの問題ではなくバックエンドのデータモデル・実装の�
 4. **上記「発見した既存バグ」5スクリプトのスキーマ修正**
 5. **№08・10**: 9/24以降にポータル上でコースが実際に現れるか再確認（現時点では申込開始日からの推測に過ぎない未検証の仮説）
 6. ~~`STUDENT_SPREADSHEET_ID`の年度スコープ化~~（上記「Dashboard Hosting分離では解決しない既存の設計上の欠落」③、Issue #5 Phase 1）: **メカニズムは2026-08-26に対応済み**。残るのは`STUDENT_SPREADSHEET_IDS_BY_YEAR`への令和8年度の実IDの設定（再開ゲートの前提条件、値そのものは人間の確認が必要）
-7. **`students`コレクション・`_backfill_all_files`の年度分離**（同①②）。再開ゲートの前提条件
+7. ~~`students`コレクション・`_backfill_all_files`の年度分離~~（同①②）: **2026-09-14、DB単位の分離で対応済み**（下記「年度切替チェックリスト」参照）
 8. **Cloud Run/Hosting両ワークフローの依存関係化**（CIレベルで順序を強制する仕組み。現状は手順書での申し合わせのみ）
+
+---
+
+## 年度切替チェックリスト（2026-09-14追記）
+
+`students`コレクションが年度非依存だったため、令和8年度ダッシュボードに令和7年度の受講者が
+混在表示される事故が発生した（jaccw指摘）。対応として、Firestoreデータベースそのものを
+年度ごとに分離する方式を採用した（`carewell-native`=令和7年度、`carewell-2026`=令和8年度）。
+以降、年度が変わるたびに以下を1セットで実施すること。**「Hosting分離だけ」「DB分離だけ」の
+ような部分対応は、今回と同種の事故を再発させる**。
+
+### 重要な訂正（当初の想定との差分）
+
+年度ごとにFirestore DBを新設する運用は、**毎年「移行作業」が必要になるわけではない**。
+新年度の受講者データが実際に流入し始める前に、あらかじめ新DBを作成し接続先を切り替えて
+おけば、移行対象のデータは常にゼロ件で済む。今回「移行不要」で済んだのはこのケースに
+該当したからであり、逆に言えば**年度が既に始まった後で分離漏れに気づいた場合**は、
+書込みを止めた上で対象データを識別・検証してから移すという例外手順が必要になる
+（令和7年度データを令和8年度DBへ持ち込まない、という方針とは矛盾しない。あくまで
+「気づくのが遅れた場合の火消し」の話）。
+
+### 年度切替の手順（次回・令和9年度切替時に使う）
+
+1. **新年度のシーズン開始前に**、新しいFirestoreデータベースを作成する
+   （`gcloud firestore databases create --database=carewell-<年> --location=asia-northeast1 --type=firestore-native --delete-protection --point-in-time-recovery`）
+2. `src/config/classes.py`の`FIRESTORE_DATABASE_IDS_BY_YEAR`に新年度のエントリを追加
+3. `dashboard/src/config/firebase.ts`のDB名リテラルを新年度のDBに更新
+4. 新しいHostingサイトを作成し（既存の`carewell-dashboard-<年>`パターンを踏襲）、
+   `dashboard/firebase.json`に新DBのrules/indexesエントリを追加してデプロイ・実機検証
+5. `scripts/seed_admins.py`で新DBに管理者を再投入し、件数・メールアドレスを承認済み
+   管理者リストと照合する（`admins`コレクションはDBごとに独立しており引き継がれない）
+6. 上記が全て検証できてから、前年度DB向けのdeny-allルール
+   （`dashboard/firestore-legacy-frozen.rules`相当）を`dashboard/firebase.json`に追加して
+   デプロイする（**必ず最後**。これより前に前年度DBを凍結すると、切替失敗時の復帰経路が
+   なくなる）
+7. 前年度DBの凍結前に、監査目的の一時エクスポートを取得しておく
+   （`gcloud firestore export`）
+
+### 既知の残存リスク（対応不要と判断済み・理由込み）
+
+Firestore Rulesはクライアント（Web SDK）向けの制御であり、Admin SDK/gcloud等の
+サーバー側アクセスは迂回できる。2026-09-14時点でこれに該当する主体を実際にIAM
+ポリシーで確認したところ、`roles/owner`を持つ`user:system@jaccw.or.jp`（本プロジェクトの
+正規運用者）と`carewell-automation-sa`、および`roles/datastore.user`を持つ
+`github-actions-sa`（CIデプロイ用）の3者のみで、外部の第三者や想定外の経路は存在しない。
+したがって「凍結の迂回」自体は事実だが、実質的なリスクは「自分たちのスクリプト・CI
+パイプラインのバグによる誤書き込み」に限定され、追加のIAM Conditions/break-glass設計は
+不要と判断した（DB接続先の環境変数上書きを廃止したことで、主な誤爆経路は既に閉じている）。

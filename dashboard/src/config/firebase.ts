@@ -42,13 +42,15 @@ export function initializeFirebase(): FirebaseApp {
  * Firestoreインスタンスを取得
  * 自動的にFirebaseアプリを初期化
  *
- * Note: carewell-drive-automationが使用している`carewell-native`データベースに接続
+ * Note: 令和8年度専用データベース`carewell-2026`に接続する。
+ * 令和7年度以前は`carewell-native`（凍結済み・別Hostingサイト）を使用していた。
+ * 年度が変わる際はこのリテラルとHostingサイトを同時に切り替えること
+ * （docs/SERVICE_SHUTDOWN_AND_RESUME.mdの年度切替チェックリスト参照）。
  */
 export function getDb(): Firestore {
   if (!db) {
     const firebaseApp = initializeFirebase();
-    // carewell-nativeデータベースに接続
-    db = getFirestore(firebaseApp, 'carewell-native');
+    db = getFirestore(firebaseApp, 'carewell-2026');
   }
   return db;
 }

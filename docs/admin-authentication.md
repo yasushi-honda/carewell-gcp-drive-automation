@@ -89,7 +89,7 @@ DRY_RUN=false python scripts/seed_admins.py --add --file scripts/admins.local.js
 DRY_RUN=false python scripts/seed_admins.py --remove --email admin@example.com
 ```
 
-`FirestoreService` を再利用しており、`carewell-native` データベースへ明示的に書き込む（`(default)` DB に投入すると全管理者が拒否される既知の罠を回避）。
+`FirestoreService` を再利用しており、現在年度用データベース（`resolve_firestore_database_id()`で解決。令和8年度は`carewell-2026`）へ明示的に書き込む（`(default)` DB に投入すると全管理者が拒否される既知の罠を回避）。年度切替直後は、切替先DBに管理者が未投入のため本スクリプトでの再投入が必須（`docs/SERVICE_SHUTDOWN_AND_RESUME.md`「年度切替チェックリスト」参照）。
 
 ## `/cleanup` を手動実行する場合のトークン取得手順
 

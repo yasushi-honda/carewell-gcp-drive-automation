@@ -99,3 +99,36 @@ def resolve_student_spreadsheet_id() -> str:
             "に追加してください。"
         )
     return spreadsheet_id
+
+
+# FirestoreデータベースID（年度表記プレフィックスをキーとする）。
+# 令和7年度・令和8年度が同一DB(carewell-native)を共有していたため、
+# 令和8年度ダッシュボードの「受講生一覧」に令和7年度の受講者が混在表示される
+# 事故が発生した（2026-09-14、jaccw指摘）。年度ごとにDBそのものを分離する。
+#
+# 意図的にSTUDENT_SPREADSHEET_ID方式のような環境変数上書きは設けない。
+# DB接続先を誤った値に上書きできてしまうと、Firestore Rulesによる保護
+# （クライアントSDK向け）を経由しないAdmin SDK経由の書き込みが、凍結済みの
+# 前年度DBへ誤って行われるリスクがあり、スプレッドシートIDの誤設定より
+# 被害が大きい。正当な一時上書きのユースケースも無いため、単純な
+# 年度→DB辞書引きのみとする。
+FIRESTORE_DATABASE_IDS_BY_YEAR = {
+    "令和7年度": "carewell-native",
+    "令和8年度": "carewell-2026",
+}
+
+
+def resolve_firestore_database_id() -> str:
+    """
+    現在年度（KNOWN_CLASSESから動的取得）に対応するFirestoreデータベースIDを
+    解決する。対応するIDが無い場合は、誤ったDBへの暗黙フォールバックを避ける
+    ためValueErrorを送出する。
+    """
+    current_year = get_current_academic_year_prefix()
+    database_id = FIRESTORE_DATABASE_IDS_BY_YEAR.get(current_year)
+    if not database_id:
+        raise ValueError(
+            f"{current_year}のFirestoreデータベースIDが未設定です。"
+            "src/config/classes.pyのFIRESTORE_DATABASE_IDS_BY_YEARに追加してください。"
+        )
+    return database_id

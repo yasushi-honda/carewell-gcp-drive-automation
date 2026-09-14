@@ -8,26 +8,45 @@ Prevent configuration mistakes and design specification violations when working 
 
 ## Critical Rules
 
-### Rule 1: Database Name is IMMUTABLE
+### Rule 1: Database Name is resolved per academic year (NEVER hardcode a literal)
 
-**Database name MUST be `carewell-native` in ALL contexts:**
+**2026-09-14改訂**: 令和7年度・令和8年度が同一DB（`carewell-native`）を共有していたため、
+令和8年度ダッシュボードに令和7年度の受講者データが混在表示される事故が発生した。
+以降、本番DBは年度ごとに完全に分離する（詳細: `docs/SERVICE_SHUTDOWN_AND_RESUME.md`
+「年度切替チェックリスト」）。
 
-- ✅ Production: `carewell-native`
-- ✅ Test (unit): `carewell-native`
-- ✅ Test (integration): `carewell-native`
-- ✅ Emulator: `carewell-native`
+- ✅ Production/scripts: `src/config/classes.py`の`resolve_firestore_database_id()`を
+  必ず経由する。DB名を文字列リテラルで直書きしない
+- ✅ 年度→DB名のマッピングは`src/config/classes.py`の`FIRESTORE_DATABASE_IDS_BY_YEAR`
+  にコードとして管理する（現在: 令和7年度=`carewell-native`、令和8年度=`carewell-2026`）
+- ✅ Test (unit/integration, emulator): `carewell-native`のままでよい（エミュレータ上の
+  任意のDB名ラベルであり、本番DB選択ロジックとは無関係。resolverのロジック自体を
+  検証するテストは`tests/unit/test_classes_config.py`を参照）
+- ✅ Dashboard(フロントエンド): `dashboard/src/config/firebase.ts`の`getDb()`は
+  年度ごとにビルド時のリテラルを更新する（Hostingサイト自体も年度ごとに分離済み
+  のため、動的resolverは不要）
 - ❌ NEVER use `(default)` database
+- ❌ `resolve_firestore_database_id()`に環境変数による上書き機構を追加しない
+  （`resolve_student_spreadsheet_id()`とは異なり、DB接続先の誤上書きは
+  Firestore Rulesを経由しないAdmin SDK書き込みで前年度DBを汚染しうるため、
+  正当なユースケースがない限り持たせない。`/plan-crossreview`でのcodex指摘）
+- ❌ 前年度DB（例: `carewell-native`）は年度切替完了後、クライアントSDKからの
+  読み書きをFirestore Rulesで全面denyにする（`dashboard/firestore-legacy-frozen.rules`）。
+  ただしAdmin SDK/gcloud等のサーバー側アクセスはこれを迂回できる点に注意
+  （プロジェクトIAM権限を持つ主体に限られるため別途のIAM再設計は不要と判断済み）
 
 **Reference documents:**
 
 - `.kiro/specs/firestore-schema-improvement/requirements.md` (Lines 1-10)
 - `docs/firestore-schema-improvement-implementation.md` (Line 529)
+- `docs/SERVICE_SHUTDOWN_AND_RESUME.md` 「年度切替チェックリスト」
 
 **Code locations to verify:**
 
-- `src/firestore_service.py` Line 20: `firestore.Client(database="carewell-native")`
-- `tests/conftest.py` Line 20: `firestore.Client(project=project_id, database="carewell-native")`
-- `tests/conftest.py` Line 54: `firestore.Client(project=project_id, database="carewell-native")`
+- `src/config/classes.py`: `FIRESTORE_DATABASE_IDS_BY_YEAR` / `resolve_firestore_database_id()`
+- `src/firestore_service.py` Line 20: `firestore.Client(database=resolve_firestore_database_id())`
+- `dashboard/src/config/firebase.ts`: `getFirestore(firebaseApp, '<年度のDB名>')`
+- `dashboard/firebase.json`: `firestore`配列（年度ごとのDB + 前年度の凍結ルール）
 
 ### Rule 2: Collection Path Structure is FIXED
 

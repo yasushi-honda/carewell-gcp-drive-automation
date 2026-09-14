@@ -80,3 +80,42 @@ class TestResolveStudentSpreadsheetId:
             ):
                 with pytest.raises(ValueError):
                     classes_config.resolve_student_spreadsheet_id()
+
+
+class TestResolveFirestoreDatabaseId:
+    """
+    2026-09-14: 令和7年度・令和8年度が同一Firestore DBを共有していたため、
+    令和8年度ダッシュボードに令和7年度の受講者が混在表示される事故が発生した。
+    以降DBを年度ごとに分離する。resolve_student_spreadsheet_id()と異なり、
+    誤ったDBへの誤接続の被害が大きいため環境変数上書きは持たせない
+    （/plan-crossreviewでのcodex指摘）。
+    """
+
+    def test_resolves_current_year_database_id(self):
+        with patch.dict(
+            classes_config.FIRESTORE_DATABASE_IDS_BY_YEAR,
+            {CURRENT_YEAR_PREFIX: "current-year-db"},
+            clear=True,
+        ):
+            assert classes_config.resolve_firestore_database_id() == "current-year-db"
+
+    def test_raises_when_current_year_entry_missing(self):
+        with patch.dict(classes_config.FIRESTORE_DATABASE_IDS_BY_YEAR, {}, clear=True):
+            with pytest.raises(ValueError, match=CURRENT_YEAR_PREFIX):
+                classes_config.resolve_firestore_database_id()
+
+    def test_environment_variable_has_no_override_effect(self):
+        """
+        DB選択には意図的にenv var上書き機構を持たせていない回帰テスト。
+        STUDENT_SPREADSHEET_IDと同名の慣習(FIRESTORE_DATABASE_ID)を環境変数に
+        設定しても、辞書引きの結果に一切影響しないこと。
+        """
+        with patch.dict(os.environ, {"FIRESTORE_DATABASE_ID": "should-be-ignored"}):
+            with patch.dict(
+                classes_config.FIRESTORE_DATABASE_IDS_BY_YEAR,
+                {CURRENT_YEAR_PREFIX: "current-year-db"},
+                clear=True,
+            ):
+                assert (
+                    classes_config.resolve_firestore_database_id() == "current-year-db"
+                )
