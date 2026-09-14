@@ -26,6 +26,10 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
+from src.config.classes import (  # noqa: E402
+    ATTENDANCE_ROSTER_FILE_IDS as KNOWN_ATTENDANCE_FILE_IDS,
+)
+from src.config.classes import ATTENDANCE_ROSTER_HEADER as ROSTER_HEADER  # noqa: E402
 from src.gcp_sa_auth import call_with_reauth, get_impersonated_service  # noqa: E402
 
 SA_EMAIL = "carewell-automation-sa@carewell-automation.iam.gserviceaccount.com"
@@ -39,18 +43,8 @@ APPLICATION_SPREADSHEET_ID = (
     "1ybWm0n0e7Ixk6A_GbLGwmPhixza01PF7Kn0NXv6jXcg"  # 【申込状況】
 )
 
-# 既知クラスのスプレッドシートID。未登録クラスはDrive名前検索で解決し、
-# 発見したIDをここに追記する運用とする(Codex指摘H4: 名前検索を毎回の識別子にしない)。
-KNOWN_ATTENDANCE_FILE_IDS = {
-    "01": "10pXxlqzIvWNGt0QZQpgcsgguOvW372RVS2eSkGpMws4",
-    "02": "138wCXPyD8JeSbnYhC2-UYi1haJB9OqA61JipwKrm-Uc",
-    "03": "1I9t6CzePqaPQxsHfv5r8H2zrBoXRss65flJKZbqk-uU",
-    "04": "1rRHdPa5QEuvKG4uI8tKZpocpobzLaubLi1D0cGgWGl4",
-    "05": "1F45fZ0-q8-sncS6evRaJ31_hZLaFR3p6Jr5tXq0Byz8",
-    "06": "16tpctLo8x_Bn_oLy2sfHv8qyHxGmnqyJufp6-AJJ2Rs",
-    "07": "1ooY1O5eurA7MWXN7u8l8A-WytBRTVM62jwBUPSDR62A",
-    "09": "1kTR2myJocAeDajT8Tr3Uy6_Kg7pbCVueVgLmJTdSy-U",
-}
+# KNOWN_ATTENDANCE_FILE_IDS: src/config/classes.pyのATTENDANCE_ROSTER_FILE_IDSを
+# 正本としてimport（上部import参照。2026-09-14、重複定義によるドリフト解消のため統合）。
 
 CLIENT_SOURCE_TAB = "№{class_num}リスト"
 ROSTER_TARGET_TAB = "受講者リスト"
@@ -65,18 +59,8 @@ CLIENT_SOURCE_HEADER = [
     "備考",
 ]
 APPLICATION_HEADER_PREFIX = ["氏名", "ふりがな", "日介番号"]
-ROSTER_HEADER = [
-    "氏名",
-    "ふりがな",
-    "日介番号",
-    "会社",
-    "事業所",
-    "サービス種別",
-    "入所・居宅系",
-    "グループ",
-    "受講者番号",
-    "受講者番号（グループ付き）",
-]
+# ROSTER_HEADER: src/config/classes.pyのATTENDANCE_ROSTER_HEADERを正本としてimport
+# （上部import参照）。
 
 # グループ→入所・居宅系カテゴリ対応表。
 # 出典: クライアントの公式承認ではなく、手動転記時代の「受講者リスト」タブから

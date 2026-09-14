@@ -514,6 +514,213 @@ class TestFirestoreService:
             assert call_args["sheets_sync_status"] == "pending"
 
 
+class TestCreateStudent:
+    """Test suite for create_student() (出欠名簿同期の新経路対応、2026-09-14)."""
+
+    @pytest.fixture(autouse=True)
+    def setup(self):
+        import sys
+
+        sys.path.insert(0, "src")
+        from firestore_service import FirestoreService
+
+        self.FirestoreService = FirestoreService
+
+    def test_attendance_roster_sync_excludes_company_office_keys(self):
+        """
+        sync_source="attendance_roster"の場合、doc_dataにcompany/officeキー自体が
+        含まれないこと（値が空文字ではなく、キー自体が無いことを確認する点に注意）。
+
+        plan-crossreview codexレビュー指摘: 従来は入力student_dataのフィルタのみで、
+        doc_data構築自体が固定テンプレートでcompany/officeを無条件に含んでいた
+        ため機能しなかった。本テストはその再発防止。
+        """
+        with patch("firestore_service.firestore.Client") as mock_client:
+            mock_db = Mock()
+            mock_client.return_value = mock_db
+            mock_doc_ref = Mock()
+            mock_db.collection.return_value.document.return_value = mock_doc_ref
+
+            service = self.FirestoreService()
+            result = service.create_student(
+                {
+                    "student_id": "N001",
+                    "name": "山田太郎",
+                    # 万一呼び出し元の実装ミスで紛れ込んでも書かれないことを確認する
+                    "company": "should-not-be-written",
+                    "office": "should-not-be-written",
+                },
+                sync_source="attendance_roster",
+            )
+
+            assert result is True
+            doc_data = mock_doc_ref.set.call_args[0][0]
+            assert "company" not in doc_data
+            assert "office" not in doc_data
+            assert doc_data["sync_source"] == "attendance_roster"
+
+    def test_default_sync_source_includes_company_office(self):
+        """sync_source未指定(既存の統合_受講者リスト経由)は従来通りcompany/officeを含む回帰テスト。"""
+        with patch("firestore_service.firestore.Client") as mock_client:
+            mock_db = Mock()
+            mock_client.return_value = mock_db
+            mock_doc_ref = Mock()
+            mock_db.collection.return_value.document.return_value = mock_doc_ref
+
+            service = self.FirestoreService()
+            service.create_student(
+                {
+                    "student_id": "N001",
+                    "name": "山田太郎",
+                    "company": "テスト株式会社",
+                    "office": "本社",
+                }
+            )
+
+            doc_data = mock_doc_ref.set.call_args[0][0]
+            assert doc_data["company"] == "テスト株式会社"
+            assert doc_data["office"] == "本社"
+            assert "sync_source" not in doc_data
+
+    def test_preserve_existing_status_true_keeps_existing_status(self):
+        """preserve_existing_status=Trueで既存ドキュメントがある場合、statusを上書きしない。"""
+        with patch("firestore_service.firestore.Client") as mock_client:
+            mock_db = Mock()
+            mock_client.return_value = mock_db
+            mock_doc_ref = Mock()
+            mock_db.collection.return_value.document.return_value = mock_doc_ref
+            mock_snapshot = Mock()
+            mock_snapshot.exists = True
+            mock_doc_ref.get.return_value = mock_snapshot
+
+            service = self.FirestoreService()
+            service.create_student(
+                {"student_id": "N001", "name": "山田太郎"},
+                preserve_existing_status=True,
+                sync_source="attendance_roster",
+            )
+
+            doc_data = mock_doc_ref.set.call_args[0][0]
+            assert "status" not in doc_data
+
+    def test_preserve_existing_status_true_new_student_gets_active(self):
+        """preserve_existing_status=Trueで新規学生の場合、status="active"になる。"""
+        with patch("firestore_service.firestore.Client") as mock_client:
+            mock_db = Mock()
+            mock_client.return_value = mock_db
+            mock_doc_ref = Mock()
+            mock_db.collection.return_value.document.return_value = mock_doc_ref
+            mock_snapshot = Mock()
+            mock_snapshot.exists = False
+            mock_doc_ref.get.return_value = mock_snapshot
+
+            service = self.FirestoreService()
+            service.create_student(
+                {"student_id": "N001", "name": "山田太郎"},
+                preserve_existing_status=True,
+                sync_source="attendance_roster",
+            )
+
+            doc_data = mock_doc_ref.set.call_args[0][0]
+            assert doc_data["status"] == "active"
+
+
+class TestGetStudentIdsByClassAndSource:
+    """Test suite for get_student_ids_by_class_and_source()（退会検出reconcile用）。"""
+
+    @pytest.fixture(autouse=True)
+    def setup(self):
+        import sys
+
+        sys.path.insert(0, "src")
+        from firestore_service import FirestoreService
+
+        self.FirestoreService = FirestoreService
+
+    def test_returns_student_id_to_status_mapping(self):
+        with patch("firestore_service.firestore.Client") as mock_client:
+            mock_db = Mock()
+            mock_client.return_value = mock_db
+
+            mock_doc1 = Mock()
+            mock_doc1.id = "N001"
+            mock_doc1.to_dict.return_value = {"status": "active"}
+            mock_doc2 = Mock()
+            mock_doc2.id = "N002"
+            mock_doc2.to_dict.return_value = {"status": "withdrawn"}
+
+            mock_query = Mock()
+            mock_query.where.return_value = mock_query
+            mock_query.stream.return_value = [mock_doc1, mock_doc2]
+            mock_db.collection.return_value = mock_query
+
+            service = self.FirestoreService()
+            result = service.get_student_ids_by_class_and_source(
+                "No1", "attendance_roster"
+            )
+
+            assert result == {"N001": "active", "N002": "withdrawn"}
+
+    def test_propagates_exception_on_query_failure(self):
+        """
+        呼び出し側(main.py)がreconcileをスキップする判断材料にするため、
+        fail-openにせず例外を送出する（class_name+sync_sourceの母集団が
+        不明なまま「誰も退会していない」と誤判定させないため）。
+        """
+        with patch("firestore_service.firestore.Client") as mock_client:
+            mock_db = Mock()
+            mock_client.return_value = mock_db
+            mock_query = Mock()
+            mock_query.where.return_value = mock_query
+            mock_query.stream.side_effect = Exception("Firestore unavailable")
+            mock_db.collection.return_value = mock_query
+
+            service = self.FirestoreService()
+            with pytest.raises(Exception, match="Firestore unavailable"):
+                service.get_student_ids_by_class_and_source("No1", "attendance_roster")
+
+
+class TestMarkStudentWithdrawn:
+    """Test suite for mark_student_withdrawn()。"""
+
+    @pytest.fixture(autouse=True)
+    def setup(self):
+        import sys
+
+        sys.path.insert(0, "src")
+        from firestore_service import FirestoreService
+
+        self.FirestoreService = FirestoreService
+
+    def test_sets_status_withdrawn(self):
+        with patch("firestore_service.firestore.Client") as mock_client:
+            mock_db = Mock()
+            mock_client.return_value = mock_db
+            mock_doc_ref = Mock()
+            mock_db.collection.return_value.document.return_value = mock_doc_ref
+
+            service = self.FirestoreService()
+            result = service.mark_student_withdrawn("N001")
+
+            assert result is True
+            call_args = mock_doc_ref.set.call_args
+            assert call_args[0][0]["status"] == "withdrawn"
+            assert call_args[1]["merge"] is True
+
+    def test_returns_false_on_error(self):
+        with patch("firestore_service.firestore.Client") as mock_client:
+            mock_db = Mock()
+            mock_client.return_value = mock_db
+            mock_doc_ref = Mock()
+            mock_doc_ref.set.side_effect = Exception("Firestore error")
+            mock_db.collection.return_value.document.return_value = mock_doc_ref
+
+            service = self.FirestoreService()
+            result = service.mark_student_withdrawn("N001")
+
+            assert result is False
+
+
 # Placeholder test to ensure pytest can run
 def test_placeholder():
     """Placeholder test."""

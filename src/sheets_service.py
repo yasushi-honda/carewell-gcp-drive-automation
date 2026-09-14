@@ -3,13 +3,36 @@ Google Sheets Service for recording uploaded files
 """
 
 import logging
+from dataclasses import dataclass, field
 from datetime import datetime
 from typing import List, Optional
 
 from google.auth import default
 from googleapiclient.discovery import build
 
+from config.classes import ATTENDANCE_ROSTER_HEADER
+
 logger = logging.getLogger(__name__)
+
+
+@dataclass
+class RosterReadResult:
+    """クラス別出欠管理ファイルの「受講者リスト」タブ読み取り結果。
+
+    statusは「正常系の0件」と「取得失敗」を区別するための状態遷移を持つ
+    （common-mistakes.md パターン9の再発防止。0件表示のみで実データの
+    不在を断定せず、取得できたかどうか自体を独立した状態として保持する）:
+    - "ok": ヘッダー一致・データ行あり
+    - "empty": ヘッダー一致・データ行0件（正常系の空。エラーではない）
+    - "read_error": Sheets API呼び出し自体が例外（権限不足・タブ不在等）
+    - "schema_error": ヘッダーが想定と不一致（列の挿入・並べ替え等）
+    """
+
+    class_name: str
+    status: str
+    students: List[dict] = field(default_factory=list)
+    malformed_rows: List[dict] = field(default_factory=list)
+    error_detail: Optional[str] = None
 
 
 class SheetsService:
@@ -237,6 +260,153 @@ class SheetsService:
     # NOTE: check_record_exists() was removed as duplicate checking is handled by Firestore
     # Firestore provides O(1) lookups vs Sheets O(n) full table scan
     # See: maintenance-report.md section 3
+
+    def get_attendance_roster_data(
+        self, spreadsheet_id: str, class_name: str
+    ) -> RosterReadResult:
+        """
+        クラス別出欠管理ファイル({No}_受講者リスト_出欠管理)の「受講者リスト」
+        タブから学生データを読む。統合_受講者リスト経由のget_student_data()と異なり、
+        会社(D列)・事業所(E列)は範囲指定そのものから除外し、Sheets APIレスポンスに
+        物理的に含めない（データ最小化。「取得後に捨てる」ではなく「そもそも
+        取得しない」を徹底する、PR#29の個人情報保護方針を踏襲）。
+
+        Args:
+            spreadsheet_id: クラス別出欠管理ファイルのスプレッドシートID
+            class_name: 同期先のclass_name(例: "No1")。シート側に該当列が
+                無いため、呼び出し元が固定値として渡す
+
+        Returns:
+            RosterReadResult（status: ok/empty/read_error/schema_error）
+        """
+        tab = "受講者リスト"
+        escaped_tab = tab.replace("'", "''")
+
+        try:
+            header_result = (
+                self.service.spreadsheets()
+                .values()
+                .get(
+                    spreadsheetId=spreadsheet_id,
+                    range=f"'{escaped_tab}'!A1:J1",
+                )
+                .execute()
+            )
+            header_values = header_result.get("values", [])
+            actual_header = header_values[0] if header_values else []
+
+            if actual_header != ATTENDANCE_ROSTER_HEADER:
+                logger.warning(
+                    f"Header mismatch for class={class_name}: "
+                    f"expected={ATTENDANCE_ROSTER_HEADER} actual={actual_header}"
+                )
+                return RosterReadResult(
+                    class_name=class_name,
+                    status="schema_error",
+                    error_detail=(
+                        f"ヘッダー不一致: 期待={ATTENDANCE_ROSTER_HEADER} "
+                        f"実際={actual_header}"
+                    ),
+                )
+
+            # A〜C列(氏名/ふりがな/日介番号)とF〜J列(サービス種別/入所居宅系/
+            # グループ/受講者番号/受講者番号(グループ付き))を非連続レンジで取得。
+            # D(会社)・E(事業所)は範囲に含めない。
+            batch_result = (
+                self.service.spreadsheets()
+                .values()
+                .batchGet(
+                    spreadsheetId=spreadsheet_id,
+                    ranges=[f"'{escaped_tab}'!A2:C", f"'{escaped_tab}'!F2:J"],
+                )
+                .execute()
+            )
+            value_ranges = batch_result.get("valueRanges", [])
+            left_rows = value_ranges[0].get("values", []) if value_ranges else []
+            right_rows = (
+                value_ranges[1].get("values", []) if len(value_ranges) > 1 else []
+            )
+
+            max_rows = max(len(left_rows), len(right_rows))
+            students: List[dict] = []
+            malformed_rows: List[dict] = []
+
+            for i in range(max_rows):
+                # Sheets APIは各行末尾の空セルを省略して返すため、行ごとに
+                # 期待列数までパディングしてから結合する（単純な配列zipでは
+                # 行がずれるリスクがある — plan-crossreview codex指摘対応）。
+                left = list(left_rows[i]) if i < len(left_rows) else []
+                left += [""] * (3 - len(left))
+                right = list(right_rows[i]) if i < len(right_rows) else []
+                right += [""] * (5 - len(right))
+
+                row_number = i + 2  # ヘッダーが1行目
+                name = left[0].strip() if left[0] else ""
+                furigana = left[1].strip() if left[1] else ""
+                student_id = left[2].strip() if left[2] else ""
+                service_type = right[0].strip() if right[0] else ""
+                # right[1] = G列(入所・居宅系)は未使用
+                group_raw = right[2].strip() if right[2] else ""
+                student_number = right[3].strip() if right[3] else ""
+                # right[4] = J列(受講者番号(グループ付き))は未使用
+
+                if not any(
+                    [
+                        name,
+                        furigana,
+                        student_id,
+                        service_type,
+                        group_raw,
+                        student_number,
+                    ]
+                ):
+                    continue  # 完全に空白の行はスキップ(末尾の余白行等)
+
+                # 日介番号または氏名が欠落した非空行は、サイレントにスキップ
+                # せずmalformed_rowsへ退避する（呼び出し側が書込み中断の
+                # 判断材料にする。ログwarningのみでの黙殺はしない）。
+                if not student_id or not name:
+                    malformed_rows.append(
+                        {
+                            "row": row_number,
+                            "name": name,
+                            "student_id": student_id,
+                        }
+                    )
+                    continue
+
+                students.append(
+                    {
+                        "student_id": student_id,
+                        "furigana": furigana,
+                        "name": name,
+                        "group": group_raw if group_raw else "未分類",
+                        "service_type": service_type,
+                        "student_number": student_number,
+                        # 個別クラスファイルには通し番号に対応する列が無いため0
+                        "serial_number": 0,
+                        "class_name": class_name,
+                    }
+                )
+
+            status = "ok" if students else "empty"
+            return RosterReadResult(
+                class_name=class_name,
+                status=status,
+                students=students,
+                malformed_rows=malformed_rows,
+            )
+
+        except Exception as e:
+            logger.error(
+                f"Error reading attendance roster for class={class_name}: {e}",
+                exc_info=True,
+            )
+            return RosterReadResult(
+                class_name=class_name,
+                status="read_error",
+                error_detail=str(e),
+            )
 
     def get_student_data(
         self, spreadsheet_id: str, sheet_name: str = "統合_受講者リスト"

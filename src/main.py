@@ -10,7 +10,13 @@ import time  # ✅ 追加: 診断ログで使用（将来の拡張用に追加�
 from flask import Request
 
 import auth
-from config.classes import KNOWN_CLASSES, KNOWN_TASK_IDS, resolve_student_spreadsheet_id
+from config.classes import (
+    ATTENDANCE_ROSTER_FILE_IDS,
+    KNOWN_CLASSES,
+    KNOWN_TASK_IDS,
+    get_current_academic_year_prefix,
+    resolve_student_spreadsheet_id,
+)
 from firestore_service import FirestoreService
 from google_drive_service import GoogleDriveService
 from playwright_automation import PlaywrightAutomationEngine
@@ -489,6 +495,21 @@ def sync_students_from_sheets(request):
         "errors": []
     }
     """
+    # 令和8年度は出欠名簿経由の同期(/admin/sync-students-from-attendance-rosters)に
+    # 統一されている。このガードは_sync_students()ではなく、このHTTPハンドラ自身の
+    # 先頭に置く（_sync_students()の戻り値契約はdictのみであり、そちらにタプルを
+    # 返すガードを置くと呼び出し元のsync_result.get("status")がAttributeErrorになり
+    # 実際には500になる、という実装ミスをplan-crossreviewのcodexレビューで指摘され
+    # 修正した経緯がある。2026-09-14）。
+    if get_current_academic_year_prefix() == "令和8年度":
+        return {
+            "status": "disabled",
+            "message": (
+                "令和8年度は出欠名簿経由の同期"
+                "(/admin/sync-students-from-attendance-rosters)に統一されています。"
+            ),
+        }, 409
+
     try:
         # Parse request
         request_json = request.get_json(silent=True) or {}
@@ -540,6 +561,56 @@ def sync_students_from_sheets(request):
 
     except Exception as e:
         logger.error(f"Error during student sync: {str(e)}", exc_info=True)
+        return {"status": "error", "error": str(e)}, 500
+
+
+def sync_students_from_attendance_rosters(request):
+    """
+    Admin/Scheduler endpoint: クラス別出欠管理ファイル({No}_受講者リスト_出欠管理)の
+    「受講者リスト」タブからFirestore studentsコレクションへ直接同期する。
+
+    令和7年度が使っていたVSTACK/IMPORTRANGE集約スプレッドシート方式のバージョンアップ版。
+    全クラスを読込み・検証してから書込む二段階のfail-closed設計（1クラスでも異常が
+    あればFirestoreへは一切書き込まない）。
+
+    Expected request body:
+    {
+        "dry_run": false  # trueの場合フェーズAのみ実行し、Firestoreへは書き込まない
+                          # (preflight用。読み取り権限・ヘッダー一致の事前確認に使う)
+    }
+
+    Returns:
+    {
+        "status": "success" | "aborted" | "error",
+        "dry_run": false,
+        "classes": [{"class_name": "No1", "status": "ok", "synced": 254, ...}, ...],
+        "not_configured_classes": ["No8", "No10"],
+        "error_classes": [...],
+        "malformed_rows": [...],
+        "duplicate_student_ids": [...]
+    }
+    """
+    try:
+        request_json = request.get_json(silent=True) or {}
+        dry_run = bool(request_json.get("dry_run", False))
+
+        logger.info(f"Starting attendance roster student sync (dry_run={dry_run})")
+
+        sheets_service = SheetsService()
+        firestore_service = FirestoreService()
+
+        result = _sync_students_from_attendance_rosters(
+            sheets_service, firestore_service, dry_run=dry_run
+        )
+
+        status_code = 200 if result.get("status") == "success" else 409
+        logger.info(f"Attendance roster sync completed: status={result.get('status')}")
+        return result, status_code
+
+    except Exception as e:
+        logger.error(
+            f"Error during attendance roster student sync: {str(e)}", exc_info=True
+        )
         return {"status": "error", "error": str(e)}, 500
 
 
@@ -698,6 +769,164 @@ def _sync_students(sheets_service, firestore_service, spreadsheet_id):
             "students_updated": 0,
             "errors": [{"error": str(e)}],
         }
+
+
+def _sync_students_from_attendance_rosters(
+    sheets_service, firestore_service, dry_run: bool = False
+):
+    """
+    クラス別出欠管理ファイルからFirestore studentsへ同期する（フェーズA: 収集・検証
+    → フェーズB: 書込み+reconcile の二段階、fail-closed）。
+
+    Args:
+        sheets_service: SheetsService instance
+        firestore_service: FirestoreService instance
+        dry_run: Trueの場合フェーズAのみ実行し、Firestoreへは一切書き込まない
+
+    Returns:
+        Dictionary with sync results (status: "success" | "aborted")
+    """
+    # フェーズA: 全クラス収集
+    class_results = {}
+    for class_num, spreadsheet_id in ATTENDANCE_ROSTER_FILE_IDS.items():
+        class_name = f"No{int(class_num)}"
+        logger.info(f"Reading attendance roster for class={class_name}")
+        class_results[class_num] = sheets_service.get_attendance_roster_data(
+            spreadsheet_id, class_name
+        )
+
+    all_class_nums = [f"{i:02d}" for i in range(1, len(KNOWN_CLASSES) + 1)]
+    not_configured_classes = [
+        f"No{int(n)}" for n in all_class_nums if n not in ATTENDANCE_ROSTER_FILE_IDS
+    ]
+
+    error_classes = [
+        {"class_name": r.class_name, "status": r.status, "error": r.error_detail}
+        for r in class_results.values()
+        if r.status in ("read_error", "schema_error")
+    ]
+
+    malformed_summary = [
+        {"class_name": r.class_name, "rows": r.malformed_rows}
+        for r in class_results.values()
+        if r.malformed_rows
+    ]
+
+    # 日介番号の重複検出（クラス内・クラス横断を区別しない統一処理。
+    # クラス内限定の「先勝ち」は行わない — plan-crossreview codex指摘対応）
+    student_id_owners: dict = {}
+    for r in class_results.values():
+        for s in r.students:
+            student_id_owners.setdefault(s["student_id"], []).append(r.class_name)
+    duplicate_student_ids = [
+        {"student_id": sid, "classes": classes}
+        for sid, classes in student_id_owners.items()
+        if len(classes) > 1
+    ]
+
+    diagnostics = {
+        "not_configured_classes": not_configured_classes,
+        "error_classes": error_classes,
+        "malformed_rows": malformed_summary,
+        "duplicate_student_ids": duplicate_student_ids,
+    }
+
+    can_write = (
+        not error_classes and not malformed_summary and not duplicate_student_ids
+    )
+
+    class_status_overview = [
+        {
+            "class_name": r.class_name,
+            "status": r.status,
+            "student_count": len(r.students),
+        }
+        for r in class_results.values()
+    ]
+
+    if dry_run or not can_write:
+        logger.info(
+            f"Attendance roster sync phase A only: can_write={can_write} "
+            f"dry_run={dry_run}"
+        )
+        return {
+            "status": "success" if can_write else "aborted",
+            "dry_run": dry_run,
+            "classes": class_status_overview,
+            **diagnostics,
+        }
+
+    # フェーズB: 書込み（クラス単位で擬似アトミック。1件でも書込みが失敗した
+    # クラスは、そのクラスのreconcileをスキップし他クラスの処理は継続する）
+    class_summaries = []
+    for r in class_results.values():
+        created = 0
+        updated = 0
+        write_error_ids = []
+
+        for student in r.students:
+            try:
+                exists = firestore_service.student_exists(student["student_id"])
+                success = firestore_service.create_student(
+                    student,
+                    preserve_existing_status=True,
+                    sync_source="attendance_roster",
+                )
+                if success:
+                    if exists:
+                        updated += 1
+                    else:
+                        created += 1
+                else:
+                    write_error_ids.append(student["student_id"])
+            except Exception as e:
+                write_error_ids.append(student["student_id"])
+                logger.error(
+                    f"Error syncing student {student.get('student_id')} "
+                    f"in class={r.class_name}: {e}",
+                    exc_info=True,
+                )
+
+        withdrawn = 0
+        if not write_error_ids:
+            try:
+                existing_ids = firestore_service.get_student_ids_by_class_and_source(
+                    r.class_name, "attendance_roster"
+                )
+                current_ids = {s["student_id"] for s in r.students}
+                for sid, status in existing_ids.items():
+                    if sid not in current_ids and status != "withdrawn":
+                        if firestore_service.mark_student_withdrawn(sid):
+                            withdrawn += 1
+                        else:
+                            write_error_ids.append(sid)
+            except Exception as e:
+                write_error_ids.append("__reconcile__")
+                logger.error(
+                    f"Error reconciling withdrawals for class={r.class_name}: {e}",
+                    exc_info=True,
+                )
+
+        class_summaries.append(
+            {
+                "class_name": r.class_name,
+                "status": r.status,
+                "synced": created + updated,
+                "created": created,
+                "updated": updated,
+                "withdrawn": withdrawn,
+                "write_failed": len(write_error_ids),
+            }
+        )
+
+    logger.info(f"Attendance roster sync completed: {class_summaries}")
+
+    return {
+        "status": "success",
+        "dry_run": False,
+        "classes": class_summaries,
+        **diagnostics,
+    }
 
 
 def _backfill_all_files(firestore_service):
@@ -868,6 +1097,7 @@ _HANDLER_NAMES = {
     "/": "main",
     "/cleanup": "cleanup_firestore",
     "/admin/sync-students-from-sheets": "sync_students_from_sheets",
+    "/admin/sync-students-from-attendance-rosters": "sync_students_from_attendance_rosters",
     "/admin/duplicate-students": "get_duplicate_students",
     "/health": "health_check",
 }
@@ -880,7 +1110,10 @@ def app(request):
     Routes:
     - POST /                              → File collection (main) — Scheduler専用
     - POST /cleanup                       → Firestore cleanup (administrative) — Firebase管理者専用
-    - POST /admin/sync-students-from-sheets → Student sync from Google Sheets — Scheduler or Firebase管理者
+    - POST /admin/sync-students-from-sheets
+        → Student sync from Google Sheets(令和7年度以前専用。令和8年度は409) — Scheduler or Firebase管理者
+    - POST /admin/sync-students-from-attendance-rosters
+        → Student sync from attendance rosters — Scheduler or Firebase管理者
     - GET  /admin/duplicate-students      → Get duplicate student_id info (administrative) — Firebase管理者専用
     - GET  /health                        → Health check — 認証不要
     - OPTIONS /*                          → CORS preflight — 認証不要（実処理なし）

@@ -497,7 +497,12 @@ class FirestoreService:
             # Return False on error (fail-open strategy)
             return False
 
-    def create_student(self, student_data: dict) -> bool:
+    def create_student(
+        self,
+        student_data: dict,
+        preserve_existing_status: bool = False,
+        sync_source: Optional[str] = None,
+    ) -> bool:
         """
         Create or update student document in students collection
 
@@ -508,12 +513,24 @@ class FirestoreService:
                 - name: 氏名
                 - group: グループ
                 - status: ステータス
-                - company: 勤務先
-                - office: 事業所
+                - company: 勤務先（sync_source="attendance_roster"時は無視、後述）
+                - office: 事業所（同上）
                 - service_type: サービス種別
                 - serial_number: Serial No.
                 - student_number: 受講生番号
                 - class_name: クラス
+            preserve_existing_status: Trueの場合、既存ドキュメントのstatusを
+                上書きしない（Dashboard「辞退」操作を次回同期で巻き戻さない
+                ため）。新規作成時のみstatus="active"を設定する。
+            sync_source: 同期経路の識別子。"attendance_roster"を指定した場合、
+                company/officeフィールド自体をdoc_dataに含めない（入力の
+                student_dataにcompany/officeキーが無くても、本メソッドが
+                従来固定テンプレートで空文字を書き込んでいたため、入力側の
+                フィルタだけでは不十分だった — plan-crossreview codex指摘
+                対応。ここでdoc_data構築自体を分岐させ、出欠名簿経由では
+                company/officeキーがFirestoreに一切現れないようにする）。
+                未指定時は既存の呼び出し元（統合_受講者リスト経由）と
+                同じ挙動（company/office含む）を維持する。
 
         Returns:
             True if successful, False otherwise (fail-open strategy)
@@ -531,8 +548,6 @@ class FirestoreService:
                 "name": student_data.get("name", ""),
                 "group": student_data.get("group", "未分類"),
                 "status": student_data.get("status", "active"),
-                "company": student_data.get("company", ""),
-                "office": student_data.get("office", ""),
                 "service_type": student_data.get("service_type", ""),
                 "serial_number": student_data.get("serial_number", 0),
                 "student_number": student_data.get("student_number", ""),
@@ -541,7 +556,22 @@ class FirestoreService:
                 "last_updated": firestore.SERVER_TIMESTAMP,
             }
 
+            if sync_source == "attendance_roster":
+                doc_data["sync_source"] = "attendance_roster"
+                # company/officeキー自体を含めない(意図的なデータ最小化)
+            else:
+                doc_data["company"] = student_data.get("company", "")
+                doc_data["office"] = student_data.get("office", "")
+
             doc_ref = self.db.collection("students").document(student_id)
+
+            if preserve_existing_status:
+                existing = doc_ref.get()
+                if existing.exists:
+                    doc_data.pop("status", None)
+                else:
+                    doc_data["status"] = "active"
+
             doc_ref.set(doc_data, merge=True)
 
             logger.info(
@@ -555,6 +585,46 @@ class FirestoreService:
                 exc_info=True,
             )
             # Return False on error (fail-open strategy)
+            return False
+
+    def get_student_ids_by_class_and_source(
+        self, class_name: str, sync_source: str
+    ) -> dict:
+        """
+        指定class_name・sync_source一致の既存students文書について
+        {student_id: status} を返す（出欠名簿同期の退会検出(reconcile)用）。
+
+        Raises:
+            Exception: クエリ失敗時（呼び出し側でreconcileをスキップする
+                判断材料にするため、ここではfail-openにせず送出する）
+        """
+        query = (
+            self.db.collection("students")
+            .where("class_name", "==", class_name)
+            .where("sync_source", "==", sync_source)
+        )
+        return {
+            doc.id: (doc.to_dict() or {}).get("status", "") for doc in query.stream()
+        }
+
+    def mark_student_withdrawn(self, student_id: str) -> bool:
+        """
+        出欠名簿から消えた受講者をstatus="withdrawn"に更新する（削除はしない
+        — 提出履歴等の参照整合性を保つため）。
+
+        Returns:
+            True if successful, False otherwise
+        """
+        try:
+            self.db.collection("students").document(student_id).set(
+                {"status": "withdrawn", "last_updated": firestore.SERVER_TIMESTAMP},
+                merge=True,
+            )
+            return True
+        except Exception as e:
+            logger.error(
+                f"Error marking student withdrawn {student_id}: {e}", exc_info=True
+            )
             return False
 
     def get_student(self, student_id: str) -> Optional[dict]:

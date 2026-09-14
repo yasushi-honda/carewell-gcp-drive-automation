@@ -108,6 +108,104 @@ class TestAppRoutingWithoutAuth:
         assert status == 200
         mock_handler.assert_called_once()
 
+    @patch("main.sync_students_from_attendance_rosters")
+    def test_attendance_roster_sync_no_token_returns_401_and_handler_not_called(
+        self, mock_handler
+    ):
+        request = FakeRequest("POST", "/admin/sync-students-from-attendance-rosters")
+        body, status, headers = main.app(request)
+        assert status == 401
+        mock_handler.assert_not_called()
+
+    @patch("auth.is_admin_email", return_value=False)
+    @patch("auth.fb_auth.verify_id_token")
+    @patch("main.sync_students_from_attendance_rosters")
+    def test_attendance_roster_sync_non_admin_firebase_token_returns_403(
+        self, mock_handler, mock_verify, mock_is_admin
+    ):
+        mock_verify.return_value = {
+            "email": "nobody@example.com",
+            "email_verified": True,
+        }
+        request = FakeRequest(
+            "POST",
+            "/admin/sync-students-from-attendance-rosters",
+            bearer_token="firebase-token",
+        )
+        body, status, headers = main.app(request)
+        assert status == 403
+        mock_handler.assert_not_called()
+
+    @patch("auth.is_admin_email", return_value=True)
+    @patch("auth.fb_auth.verify_id_token")
+    @patch("main.sync_students_from_attendance_rosters")
+    def test_attendance_roster_sync_admin_firebase_token_reaches_handler(
+        self, mock_handler, mock_verify, mock_is_admin
+    ):
+        mock_handler.return_value = {"status": "success"}, 200
+        mock_verify.return_value = {
+            "email": "admin@example.com",
+            "email_verified": True,
+        }
+        request = FakeRequest(
+            "POST",
+            "/admin/sync-students-from-attendance-rosters",
+            bearer_token="firebase-token",
+        )
+        body, status, headers = main.app(request)
+        assert status == 200
+        mock_handler.assert_called_once()
+
+    @patch("auth.ga_id_token.verify_oauth2_token")
+    @patch("main.sync_students_from_attendance_rosters")
+    def test_attendance_roster_sync_scheduler_token_reaches_handler(
+        self, mock_handler, mock_verify
+    ):
+        mock_handler.return_value = {"status": "success"}, 200
+        mock_verify.return_value = {
+            "iss": "https://accounts.google.com",
+            "aud": f"{auth.CLOUD_RUN_BASE_URL}/admin/sync-students-from-attendance-rosters",
+            "email": auth.SCHEDULER_SERVICE_ACCOUNT,
+            "email_verified": True,
+        }
+        request = FakeRequest(
+            "POST",
+            "/admin/sync-students-from-attendance-rosters",
+            bearer_token="oidc-token",
+        )
+        body, status, headers = main.app(request)
+        assert status == 200
+        mock_handler.assert_called_once()
+
+    @patch("auth.is_admin_email", return_value=True)
+    @patch("auth.fb_auth.verify_id_token")
+    @patch("main.get_current_academic_year_prefix", return_value="令和8年度")
+    def test_sync_students_from_sheets_returns_409_for_current_year_real_handler(
+        self, mock_year, mock_verify, mock_is_admin
+    ):
+        """
+        旧エンドポイント(/admin/sync-students-from-sheets)は令和8年度の間、409を
+        返すこと。main.sync_students_from_sheets自体はモックせず、実関数を
+        呼び出して検証する。
+
+        v2では年度ガードを_sync_students()(dictのみを返す契約のヘルパー)の
+        先頭に置いており、呼び出し元sync_students_from_sheets()がタプルに対して
+        .get("status")を呼ぶためAttributeErrorで実際には500になる、という
+        実装ミスがあった（plan-crossreview codexレビューがモックを経由しない
+        実行で発見。モックに頼ったテストでは検出できなかった反省を踏まえ、
+        本テストは実ハンドラを経由させる）。
+        """
+        mock_verify.return_value = {
+            "email": "admin@example.com",
+            "email_verified": True,
+        }
+        request = FakeRequest(
+            "POST", "/admin/sync-students-from-sheets", bearer_token="firebase-token"
+        )
+        body, status, headers = main.app(request)
+        assert status == 409
+        assert body["status"] == "disabled"
+
     @patch("main.cleanup_firestore")
     def test_cleanup_no_token_returns_401_and_handler_not_called(self, mock_handler):
         """破壊的操作(/cleanup)の回帰テスト: 認証なしでは絶対にハンドラへ到達しない"""
