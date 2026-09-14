@@ -1,5 +1,5 @@
 ---
-updated: 2026-09-11
+updated: 2026-09-14
 ---
 
 ## 現在のミッション
@@ -46,3 +46,8 @@ Issue #18（出欠確認シートへの課題提出状況の自動反映、令�
 - （2026-09-09）gcloud named configuration `carewell-automation` のアカウントが別プロジェクト（`monthly-pay-tax`）のGitHub Actions用WIFサービスアカウント（`github-actions-deployer@monthly-pay-tax.iam.gserviceaccount.com`、トークン期限切れで再認証不可）になっていたことを発見。decision-maker確認のうえ`system@jaccw.or.jp`に修正し、`gcloud auth login`で再認証・`gcloud logging read`での動作確認済み。原因（いつ・なぜ書き換わったか）は未調査
 - （2026-09-09）Git衛生対応: `.envrc`・`.playwright-mcp/`が未追跡のまま`.gitignore`未登録だったため追加。Serenaツールのバージョンアップに伴う`.serena/project.yml`の自動マイグレーション（機能的な値の変更なし）と合わせてコミット・push（370dd0a、CI green確認済み）
 - （2026-09-09）Dashboard（https://carewell-dashboard-2026.web.app/）で提出状況を再確認、8クラス（№01〜07・09）とも提出ファイル数0件で変化なし。先方（jaccw）の名簿データ到着（№01は9/11目途）待ちが継続
+- （2026-09-14、前ミッション）jaccw依頼の個人情報保護対応（受講者リストの会社名・事業所名欄削除・タブ非表示化・「課題①」タブ非表示化、全8クラス、PR #29〜31）を本セッションで目視確認まで完了。加えて以下を新たに発見・対応済み：
+  - **【重大・対応済み】令和7年度の旧Dashboard**（デフォルトHostingサイト`carewell-automation.web.app`、令和8年度用サイト分離後に削除されず「凍結アーカイブ」のまま放置）が、認証なしで1923名分の受講生情報（勤務先含む）を公開し続けていたことを発見。デフォルトHostingサイトはAPI仕様上削除不可のため、個人情報を含まない廃止通知ページに上書きデプロイして解消（実機確認済み）。他の放置公開サイトがないこともHosting全サイト一覧で確認済み（現存は`carewell-dashboard-2026`と`carewell-guide-549efe9b`のみ）
+  - Dashboard管理者アカウントとしてjaccw側4名（inomata/matsushita/system/tanimoto@jaccw.or.jp）を`admins`コレクションに登録。管理者機能3つ（データ同期・重複一覧・受講生の辞退切替）を実際にログインして実機検証済み（辞退切替は実データで切替→復帰まで確認、データ同期は名簿本体未入力のため0件同期だが正常動作を確認）
+  - クライアント向け完了報告・管理者機能ガイドをhtml-briefで作成・送付済み
+  - html-briefスキルの既知バグ（`<ol>`の番号がクリップボードコピー時に失われる）をグローバルテンプレート（`~/.claude/skills/html-brief/assets/template.html`・`SKILL.md`）で修正
