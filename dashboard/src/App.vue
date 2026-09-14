@@ -212,15 +212,21 @@ const handleSync = async () => {
   try {
     const result = await syncStudents()
 
-    if (result.status === 'success') {
+    if (result.status === 'success' || result.status === 'partial_failure') {
       const classes = result.classes || []
       const totalSynced = classes.reduce((sum, c) => sum + (c.synced || 0), 0)
       const totalWithdrawn = classes.reduce((sum, c) => sum + (c.withdrawn || 0), 0)
+      const totalFailed = classes.reduce((sum, c) => sum + (c.write_failed || 0), 0)
       const notConfigured = result.not_configured_classes || []
       const parts = [`受講生: ${totalSynced}件同期`]
       if (totalWithdrawn > 0) parts.push(`退会検出: ${totalWithdrawn}件`)
       if (notConfigured.length > 0) parts.push(`未準備クラス: ${notConfigured.join('、')}`)
-      showNotification('success', '同期完了', parts.join(' / '))
+      if (result.status === 'partial_failure') {
+        parts.push(`書込み失敗: ${totalFailed}件`)
+        showNotification('error', '同期一部失敗', parts.join(' / '))
+      } else {
+        showNotification('success', '同期完了', parts.join(' / '))
+      }
     } else if (result.status === 'aborted') {
       // フェーズAで異常を検出し、Firestoreへは書き込まずに中断した状態
       // (fail-closed)。診断情報を要約して表示する。

@@ -159,6 +159,29 @@ class TestGetAttendanceRosterDataRowMapping:
         assert len(result.students) == 1
         assert result.malformed_rows == []
 
+    def test_row_with_only_unused_g_or_j_column_is_not_treated_as_blank(
+        self, sheets_service
+    ):
+        """
+        G列(入所・居宅系)・J列(受講者番号(グループ付き))はFirestoreへ
+        マッピングしないが、空行判定の対象からは除外しない。除外すると、
+        A/B/C/F/H/I列が全て空でG列またはJ列にのみ値がある行を「完全空行」
+        として誤ってスキップし、malformed_rows検出をすり抜けてしまう
+        (codex実装レビュー指摘P2対応)。
+        """
+        service, mock_service = sheets_service
+        _mock_header(mock_service, ATTENDANCE_ROSTER_HEADER)
+        _mock_batch_get(
+            mock_service,
+            left_rows=[["", "", ""]],
+            right_rows=[["", "何か入所居宅系データ", "", "", ""]],
+        )
+
+        result = service.get_attendance_roster_data("sheet-id", "No1")
+
+        assert result.students == []
+        assert result.malformed_rows == [{"row": 2, "name": "", "student_id": ""}]
+
     def test_missing_student_id_goes_to_malformed_rows(self, sheets_service):
         service, mock_service = sheets_service
         _mock_header(mock_service, ATTENDANCE_ROSTER_HEADER)

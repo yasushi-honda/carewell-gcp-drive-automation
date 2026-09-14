@@ -106,7 +106,7 @@ Hostingを有効化すると本番Firestore rulesも同時に再適用される�
 ✅ **message-body の令和8年度対応は2026-08-26に完了済み**（`carewell-classXX-taskYY`16ジョブの更新＋`carewell-class06/07`新規4ジョブ作成、全20ジョブPAUSEDのまま。詳細は本ファイル下部「令和8年度（2026年度）再開ステータス」参照）。残る作業は**resumeのみ**。
 
 ⚠️⚠️ **無条件の一括resumeは絶対に行わないこと**。config自体は令和8年度用に更新済みだが、以下の理由で個別確認が必要:
-- `student-sync-daily`は**resume禁止**（Issue #5 Phase 1で「年度不明時に誤って令和7年度の名簿へフォールバックする」リスクは解消済み（`resolve_student_spreadsheet_id()`が未設定時は明示エラーで停止）だが、①令和8年度の正しいスプレッドシートIDが`STUDENT_SPREADSHEET_IDS_BY_YEAR`にまだ未設定 ②`students`コレクション・`_backfill_all_files`の年度分離＝Phase 2が未着手のため、resume禁止は継続）
+- `student-sync-daily`は**resume禁止**（2026-09-14更新: このジョブが指す`/admin/sync-students-from-sheets`は、出欠管理名簿経由の新エンドポイント`/admin/sync-students-from-attendance-rosters`への移行に伴い、令和8年度中は年度ガードで無条件に409を返すよう変更された。このままresumeしても実際には何も同期されない。resumeするには、まずジョブのURLを新エンドポイントへretarget（または削除して新規ジョブを作成）する必要がある。詳細: `docs/STUDENT_SYNC_FEATURE_HANDOVER.md`「Cloud Scheduler 設定」）
 - 課題②ジョブ（`carewell-classXX-task02`）は実際にポータルへ課題②が公開されているか、resume前に実機確認が必要（未確認のまま自動実行させない）
 - `carewell-class06/07`はcronスロットを既存クラスと合流させているため、同時実行本数が増える。一括ではなく1クラスずつ段階的に有効化する
 

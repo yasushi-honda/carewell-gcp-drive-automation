@@ -299,6 +299,14 @@ file_doc.reference.update(update_data)
 | **タイムアウト** | 180秒 |
 | **リトライ** | 最大3回、バックオフ 10-300秒 |
 
+> ⚠️ **2026-09-14更新**: このジョブが指す`/admin/sync-students-from-sheets`（統合_受講者リスト経由）は、
+> 令和8年度は無効化されている（`src/main.py`の`sync_students_from_sheets()`が年度ガードで409を返す）。
+> 出欠管理名簿（クラス別受講者リスト）経由の新エンドポイント`/admin/sync-students-from-attendance-rosters`
+> に統一されたため。このジョブは現在他の全ジョブ同様PAUSED状態（`docs/SERVICE_SHUTDOWN_AND_RESUME.md`
+> 参照）のため即時の実害はないが、**このジョブを将来resumeする前に、必ずURLを新エンドポイントへ
+> retarget（または本ジョブを削除し新規ジョブを作成）すること**。retargetせずresumeすると、毎日409を
+> 返すだけで実際には何も同期されない（codex実装レビュー指摘、2026-09-14 attendance-roster-sync PR）。
+
 ### 確認コマンド
 
 ```bash

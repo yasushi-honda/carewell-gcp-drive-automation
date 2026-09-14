@@ -345,19 +345,28 @@ class SheetsService:
                 furigana = left[1].strip() if left[1] else ""
                 student_id = left[2].strip() if left[2] else ""
                 service_type = right[0].strip() if right[0] else ""
-                # right[1] = G列(入所・居宅系)は未使用
+                # right[1] = G列(入所・居宅系)。Firestoreへはマッピングしないが、
+                # 空行判定には含める(下記コメント参照)
+                unused_g = right[1].strip() if right[1] else ""
                 group_raw = right[2].strip() if right[2] else ""
                 student_number = right[3].strip() if right[3] else ""
-                # right[4] = J列(受講者番号(グループ付き))は未使用
+                # right[4] = J列(受講者番号(グループ付き))。同上
+                unused_j = right[4].strip() if right[4] else ""
 
+                # 取得した全列(A/B/C/F/G/H/I/J)を対象に空判定する。マッピング
+                # しない列(G/J)を対象から外すと、そこにのみ値がある行を
+                # 「完全空行」として誤ってスキップし、malformed_rows検出を
+                # すり抜けてしまう(codex実装レビュー指摘P2対応)。
                 if not any(
                     [
                         name,
                         furigana,
                         student_id,
                         service_type,
+                        unused_g,
                         group_raw,
                         student_number,
+                        unused_j,
                     ]
                 ):
                     continue  # 完全に空白の行はスキップ(末尾の余白行等)

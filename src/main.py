@@ -856,9 +856,22 @@ def _sync_students_from_attendance_rosters(
             **diagnostics,
         }
 
+    # クラス異動(例: No1→No2)の受講者を、旧クラスのreconcileが誤ってwithdrawn化
+    # しないよう、全クラスを跨いだ「現在の名簿に存在するstudent_id」の集合を
+    # 事前に確定させる。フェーズAでクラス横断の重複は既に中断済みのため、
+    # この時点で各student_idはたかだか1クラスにしか属さない
+    # （codex実装レビュー指摘P1対応: クラス単位に閉じたcurrent_idsで判定すると、
+    # 移動先クラスの書込みより先に旧クラスのreconcileが走った場合、
+    # preserve_existing_statusにより移動先での書込みがwithdrawn状態を
+    # 引き継いでしまい、在籍中の受講者が退会者として表示され続けるバグがあった）。
+    all_current_student_ids = {
+        s["student_id"] for r in class_results.values() for s in r.students
+    }
+
     # フェーズB: 書込み（クラス単位で擬似アトミック。1件でも書込みが失敗した
     # クラスは、そのクラスのreconcileをスキップし他クラスの処理は継続する）
     class_summaries = []
+    any_write_failed = False
     for r in class_results.values():
         created = 0
         updated = 0
@@ -893,9 +906,8 @@ def _sync_students_from_attendance_rosters(
                 existing_ids = firestore_service.get_student_ids_by_class_and_source(
                     r.class_name, "attendance_roster"
                 )
-                current_ids = {s["student_id"] for s in r.students}
                 for sid, status in existing_ids.items():
-                    if sid not in current_ids and status != "withdrawn":
+                    if sid not in all_current_student_ids and status != "withdrawn":
                         if firestore_service.mark_student_withdrawn(sid):
                             withdrawn += 1
                         else:
@@ -906,6 +918,9 @@ def _sync_students_from_attendance_rosters(
                     f"Error reconciling withdrawals for class={r.class_name}: {e}",
                     exc_info=True,
                 )
+
+        if write_error_ids:
+            any_write_failed = True
 
         class_summaries.append(
             {
@@ -921,8 +936,14 @@ def _sync_students_from_attendance_rosters(
 
     logger.info(f"Attendance roster sync completed: {class_summaries}")
 
+    # 1件でも書込み失敗があれば、全体statusは"success"にしない
+    # （codex実装レビュー指摘P2対応: write_failedをレスポンスに含めるだけでは、
+    # Dashboardが200/successとして「成功」トーストを出してしまい、
+    # 運用者が未同期データの存在に気づけない）
+    overall_status = "partial_failure" if any_write_failed else "success"
+
     return {
-        "status": "success",
+        "status": overall_status,
         "dry_run": False,
         "classes": class_summaries,
         **diagnostics,

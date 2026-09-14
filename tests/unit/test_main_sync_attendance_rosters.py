@@ -311,6 +311,10 @@ class TestPhaseBWrite:
         no1_summary = next(c for c in result["classes"] if c["class_name"] == "No1")
         no2_summary = next(c for c in result["classes"] if c["class_name"] == "No2")
 
+        # 書込み失敗が1件でもあれば、全体statusは"success"にせず、
+        # Dashboardが「成功」トーストを誤って出さないようにする
+        # (codex実装レビュー指摘P2対応)
+        assert result["status"] == "partial_failure"
         assert no1_summary["write_failed"] == 1
         assert no1_summary["withdrawn"] == 0
         assert no2_summary["write_failed"] == 0
@@ -345,5 +349,51 @@ class TestPhaseBWrite:
         )
 
         no1_summary = next(c for c in result["classes"] if c["class_name"] == "No1")
+        assert result["status"] == "partial_failure"
         assert no1_summary["write_failed"] == 1
+        assert no1_summary["withdrawn"] == 0
+
+    def test_class_transfer_student_is_not_marked_withdrawn(self, patched_config):
+        """
+        受講者がクラスを異動した場合(例: No1→No2)、旧クラス(No1)のreconcileが
+        新クラス(No2)の書込みより先に走っても、その受講者を誤ってwithdrawn化
+        しないこと。
+
+        再現条件: student_id="N001"が以前はNo1に在籍していた(Firestore上に
+        class_name="No1", sync_source="attendance_roster"のドキュメントが存在)が、
+        今回の同期ではNo2の名簿にのみ登場する(No1の名簿には登場しない)。
+        処理順はNo1→No2のため、No1のreconcileがNo2の書込みより先に実行される。
+
+        修正前は、No1のreconcile時点でN001がNo1の現在名簿に存在しないため
+        withdrawn化され、その後のNo2書込みがpreserve_existing_status=Trueに
+        よりwithdrawnステータスを引き継いでしまうバグがあった
+        （codex実装レビュー指摘P1、2026-09-14修正）。
+        """
+        sheets_service = Mock()
+        sheets_service.get_attendance_roster_data.side_effect = [
+            # No1の現在名簿にはN001はもういない(No2へ異動済み)
+            RosterReadResult(class_name="No1", status="empty", students=[]),
+            RosterReadResult(
+                class_name="No2",
+                status="ok",
+                students=[_student("N001", class_name="No2")],
+            ),
+        ]
+        firestore_service = Mock()
+        firestore_service.student_exists.return_value = True
+        firestore_service.create_student.return_value = True
+        # No1側の既存ドキュメント: N001がまだclass_name="No1"のまま残っている
+        firestore_service.get_student_ids_by_class_and_source.side_effect = (
+            lambda class_name, sync_source: (
+                {"N001": "active"} if class_name == "No1" else {}
+            )
+        )
+
+        result = main._sync_students_from_attendance_rosters(
+            sheets_service, firestore_service
+        )
+
+        assert result["status"] == "success"
+        firestore_service.mark_student_withdrawn.assert_not_called()
+        no1_summary = next(c for c in result["classes"] if c["class_name"] == "No1")
         assert no1_summary["withdrawn"] == 0

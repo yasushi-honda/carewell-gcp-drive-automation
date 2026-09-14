@@ -43,12 +43,15 @@ export interface DuplicateStudentIdInfo {
  *
  * status:
  * - "success": フェーズB(書込み)まで完了、またはdry_run/preflightが正常に完了
+ * - "partial_failure": フェーズBは実行されたが、一部クラスでcreate_student()や
+ *   reconcile(退会検出)の書込みが失敗した(classes[].write_failed > 0)。
+ *   同期処理自体は完走しているため"aborted"とは区別する
  * - "aborted": フェーズAで異常(read_error/schema_error/重複/malformed_rows)を検出し、
  *   Firestoreへは書き込まずに中断した(fail-closed)。診断情報は各フィールド参照
  * - "error": ハンドラ自体で例外が発生した
  */
 export interface SyncResult {
-  status: 'success' | 'aborted' | 'error';
+  status: 'success' | 'partial_failure' | 'aborted' | 'error';
   dry_run?: boolean;
   classes?: ClassSyncSummary[];
   not_configured_classes?: string[];
