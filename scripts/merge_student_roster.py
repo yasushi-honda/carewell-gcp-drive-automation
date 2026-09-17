@@ -436,6 +436,12 @@ def run_validation_gates(
 def build_target_matrix(
     merged: list[dict], category_map: dict[str, str]
 ) -> list[list[str]]:
+    """出欠管理シート「受講者リスト」タブへの書込み行列を組み立てる。
+
+    会社(D列)・事業所(E列)は個人情報保護のためクライアント要望(2026-09-12)により
+    列は残しつつ値は常に空欄で書き込む(scripts/hide_sensitive_sheets.pyの列非表示と対)。
+    列自体を削除しないのは、他の列(F列以降)の位置を変えないため。
+    """
     rows = []
     for r in merged:
         rows.append(
@@ -443,8 +449,8 @@ def build_target_matrix(
                 r["name"],
                 r["kana"],
                 r["nichikai"],
-                r["company"],
-                r["office"],
+                "",
+                "",
                 r["service_type"],
                 category_map.get(r["group"], ""),
                 r["group"],
