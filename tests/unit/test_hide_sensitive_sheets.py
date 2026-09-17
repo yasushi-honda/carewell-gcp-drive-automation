@@ -6,12 +6,15 @@ Unit tests for scripts/hide_sensitive_sheets.py の純粋関数(リクエスト�
 
 import sys
 
+import pytest
+
 sys.path.insert(0, "scripts")
 
 from hide_sensitive_sheets import (  # noqa: E402
     COMPANY_OFFICE_COLUMN_RANGE,
     _find_sheet_entry,
     _is_whole_sheet_protected,
+    check_sa_not_locked_out,
     plan_destination_task1_requests,
     plan_hide_request,
     plan_protect_request,
@@ -46,11 +49,8 @@ class TestFindSheetEntry:
             {"properties": {"title": "課題①"}},
             {"properties": {"title": "課題①"}},
         ]
-        try:
+        with pytest.raises(RuntimeError):
             _find_sheet_entry(sheets, "課題①")
-            assert False, "RuntimeErrorが発生するはず"
-        except RuntimeError:
-            pass
 
 
 class TestIsWholeSheetProtected:
@@ -67,6 +67,26 @@ class TestIsWholeSheetProtected:
             protected_ranges=[
                 {"range": {"sheetId": 1, "startRowIndex": 0, "endRowIndex": 5}}
             ]
+        )
+        assert _is_whole_sheet_protected(entry) is False
+
+    def test_zero_start_index_omitted_partial_range_is_not_whole_sheet(self):
+        # Sheets APIはproto3のデフォルト値省略により、start側indexが0の場合
+        # レスポンスからstartRowIndex/startColumnIndex自体が欠落しうる(例: A1:E100)。
+        # この場合もendRowIndex/endColumnIndexが残っているため、シート全体保護と
+        # 誤判定してはならない(4つのindexキー全てが欠落している場合のみ全体保護扱い)。
+        entry = _sheet_entry(
+            protected_ranges=[
+                {"range": {"sheetId": 1, "endRowIndex": 5, "endColumnIndex": 5}}
+            ]
+        )
+        assert _is_whole_sheet_protected(entry) is False
+
+    def test_warning_only_protection_does_not_count(self):
+        # warningOnly=Trueは編集時に警告を表示するだけで、誰でも編集できてしまうため
+        # 「保護済み」とはみなさない
+        entry = _sheet_entry(
+            protected_ranges=[{"range": {"sheetId": 1}, "warningOnly": True}]
         )
         assert _is_whole_sheet_protected(entry) is False
 
@@ -140,6 +160,24 @@ class TestPlanDestinationTask1Requests:
         )
         requests = plan_destination_task1_requests(entry, ["a@example.com"])
         assert requests == []
+
+
+class TestCheckSaNotLockedOut:
+    def test_raises_when_sa_missing_from_nonempty_editor_list(self):
+        with pytest.raises(RuntimeError):
+            check_sa_not_locked_out(
+                ["someone@example.com"], sa_email="sa@example.com"
+            )
+
+    def test_passes_when_sa_present(self):
+        check_sa_not_locked_out(
+            ["someone@example.com", "sa@example.com"], sa_email="sa@example.com"
+        )  # 例外が発生しなければOK
+
+    def test_empty_editor_list_does_not_raise(self):
+        # 対象タブが存在せずまだ取得していない場合(呼び出し元でeditor_emails=[]としている)は
+        # 判定不能なため何もしない
+        check_sa_not_locked_out([], sa_email="sa@example.com")
 
 
 class TestPlanTask1Requests:
