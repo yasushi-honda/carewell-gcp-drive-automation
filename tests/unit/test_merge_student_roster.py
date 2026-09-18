@@ -15,6 +15,7 @@ from merge_student_roster import (  # noqa: E402
     ValidationError,
     _find_key_duplicates,
     _rstrip_blank_rows,
+    build_target_matrix,
     match_students,
     normalize_key,
     parse_application_data,
@@ -487,3 +488,44 @@ class TestValidateStudentNumberUniqueness:
         ]
         issues = validate_student_number_uniqueness(merged)
         assert any("A001" in i for i in issues)
+
+
+class TestBuildTargetMatrix:
+    def _row(self, **overrides):
+        base = {
+            "name": "青山 夏貴",
+            "kana": "あおやま なつき",
+            "nichikai": "N9904820",
+            "company": "社会福祉法人テスト会",
+            "office": "テスト施設",
+            "service_type": "短期入所生活介護",
+            "group": "A",
+            "student_number": "A001",
+        }
+        base.update(overrides)
+        return base
+
+    def test_company_and_office_are_blanked_even_when_source_has_values(self):
+        rows = build_target_matrix([self._row()], {"A": "入所系居宅系"})
+        # D列・E列(index 3,4)が空欄であること。列自体は削除せず位置を保つ。
+        assert rows[0][3] == ""
+        assert rows[0][4] == ""
+        assert len(rows[0]) == 10
+
+    def test_other_columns_are_unaffected_by_blanking(self):
+        rows = build_target_matrix([self._row()], {"A": "入所系居宅系"})
+        assert rows[0][0] == "青山 夏貴"
+        assert rows[0][1] == "あおやま なつき"
+        assert rows[0][2] == "N9904820"
+        assert rows[0][5] == "短期入所生活介護"
+        assert rows[0][6] == "入所系居宅系"
+        assert rows[0][7] == "A"
+        assert rows[0][8] == "A001"
+        assert rows[0][9] == "A001"
+
+    def test_already_empty_company_and_office_stay_empty(self):
+        rows = build_target_matrix(
+            [self._row(company="", office="")], {"A": "入所系居宅系"}
+        )
+        assert rows[0][3] == ""
+        assert rows[0][4] == ""
