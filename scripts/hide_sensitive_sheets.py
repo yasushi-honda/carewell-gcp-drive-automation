@@ -558,7 +558,12 @@ def main() -> int:
 
     classes = [args.class_num] if args.class_num else TARGET_CLASSES
 
-    scratch_dir = Path.home() / ".claude" / "scratch" / "hide_sensitive_sheets"
+    scratch_dir = (
+        Path(__file__).resolve().parent.parent
+        / "var"
+        / "scratch"
+        / "hide_sensitive_sheets"
+    )
     timestamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
     backup_dir = scratch_dir / timestamp
     backup_dir.mkdir(parents=True, exist_ok=True)

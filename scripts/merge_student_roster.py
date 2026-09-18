@@ -641,7 +641,12 @@ def main() -> int:
     current_raw = _get_values(spreadsheet_id, f"'{ROSTER_TARGET_TAB}'!A2:J100000")
     current_hash = _content_hash(current_raw)
 
-    scratch_dir = Path.home() / ".claude" / "scratch" / "merge_student_roster"
+    scratch_dir = (
+        Path(__file__).resolve().parent.parent
+        / "var"
+        / "scratch"
+        / "merge_student_roster"
+    )
     scratch_dir.mkdir(parents=True, exist_ok=True)
     timestamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
     backup_path = scratch_dir / f"backup_class{class_num}_{timestamp}.json"
