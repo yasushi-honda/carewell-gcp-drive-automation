@@ -5,6 +5,7 @@ Unit tests for scripts/hide_sensitive_sheets.py の純粋関数(リクエスト�
 """
 
 import sys
+from pathlib import Path
 
 import pytest
 
@@ -12,8 +13,10 @@ sys.path.insert(0, "scripts")
 
 from hide_sensitive_sheets import (  # noqa: E402
     COMPANY_OFFICE_COLUMN_RANGE,
+    PROJECT_ROOT,
     _find_sheet_entry,
     _is_whole_sheet_protected,
+    _scratch_dir,
     check_sa_not_locked_out,
     plan_destination_task1_requests,
     plan_hide_request,
@@ -184,3 +187,20 @@ class TestPlanTask1Requests:
 
     def test_returns_empty_when_already_hidden(self):
         assert plan_task1_requests({"sheetId": 3, "hidden": True}) == []
+
+
+class TestScratchDir:
+    """Issue #36: backup/manifestの出力先がプロジェクト外(ホーム配下)へ逆戻りしないことを保証する回帰テスト。"""
+
+    def test_scratch_dir_is_under_project_root(self):
+        scratch_dir = _scratch_dir()
+        assert scratch_dir.is_relative_to(PROJECT_ROOT)
+
+    def test_scratch_dir_is_not_under_home_claude(self):
+        scratch_dir = _scratch_dir()
+        assert not scratch_dir.is_relative_to(Path.home() / ".claude")
+
+    def test_scratch_dir_matches_gitignore_target(self):
+        assert (
+            _scratch_dir() == PROJECT_ROOT / "var" / "scratch" / "hide_sensitive_sheets"
+        )

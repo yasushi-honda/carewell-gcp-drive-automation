@@ -9,12 +9,16 @@ import sys
 
 sys.path.insert(0, "scripts")
 
+from pathlib import Path  # noqa: E402
+
 from merge_student_roster import (  # noqa: E402
     APPLICATION_HEADER_PREFIX,
     CLIENT_SOURCE_HEADER,
+    PROJECT_ROOT,
     ValidationError,
     _find_key_duplicates,
     _rstrip_blank_rows,
+    _scratch_dir,
     build_target_matrix,
     match_students,
     normalize_key,
@@ -529,3 +533,20 @@ class TestBuildTargetMatrix:
         )
         assert rows[0][3] == ""
         assert rows[0][4] == ""
+
+
+class TestScratchDir:
+    """Issue #36: 生徒名簿backupの出力先がプロジェクト外(ホーム配下)へ逆戻りしないことを保証する回帰テスト。"""
+
+    def test_scratch_dir_is_under_project_root(self):
+        scratch_dir = _scratch_dir()
+        assert scratch_dir.is_relative_to(PROJECT_ROOT)
+
+    def test_scratch_dir_is_not_under_home_claude(self):
+        scratch_dir = _scratch_dir()
+        assert not scratch_dir.is_relative_to(Path.home() / ".claude")
+
+    def test_scratch_dir_matches_gitignore_target(self):
+        assert (
+            _scratch_dir() == PROJECT_ROOT / "var" / "scratch" / "merge_student_roster"
+        )

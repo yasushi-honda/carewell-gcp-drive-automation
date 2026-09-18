@@ -68,4 +68,5 @@ tests/rules/.firebase/
 
 # Local script backups/manifests (may contain student roster PII) - Issue #36
 # 必ずプロジェクトローカルに留める。~/.claude/scratch/ 等のグローバル領域へは書き出さないこと。
-var/scratch/
+# ディレクトリ全体を除外(将来 var/ 配下に非JSON出力が増えても漏れなく無視するため)。
+/var/
