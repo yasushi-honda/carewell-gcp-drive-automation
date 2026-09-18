@@ -68,4 +68,5 @@ Issue #18（出欠確認シートへの課題提出状況の自動反映、令�
   - 修正: (1) scratch_dirの起点をプロジェクトローカルの`.gitignore`済み`var/`配下に変更 (2) レビュー過程で新たに発見した「`merge_student_roster.py`がdry-run実行時にも生徒名簿PII全行をローカルに書き出していた」問題も合わせて修正（`--commit`確定後・実書込み直前にのみ書き出すよう変更） (3) backup用ディレクトリ/ファイルをパーミッション0700/0600に制限 (4) `~/.claude/scratch/`への逆戻りを検知する回帰テストを追加（既存70件+新規6件、計76件通過）
   - codexがusage limit(利用枠枯渇、次回リトライ2026-09-20 1:21 AM)で使用不可だったため、事前承認済みの狭い代替条件（capacity超過限定）には該当しないと判断しAskUserQuestionでユーザー確認のうえfable-review(Fable 5.1)を2回実施。CI全項目pass後、番号単位の明示承認を得てマージ
   - triage基準未達と判断し新規Issue化を見送った項目（Issue #36にコメントで記録済み）: `var/scratch/`の保持期限・自動クリーンアップ未整備、検証ゲート失敗時の受講者番号・日介番号(氏名は含まない)のstdout→Claude Code transcript残留
+  - （2026-09-18追記）claude-11がPR #37をさらに独立再検証し、`hide_sensitive_sheets.py`側4箇所（class*_roster_before.json / class*_dest_task1_before.json / class*_task1_before.json / manifest.json）がディレクトリ制限（mode=0o700）のみでファイル単位のchmodを欠いていた不一致を指摘。`merge_student_roster.py`のmanifest_pathも同様に未対応だったため合わせて修正し、両ファイル計6箇所にchmod(0o600)を統一適用。PR #39としてCI全項目pass・回帰テスト76件通過を確認のうえ番号単位の明示承認を得てマージ済み（`06ccf2e`）。backup_dir/scratch_dir自体は既に0700のため実害はなく、多層防御としての一貫性向上が目的
   - Issue #18本体の進捗には影響なし（このバグ修正は完全に独立した副産物対応）
