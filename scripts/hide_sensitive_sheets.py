@@ -44,7 +44,8 @@ import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(PROJECT_ROOT))
 
 from scripts.merge_student_roster import (  # noqa: E402
     ROSTER_TARGET_TAB,
@@ -324,6 +325,15 @@ def check_sa_not_locked_out(editor_emails: list[str], sa_email: str = SA_EMAIL) 
         )
 
 
+def _scratch_dir() -> Path:
+    """backup/manifestの出力先(プロジェクトローカル、gitignore済み)。
+
+    ~/.claude/scratch/ 等のホーム配下(グローバル・全プロジェクト共有領域)には
+    絶対に書き出さないこと(Issue #36: PII漏出インシデントの原因)。
+    """
+    return PROJECT_ROOT / "var" / "scratch" / "hide_sensitive_sheets"
+
+
 def process_class(class_num: str, commit: bool, backup_dir: Path) -> dict:
     result = {"class": class_num, "roster": None, "task1": None, "dest_task1": None}
 
@@ -558,10 +568,10 @@ def main() -> int:
 
     classes = [args.class_num] if args.class_num else TARGET_CLASSES
 
-    scratch_dir = Path.home() / ".claude" / "scratch" / "hide_sensitive_sheets"
+    scratch_dir = _scratch_dir()
     timestamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
     backup_dir = scratch_dir / timestamp
-    backup_dir.mkdir(parents=True, exist_ok=True)
+    backup_dir.mkdir(parents=True, exist_ok=True, mode=0o700)
     print(f"[バックアップ先] {backup_dir}")
 
     all_results = []

@@ -24,7 +24,8 @@ import unicodedata
 from datetime import datetime, timezone
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(PROJECT_ROOT))
 
 from src.config.classes import (  # noqa: E402
     ATTENDANCE_ROSTER_FILE_IDS as KNOWN_ATTENDANCE_FILE_IDS,
@@ -475,6 +476,15 @@ def _content_hash(rows: list[list[str]]) -> str:
     ).hexdigest()
 
 
+def _scratch_dir() -> Path:
+    """生徒名簿backup/manifestの出力先(プロジェクトローカル、gitignore済み)。
+
+    ~/.claude/scratch/ 等のホーム配下(グローバル・全プロジェクト共有領域)には
+    絶対に書き出さないこと(Issue #36: PII漏出インシデントの原因)。
+    """
+    return PROJECT_ROOT / "var" / "scratch" / "merge_student_roster"
+
+
 def _col_letter(n: int) -> str:
     """1-indexed列番号をA1記法の列文字に変換する(J=10までしか使わないため簡易実装)"""
     letters = ""
@@ -641,12 +651,7 @@ def main() -> int:
     current_raw = _get_values(spreadsheet_id, f"'{ROSTER_TARGET_TAB}'!A2:J100000")
     current_hash = _content_hash(current_raw)
 
-    scratch_dir = Path.home() / ".claude" / "scratch" / "merge_student_roster"
-    scratch_dir.mkdir(parents=True, exist_ok=True)
     timestamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
-    backup_path = scratch_dir / f"backup_class{class_num}_{timestamp}.json"
-    backup_path.write_text(json.dumps(current_raw, ensure_ascii=False, indent=2))
-    print(f"[バックアップ] {backup_path}")
 
     diff_count = sum(
         1
@@ -668,6 +673,15 @@ def main() -> int:
             "[中断] 検証時点からシート内容が変更されています(楽観ロック)。再実行してください。"
         )
         return 1
+
+    # バックアップはロールバック用途のため、楽観ロック検証を通過し実書込み直前に
+    # 作成する(dry-runでは書き込みを行わないため、生徒名簿PIIをローカルに残す必要がない)。
+    scratch_dir = _scratch_dir()
+    scratch_dir.mkdir(parents=True, exist_ok=True, mode=0o700)
+    backup_path = scratch_dir / f"backup_class{class_num}_{timestamp}.json"
+    backup_path.write_text(json.dumps(reread_raw, ensure_ascii=False, indent=2))
+    backup_path.chmod(0o600)
+    print(f"[バックアップ] {backup_path}")
 
     max_rows = max(len(current_raw), len(new_matrix))
     padded_matrix = [
