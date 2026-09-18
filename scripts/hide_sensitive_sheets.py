@@ -372,6 +372,7 @@ def process_class(class_num: str, commit: bool, backup_dir: Path) -> dict:
                 backup_path.write_text(
                     json.dumps(roster_sheet, ensure_ascii=False, indent=2)
                 )
+                backup_path.chmod(0o600)
                 requests = plan_roster_requests(roster_sheet, editor_emails)
                 if not commit:
                     result["roster"] = {
@@ -436,6 +437,7 @@ def process_class(class_num: str, commit: bool, backup_dir: Path) -> dict:
                 backup_path.write_text(
                     json.dumps(dest_task1_sheet, ensure_ascii=False, indent=2)
                 )
+                backup_path.chmod(0o600)
                 requests = plan_destination_task1_requests(
                     dest_task1_sheet, editor_emails
                 )
@@ -508,6 +510,7 @@ def process_class(class_num: str, commit: bool, backup_dir: Path) -> dict:
                 backup_path.write_text(
                     json.dumps(task1_sheet, ensure_ascii=False, indent=2)
                 )
+                backup_path.chmod(0o600)
                 requests = plan_task1_requests(task1_sheet)
                 if not commit:
                     result["task1"] = {
@@ -585,6 +588,7 @@ def main() -> int:
 
     manifest_path = backup_dir / "manifest.json"
     manifest_path.write_text(json.dumps(all_results, ensure_ascii=False, indent=2))
+    manifest_path.chmod(0o600)
     print(f"\n[結果一覧] {manifest_path}")
 
     if not args.commit:

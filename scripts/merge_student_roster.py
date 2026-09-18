@@ -783,6 +783,7 @@ def _write_manifest(
 ) -> None:
     manifest_path = scratch_dir / f"manifest_class{class_num}_{timestamp}.json"
     manifest_path.write_text(json.dumps(manifest, ensure_ascii=False, indent=2))
+    manifest_path.chmod(0o600)
     print(f"[実行記録] {manifest_path}")
 
 
