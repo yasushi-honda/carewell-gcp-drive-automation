@@ -125,9 +125,7 @@ class TestPlanRosterRequests:
         assert "addProtectedRange" in kinds
 
     def test_already_hidden_and_protected_sheet_only_gets_column_hide(self):
-        entry = _sheet_entry(
-            hidden=True, protected_ranges=[{"range": {"sheetId": 1}}]
-        )
+        entry = _sheet_entry(hidden=True, protected_ranges=[{"range": {"sheetId": 1}}])
         requests = plan_roster_requests(entry, ["a@example.com"])
         kinds = [list(r.keys())[0] for r in requests]
         assert "updateSheetProperties" not in kinds
@@ -165,9 +163,7 @@ class TestPlanDestinationTask1Requests:
 class TestCheckSaNotLockedOut:
     def test_raises_when_sa_missing_from_nonempty_editor_list(self):
         with pytest.raises(RuntimeError):
-            check_sa_not_locked_out(
-                ["someone@example.com"], sa_email="sa@example.com"
-            )
+            check_sa_not_locked_out(["someone@example.com"], sa_email="sa@example.com")
 
     def test_passes_when_sa_present(self):
         check_sa_not_locked_out(
