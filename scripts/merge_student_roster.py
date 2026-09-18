@@ -674,8 +674,8 @@ def main() -> int:
         )
         return 1
 
-    # バックアップはロールバック用途のため実書き込み確定後(--commit時)にのみ作成する。
-    # dry-runでは書き込みを行わないため、生徒名簿PIIをローカルに残す必要がない。
+    # バックアップはロールバック用途のため、楽観ロック検証を通過し実書込み直前に
+    # 作成する(dry-runでは書き込みを行わないため、生徒名簿PIIをローカルに残す必要がない)。
     scratch_dir = _scratch_dir()
     scratch_dir.mkdir(parents=True, exist_ok=True, mode=0o700)
     backup_path = scratch_dir / f"backup_class{class_num}_{timestamp}.json"
