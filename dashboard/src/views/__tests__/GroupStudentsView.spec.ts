@@ -60,6 +60,7 @@ const DATA: Student[] = [
 ];
 
 const mounted: VueWrapper[] = [];
+let consoleError: ReturnType<typeof vi.spyOn>;
 
 async function mountView(width: number) {
   installViewport(width);
@@ -97,13 +98,14 @@ describe('GroupStudentsView (responsive table / cards)', () => {
     studentsState.error.value = null;
     getDocuments.mockReset();
     getDocuments.mockResolvedValue([]);
-    vi.spyOn(console, 'error').mockImplementation(() => {});
+    consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
   });
 
   afterEach(() => {
     mounted.splice(0).forEach((wrapper) => wrapper.unmount());
     resetViewport();
-    vi.restoreAllMocks();
+    // 共通の setup（ResizeObserver など）のモックを巻き込まないよう、この spec で作った spy だけ戻す
+    consoleError.mockRestore();
   });
 
   describe('表示の切替（単一描画）', () => {
@@ -385,6 +387,21 @@ describe('GroupStudentsView (responsive table / cards)', () => {
         await chip(wrapper, 'failed').trigger('click');
         expect(shownIds(wrapper)).toEqual([]);
       });
+    });
+
+    it('should leave out inactive students entirely (list, chips and the mismatch check)', async () => {
+      studentsState.students.value = [
+        ...DATA.filter((s) => s.group === 'A' && s.class_name === 'No1'),
+        student('N06', { furigana: 'く', student_number: 'A008', status: 'inactive' }),
+      ];
+      // 提出しているのは無効な N06 だけ → 名簿の誰とも一致しないので、状態は出さず警告する
+      getDocuments.mockResolvedValue([file('N06', '合格')]);
+      const wrapper = await mountView(1280);
+      await flushPromises();
+
+      expect(shownIds(wrapper).sort()).toEqual(['N01', 'N02', 'N03']);
+      expect(wrapper.get('[role="alert"]').text()).toContain('提出データと受講生名簿が一致しなかった');
+      expect(wrapper.find('[data-chip]').exists()).toBe(false);
     });
 
     it('should read the files of this class and task', async () => {

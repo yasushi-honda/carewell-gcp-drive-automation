@@ -161,6 +161,13 @@ describe('StudentCardList', () => {
         const wrapper = mountList({ students: [student()], submissionState, submissions: new Map() });
 
         expect(wrapper.text()).not.toContain('未提出');
+        expect(wrapper.find('[data-status]').exists()).toBe(false);
+        // 行そのものは残し、読み込み中は骨格、それ以外は「-」を出す
+        expect(wrapper.text()).toContain('提出状況');
+        expect(wrapper.find('[data-testid="submission-cell-loading"]').exists()).toBe(submissionState === 'loading');
+        if (submissionState !== 'loading') {
+          expect(wrapper.find('[data-testid="submission-cell-unavailable"]').text()).toBe('-');
+        }
       }
     });
   });
