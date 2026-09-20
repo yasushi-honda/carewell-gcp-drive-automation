@@ -28,7 +28,7 @@
             v-model="searchQuery"
             type="text"
             placeholder="氏名・ふりがな・日介番号で検索"
-            class="block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm py-2 px-3 border"
+            class="block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm py-2 px-3 border min-h-11 lg:min-h-0"
           />
         </div>
       </div>
@@ -51,8 +51,14 @@
         </p>
       </div>
 
-      <!-- テーブル本体 -->
-      <div class="overflow-x-auto">
+      <!-- 1024px未満（表は最小幅が約812px）: カードリスト -->
+      <template v-if="isCompact">
+        <SortOptions :options="sortOptions" @toggle="onSortToggle" />
+        <StudentCardList :students="filteredAndSortedStudents" />
+      </template>
+
+      <!-- 広い画面: テーブル本体（従来どおり） -->
+      <div v-else class="overflow-x-auto">
         <table class="min-w-full divide-y divide-gray-200">
           <thead class="bg-gray-50">
             <tr>
@@ -123,14 +129,14 @@
             </tr>
           </tbody>
         </table>
+      </div>
 
-        <!-- 空状態 -->
-        <div v-if="filteredAndSortedStudents.length === 0" class="px-6 py-12 text-center">
-          <svg class="mx-auto h-12 w-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
-          </svg>
-          <p class="mt-2 text-sm text-gray-500">該当する受講生が見つかりませんでした</p>
-        </div>
+      <!-- 空状態（カード・テーブル共通） -->
+      <div v-if="filteredAndSortedStudents.length === 0" class="px-6 py-12 text-center">
+        <svg class="mx-auto h-12 w-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
+        </svg>
+        <p class="mt-2 text-sm text-gray-500">該当する受講生が見つかりませんでした</p>
       </div>
     </div>
   </div>
@@ -144,6 +150,9 @@ import { convertToShortClassName } from '../config/classes';
 import Breadcrumb from '../components/Breadcrumb.vue';
 import LoadingSkeleton from '../components/LoadingSkeleton.vue';
 import ErrorAlert from '../components/ErrorAlert.vue';
+import StudentCardList from '../components/StudentCardList.vue';
+import SortOptions from '../components/SortOptions.vue';
+import { useMediaQuery, BELOW_LG } from '../composables/useMediaQuery';
 
 const route = useRoute();
 const router = useRouter();
@@ -160,6 +169,9 @@ const sortOrder = ref<'asc' | 'desc' | null>(null);
 const shortClassName = convertToShortClassName(className);
 
 const { students, loading, error } = useStudents();
+
+// 表は最小幅が約812pxのため、1024px未満ではカード表示にする
+const isCompact = useMediaQuery(BELOW_LG);
 
 // フィルタリング（クラス、グループ、検索クエリ）
 const filteredStudents = computed(() => {
@@ -229,6 +241,20 @@ const filteredAndSortedStudents = computed(() => {
 
   return result;
 });
+
+// カード表示用の並べ替えボタン（テーブルの見出しクリックと同じ状態遷移: 昇順 ⇄ 降順）
+const sortOptions = computed(() => [
+  { key: 'furigana', label: 'ふりがな', order: sortBy.value === 'furigana' ? sortOrder.value : null },
+  { key: 'serial_number', label: '通し番号', order: sortBy.value === 'serial_number' ? sortOrder.value : null },
+]);
+
+const onSortToggle = (key: string) => {
+  if (key === 'serial_number') {
+    toggleSortSerialNumber();
+  } else {
+    toggleSortFurigana();
+  }
+};
 
 const navigateToDetail = (studentId: string) => {
   router.push(`/students/${studentId}`);
