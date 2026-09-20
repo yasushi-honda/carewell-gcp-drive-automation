@@ -179,7 +179,7 @@ export function useGroupStats(className: MaybeRefOrGetter<string>, taskId: Maybe
     submissionState.value = files.length > 0 && matchedSubmitters === 0 ? 'mismatch' : 'ready';
   };
 
-  /** 提出ファイルだけを取得して反映する（再取得用）。失敗しても例外を投げず、状態に反映する */
+  /** 提出ファイルを取得して反映する（初回の取得と再取得で共通）。失敗しても例外を投げず、状態に反映する */
   const loadSubmissions = async (generation: number, currentClassName: string, currentTaskId: string) => {
     submissionState.value = 'loading';
     let files: SubmissionFile[];
@@ -209,12 +209,6 @@ export function useGroupStats(className: MaybeRefOrGetter<string>, taskId: Maybe
     submitters.value = 0;
     baseStats.value = [];
     roster = [];
-
-    // 提出データは受講生の取得と同時に開始する（カードは提出データを待たずに表示する）
-    const filesRequest = getDocuments<SubmissionFile>('submissions', currentClassName, 'tasks', currentTaskId, 'files').then(
-      (files) => ({ ok: true as const, files }),
-      (err: unknown) => ({ ok: false as const, err })
-    );
 
     try {
       const db = getDb();
@@ -263,16 +257,10 @@ export function useGroupStats(className: MaybeRefOrGetter<string>, taskId: Maybe
       if (studentsGen === studentsGeneration) loading.value = false;
     }
 
-    // 受講生が取れたあとで、提出データの結果を反映する
-    const result = await filesRequest;
-    if (submissionsGen !== submissionsGeneration) return;
-
-    if (!result.ok) {
-      console.error('Error fetching submissions:', result.err);
-      submissionState.value = 'error';
-      return;
-    }
-    applyFiles(result.files);
+    // 提出データは、受講生の取得が終わってから取り始める（カードを先に出し、バーは後から埋める）。
+    // 同時に取り始めると、同じ回線を分け合ってカードの表示まで遅れる（本番実測で約+130ms、
+    // 全員提出で約630KBになると約+3秒の見込み）。
+    await loadSubmissions(submissionsGen, currentClassName, currentTaskId);
   };
 
   /** 提出状況だけを取り直す（受講生の再取得はしない） */

@@ -262,20 +262,22 @@ describe('useGroupStats', () => {
     expect(firestore.where).toHaveBeenCalledWith('status', '==', 'active');
   });
 
-  it('should start both requests before either resolves (parallel)', async () => {
+  it('should request the submissions only after the students arrive (so the cards are not slowed by the larger download)', async () => {
     const students = deferred<unknown>();
-    const files = deferred<SubmissionFile[]>();
     getDocs.mockReturnValue(students.promise as never);
-    getDocuments.mockReturnValue(files.promise as never);
+    getDocuments.mockResolvedValue([]);
 
     mountComposable();
-
-    // どちらもまだ解決していない時点で、両方の取得が始まっている
-    expect(getDocs).toHaveBeenCalledTimes(1);
-    expect(getDocuments).toHaveBeenCalledTimes(1);
-    students.resolve(ROSTER);
-    files.resolve([]);
     await flushPromises();
+
+    // 受講生が届くまで、提出データは取りに行かない（同じ回線を分け合わない）
+    expect(getDocs).toHaveBeenCalledTimes(1);
+    expect(getDocuments).not.toHaveBeenCalled();
+
+    students.resolve(ROSTER);
+    await flushPromises();
+
+    expect(getDocuments).toHaveBeenCalledTimes(1);
   });
 
   it('should show the cards before the submissions arrive, then fill in the breakdown', async () => {
@@ -401,7 +403,7 @@ describe('useGroupStats', () => {
     expect(result.groupStats.value).toEqual([]);
   });
 
-  it('should not leave an unhandled rejection when both requests fail', async () => {
+  it('should not request the submissions at all when the students fail', async () => {
     getDocs.mockRejectedValue(new Error('students down'));
     getDocuments.mockRejectedValue(new Error('files down'));
 
@@ -409,6 +411,7 @@ describe('useGroupStats', () => {
     await flushPromises();
 
     expect(result.error.value).toBe('グループ統計の取得に失敗しました');
+    expect(getDocuments).not.toHaveBeenCalled();
   });
 
   it('should refetch when the task changes and ignore the older response arriving late', async () => {
@@ -539,9 +542,10 @@ describe('useGroupStats', () => {
       const { result } = mountComposable();
       await result.refetchSubmissions();
 
-      expect(getDocuments).toHaveBeenCalledTimes(1);
+      expect(getDocuments).not.toHaveBeenCalled();
       students.resolve(ROSTER);
       await flushPromises();
+      expect(getDocuments).toHaveBeenCalledTimes(1);
       expect(result.submissionState.value).toBe('ready');
       expect(result.groupStats.value.find((s) => s.group === 'A')?.submission?.passed).toBe(1);
     });
