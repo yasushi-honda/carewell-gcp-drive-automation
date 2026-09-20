@@ -1,77 +1,76 @@
-# ハンドオフ: 2026-09-14（続き）
+# ハンドオフ: 2026-09-20（Dashboard モバイル対応）
 
 ## 現在のミッション（詳細: docs/handoff/GOAL.md）
-Issue #18（出欠確認シートへの課題提出状況の自動反映、令和8年度）は残り7クラスの名簿データ到着待ちで継続保留中（変更なし）。本セッションの主作業はこのミッションとは別の副産物スレッド（受講生一覧への実データ反映）。
+Issue #18（出欠確認シートへの課題提出状況の自動反映、令和8年度）は、残り7クラスの名簿・グループ分けデータ到着待ちで継続保留中（変更なし）。本セッションの主作業はこのミッションとは別の副産物スレッド（Dashboard のモバイル対応）。
 
 ## 本セッションでの完了作業
-前セッション（同日、PR #32でDB分離）に続き、令和8年度「受講生一覧」に実データを反映させる新経路を設計・実装・本番投入した。
+decision-maker の報告（スマホでヘッダーが縦に崩れる・トップの表示が遅い）を受け、Dashboard のモバイル対応を4段階・4PR + 記録1PRで完了し、各段階を本番で実測して合格判定した。
 
-- PR #33「出欠管理名簿からFirestoreへ直接同期する新経路」をマージ。decision-maker自身が「令和7年度と同じ方式（VSTACK/IMPORTRANGE集約）を本当に踏襲すべきか」と再検討を求めたため、各クラスの`受講者リスト`タブを直接Pythonから読み取りFirestoreへ書き込む方式へ設計変更。`/plan-crossreview`（grip判断モード + codex、v1→v2→v3の2巡）でHigh指摘6件+実装破壊バグ2件を修正した上で実装、実装後は`codex review`＋`pr-review-toolkit`並列6エージェント＋evaluatorによる独立レビューを実施（3エージェントが同一のHIGHバグ＝空名簿時の誤退会検出リスクを独立に発見、修正済み）
-- 二段階fail-closed設計: 収集フェーズで1クラスでも読み取り異常・スキーマ不一致・重複・不正行があれば、Firestoreへの書き込みを一切行わず中断する。会社・事業所列は取得レンジそのものから除外（PII配慮）
-- 本番で実行し、**№01クラス254名分がFirestore（`carewell-2026`）・Dashboard「受講生一覧」双方に正しく反映されていることを実機確認済み**（他7クラスは名簿データ未着のため空欄のまま、№08・10はクラス未設定のため対象外。いずれも異常ではなく想定通り）
-- Cloud Schedulerジョブ`carewell-attendance-roster-sync`を新規作成（15分間隔、ENABLED）。decision-maker方針「手動更新のみは有り得ない、理想はリアルタイム、無理ならコストも考慮した定期反映」を受け、Apps Script onEdit等の真のリアルタイム化（新規認証機構が必要・複雑度高）は見送り、既存fail-closedエンドポイントへのScheduler頻度を上げる方式を採用（Cloud Schedulerはジョブ単位課金のため頻度を上げてもコスト増なし）
-- `docs/SERVICE_SHUTDOWN_AND_RESUME.md`・`CLAUDE.md`のCloud Schedulerジョブ数記載が実態と乖離していたため訂正（実態: 全32ジョブ、ENABLED19/PAUSED13）
-- クライアント（jaccw 猪股様）向けに、完了報告と、既存Slackスレッドの続報としての返信文案をそれぞれhtml-briefスキルで作成・提示済み（送信自体はdecision-maker実施）
-- PR #33のレビューで起動した副次エージェント7件（pr-review-toolkit系5件+evaluator系2件）を全件終了。evaluator系2件は自己承認用のSendMessageツールが無効化されており自己終了できなかったため`TaskStop`で強制終了
+| PR | 内容 | 本番実測（修正前 → 後） |
+|----|------|------------------------|
+| #42 | 計測ゲート（手順・基準値・計測スクリプトを `docs/dashboard-mobile-measurement.md` に固定） | — |
+| #43 | クラス一覧・課題一覧の Firestore 取得を直列から並列化 | 表示 1331→359ms（none）/ 3210→1900ms（slow4g）/ 4823→3181ms（lat400）、Firestore リクエスト 41→12本 |
+| #44 | ヘッダーのモバイル対応（<1024px は2行、44px タップ領域、320px の横スクロール解消） | 390px で高さ 202→112px、320px の scrollW 363→320、1280px は基準値と完全一致 |
+| #45 | 受講生一覧（<1280px）・グループ内受講生（<1024px）の表をカード表示に（`useMediaQuery` / `StudentCardList` / `SortOptions`） | 画面外要素 1537→0 / 60→0、1024〜1279px の横スクロールなし、操作（並べ替え・検索・リサイズ保持・キーボード）確認 |
+| #46 | 本番実測結果を `docs/dashboard-mobile-measurement.md` §5.1 と GOAL.md に記録 | — |
+
+- 判断の経緯: 44px タップ領域は 1024px 未満のみ（decision-maker 承認）。ヘッダーの 1024px 境界と `/students` の 1280px 境界は実測に基づく実装側の判断で、PR本文で開示のうえマージされた（事前の個別承認ではない）
+- PR #45 の CI で `Dashboard Unit Tests` が4件失敗: 原因は実装ではなく `happy-dom` 12.10.3 の不具合（キー付きリストの並べ替えで要素を末尾へ移動すると `children` / `querySelectorAll` が古い状態のまま重複して見える。`childNodes` は正しい）。`dashboard/` の外のコピーで CI と同じ4件を再現して確定し、実装は変えずテストを `src/test/dom.ts` の `childNodes` 走査に置き換えた。`pr-test-analyzer` は静的読解で「CI で落ちる要因なし」と報告していたが実際には落ちた（静的レビューだけでは検出できなかった）
+- レビュー: 各PRで `codex review`（high）は最終的に指摘0件（PR #44 は初回に P2 が1件出て修正）。`code-reviewer` の Low 指摘（`/students` の入力欄を xl に揃える）と `pr-test-analyzer` の Medium 指摘（通し番号→ふりがなの逆方向のテスト）を反映
 
 ## ドキュメント整合性
 | 項目 | 状態 | 備考 |
 |------|------|------|
-| GOAL.md ↔ 実装 | ✅ | 本セッションの内容（PR #33・Cloud Scheduler新規ジョブ等）で副産物欄を更新済み |
-| CLAUDE.md ↔ 実装 | ✅ | Cloud Schedulerジョブ数の記載を実態（全32ジョブ）に訂正済み |
-| docs/SERVICE_SHUTDOWN_AND_RESUME.md ↔ 実装 | ✅ | 新規ジョブの追記、`student-sync-daily`の扱いに関する記述を更新済み |
-| E2Eテスト件数 | ⏭️ | 本セッションはE2Eテストコード変更なし（PR #33のテストはunit/integrationのみ、PR自体で既に検証済み） |
-| リンク切れ | ⚠️ | `docs/troubleshooting.md`等から削除済みの旧分析ファイル（`PAGINATION_BUG_ANALYSIS.md`等）への相対リンクが多数残存（本セッション起因ではない既存debt、対象外として次回棚卸しを検討） |
-| ADR整合性 | ⏭️ | `docs/adr/`ディレクトリ自体が存在しないプロジェクト（対象外） |
+| GOAL.md ↔ 実装 | ✅ | 副産物欄に本セッションの1エントリ追記済み（PR #46）。ミッション・中断点は変更なし |
+| 計測ドキュメント ↔ 実測 | ✅ | §5.1 に段階1〜3の本番実測を記録済み（PR #46） |
+| CLAUDE.md ↔ 実装 | ✅ | モバイル対応に関わる記載なし。Dashboard 開発ワークフロー（ローカル npm 禁止）に変更なし |
+| E2Eテスト件数 | ⏭️ | E2E コード変更なし（ユニットテストのみ） |
+| リンク切れ | ⏭️ | 本セッションでは再スキャンしていない（既存debt、9/14版の記載から変更なし） |
+| ADR整合性 | ⏭️ | `docs/adr/` なし（本プロジェクトは ADR 未導入） |
 
 ## Git状態
 | 項目 | 状態 |
 |------|------|
-| 未コミット変更 | `CLAUDE.md`・`docs/SERVICE_SHUTDOWN_AND_RESUME.md`・`docs/handoff/GOAL.md`・`docs/handoff/LATEST.md`（本ハンドオフの一部、これからコミット） |
-| 未プッシュコミット | なし |
-| CI/CD | ✅ 直近（PR #33マージ後のpush）成功、Run Tests / Deploy to Cloud Run Functions / Deploy Carewell Dashboard to Firebase Hosting 全てsuccess |
+| 未コミット変更 | 本ハンドオフ（`docs/handoff/LATEST.md`）のみ |
+| 未プッシュコミット | なし（`main` は `origin/main` と同期） |
+| OPEN PR | 本ハンドオフPR のみ（他は0件） |
+| CI/CD | ✅ PR #46 マージ後の main push、`Deploy to Cloud Run Functions` success。Dashboard は #45 のデプロイ（`index-DoWR8S2w.js`）が success で配信済み |
 
 ## 品質ゲート
 | 項目 | 状態 |
 |------|------|
-| codex review実行 | ✅実行済み（PR #33、v3プラン+実装後レビュー） |
-| pr-review-toolkit並列レビュー | ✅実行済み（5エージェント+evaluator、HIGHバグ1件を3エージェントが独立検出→修正） |
-| 構造的整合性チェック | ⏭️スキップ（本ハンドオフ自体はdocsのみの変更で対象外。PR #33自体は実装セッションで完了済み） |
-
-## ADR状態
-| 項目 | 状態 |
-|------|------|
-| ADR数 | `docs/adr/`ディレクトリなし（本プロジェクトはADR未導入） |
-| 今セッションで作成 | なし |
-| 要ADR判断 | ⚠️要検討（令和7年度方式からのアーキテクチャ変更〔PR #33〕はADR相当の判断だが、本プロジェクトにADR運用がないため`docs/SERVICE_SHUTDOWN_AND_RESUME.md`・`docs/STUDENT_SYNC_FEATURE_HANDOVER.md`への記録で代替） |
+| codex review | ✅ #43 / #44 / #45 で実行（最終的に指摘0件） |
+| pr-review-toolkit | ✅ #43（3種）/ #44・#45（code-reviewer + pr-test-analyzer）で実行、Critical/High 0件 |
+| 本番実測ゲート | ✅ 段階1〜3すべて合格（`docs/dashboard-mobile-measurement.md` §5.1） |
 
 ## 同根再発スキャン・対症療法判定
-本セッションのPR #33は`feat:`（新機能）であり`fix:`/hotfix系PRではないため、§4.6/§4.7は対象外（スキップ）。
+- §4.6: 本セッションの PR は `feat:` / `perf:` / `docs:` で、`fix:` / hotfix 系PRなし。PR #45 内の CI 失敗対応は同PR内のテスト修正（外部要因は happy-dom の不具合として特定済み）で、同根の過去PRなし → 該当なし
+- §4.7: 対象外（修正PRなし）
 
 ## 次のアクション
 
 ### 即着手タスク
-| # | タスク | ROI | 想定工数 | 完了条件 | 関連ファイル / コマンド |
-|---|--------|-----|----------|-----|----------------------|
-| 1 | 本ハンドオフのドキュメント変更をコミット・プッシュ | ドキュメント整合性の確定、次セッションの前提を正確にする | 5分 | featureブランチ作成→コミット→push→PR作成→マージ | `CLAUDE.md` / `docs/SERVICE_SHUTDOWN_AND_RESUME.md` / `docs/handoff/GOAL.md` / `docs/handoff/LATEST.md` |
+| # | タスク | ROI | 想定工数 | 完了条件 | 関連 |
+|---|--------|-----|----------|----------|------|
+| 1 | 本ハンドオフのPRのマージ | 次セッションの前提（LATEST.md）を最新化 | 5分 | 番号単位の明示認可後にマージ | `docs/handoff/LATEST.md` |
 
 ### 条件待ち（明示trigger付き）
 | # | 項目 | trigger | 充足時のタスク | 充足確認方法 |
 |---|------|---------|--------------|------------|
-| 1 | 残り7クラスのIssue #18 Step 2着手（数式書込み） | 先方（jaccw）から各クラスの名簿データ・グループ分けデータが届く | `scripts/merge_student_roster.py --class 0N`でデータ突合→検証→「受講者リスト」タブ整備→数式書込み（№01と同じ手順） | 各クラスの受講者リストタブにデータが入っているか直接確認、または`carewell-attendance-roster-sync`の実行ログで`status: "ok"`に変わったか確認 |
-| 2 | 残り7クラスの受講生一覧反映確認 | 上記1と同じ名簿データ到着 | 15分間隔のScheduler経由で自動反映される想定のため、追加作業は不要。Dashboard「受講生一覧」で件数を目視確認するのみ | Dashboard「受講生一覧」画面 |
-| 3 | `student-sync-daily`ジョブの削除要否判断 | decision-maker判断 | 用済みジョブのため削除するか令和7年度の記録として残すか決める | `gcloud scheduler jobs describe student-sync-daily --location=asia-northeast1` |
-| 4 | クライアントへの続報連絡の実送信 | decision-maker判断（下書き2件は作成済み） | Slackスレッドへ返信文案を送信 | 作成済みhtml-briefファイル（scratchpad配下、パスは前ターンの会話参照） |
+| 1 | 残り7クラスの Issue #18 Step 2（数式書込み） | 先方（jaccw）から各クラスの名簿・グループ分けデータが届く | GOAL.md 中断点の手順（`scripts/merge_student_roster.py --class 0N` → 検証 → 数式書込み） | 各クラスの「受講者リスト」タブにデータが入ったか直接確認、または `carewell-attendance-roster-sync` のログ |
+
+- 9/14版ハンドオフの条件待ち（`student-sync-daily` 削除要否、クライアントへの続報の実送信）は、本セッションでは状態を再確認していない（変更なし）。必要なら次セッションの catchup で GOAL.md と照合する
 
 ### 却下候補（記録のみ）
 | # | 項目 | 検討経緯 | 着手しない理由 |
 |---|------|---------|--------------|
-| 1 | 出欠管理名簿の真のリアルタイム化（Apps Script onEdit） | decision-makerの「理想はリアルタイム」方針を受け検討 | 各クラスファイルへのスクリプト配布・保守、新規認証機構の追加が必要で複雑度・リスクが高い。15分間隔のCloud Schedulerで体感上ほぼリアルタイムかつコストゼロ増のため、現時点では不要と判断（decision-maker確認済み） |
-| 2 | クライアント向けシステム説明ガイド（`carewell-guide-549efe9b`）への「受講生一覧」機能タブ追加 | decision-makerから「アップデート必要か」と問われ検討 | 今回の変更でガイドの既存記載（出欠確認との連携＝Issue #18の話）と矛盾する箇所は生じていない。網羅性の観点では追加余地があるが、No1しか実データが入っていない現段階では急務ではない |
-| 3 | `docs/troubleshooting.md`等の旧分析ファイルへのリンク切れ修正 | ドキュメント整合性チェックで発見 | 本セッション起因ではない既存debtでスコープ外。次回のドキュメント棚卸しで対応を検討 |
+| 1 | 管理者ログイン時のヘッダーの実機確認 | 構造テスト（`App.spec.ts`）と検証用 HTML までしか確認できていない | decision-maker が「未確認のまま残す」と判断（2026-09-20） |
+| 2 | Firestore 取得の全件失敗が「提出0件」に見える件（`useClassList` / `useTaskList`） | PR #43 のレビューで既存挙動として判明。障害事例 #15・#17 と同型のリスク | triage 基準未達（実害未発生）でIssue化せず GOAL.md に記録のみ。修正は decision-maker の起点指示が必要 |
+| 3 | グループ内受講生の本番での並べ替え・キーボード操作の確認、グループ A 以外の測定 | 本番実測で未確認として記録 | 同一コンポーネントで `/students` は本番確認済み、ユニットテストあり。ROI 低 |
+| 4 | パンくずリンクのタップ領域（390px で40px、768px で20px） | 本番実測で発見（今回の変更由来ではない） | 44px 要件の対象範囲（ヘッダー・カード・フィルタ・ソート）外。起点は decision-maker |
 
 ## Issue Net変化
-- Close数: 0件 / 起票数: 0件 / Net: 0件（Issue #18は先方対応待ちのため継続OPEN。本セッションでは新規Issue化した事項なし）
+- Close数: 0件 / 起票数: 0件 / Net: 0件（Issue #18 は先方対応待ちのため継続OPEN。本セッションで新規Issue化した事項なし）
 
 ## 最終結論
-✅ **セッション終了可** — OPEN PR 0件（PR #33はマージ済み）。Issue #18のみ継続OPEN（先方対応待ち、変更なし）。Git状態は本コミットでクリーン化予定。即着手タスク1件（本ハンドオフのコミット）、条件待ち4件（全て外部trigger待ち）。残留プロセスは他プロジェクト由来のもののみで本セッション起因のものなし。同根再発スキャン・対症療法判定は対象外（本セッションはfix系PRを作成していない）。
+✅ **セッション終了可** — ハンドオフPR以外に OPEN PR なし。Issue #18 のみ継続OPEN（先方対応待ち、変更なし）。即着手は1件（本PRのマージ、認可待ち）、条件待ち1件（外部trigger待ち）。残留プロセスなし。同根再発・対症療法判定は該当なし。
