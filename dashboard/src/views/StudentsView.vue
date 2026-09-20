@@ -16,7 +16,7 @@
             v-model="searchQuery"
             type="text"
             placeholder="氏名・ふりがな・日介番号で検索"
-            class="block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm py-2 px-3 border min-h-11 lg:min-h-0"
+            class="block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm py-2 px-3 border min-h-11 xl:min-h-0"
           />
         </div>
 
@@ -28,7 +28,7 @@
           <select
             id="class-filter"
             v-model="filterClass"
-            class="block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm py-2 px-3 border min-h-11 lg:min-h-0"
+            class="block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm py-2 px-3 border min-h-11 xl:min-h-0"
           >
             <option value="">すべて</option>
             <option v-for="className in classList" :key="className" :value="className">
@@ -45,7 +45,7 @@
           <select
             id="group-filter"
             v-model="filterGroup"
-            class="block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm py-2 px-3 border min-h-11 lg:min-h-0"
+            class="block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm py-2 px-3 border min-h-11 xl:min-h-0"
           >
             <option value="">すべて</option>
             <option v-for="group in groupList" :key="group" :value="group">

@@ -4,6 +4,7 @@ import { createRouter, createMemoryHistory } from 'vue-router';
 import { defineComponent, h, nextTick } from 'vue';
 import GroupStudentsView from '../GroupStudentsView.vue';
 import { installViewport, resizeTo, resetViewport } from '../../test/viewport';
+import { linkedStudentIds } from '../../test/dom';
 import type { Student } from '../../types/models';
 
 // グループ内の受講生一覧: <1024px はカード、≥1024px は従来の表（表の最小幅は約812px）。
@@ -75,9 +76,7 @@ async function mountView(width: number) {
 }
 
 function shownIds(wrapper: VueWrapper) {
-  return wrapper
-    .findAll('a[href^="/students/N"]')
-    .map((a) => a.attributes('href')!.replace('/students/', ''));
+  return linkedStudentIds(wrapper.element);
 }
 
 const cards = (wrapper: VueWrapper) => wrapper.find('ul[aria-label="受講生一覧"]');
@@ -208,6 +207,19 @@ describe('GroupStudentsView (responsive table / cards)', () => {
 
       expect(serial.attributes('aria-pressed')).toBe('true');
       expect(furigana.attributes('aria-pressed')).toBe('false');
+    });
+
+    it('should switch from serial number to furigana ascending (only one sort key stays active)', async () => {
+      const wrapper = await mountView(390);
+      const [furigana, serial] = sortGroup(wrapper).findAll('button');
+
+      await serial.trigger('click'); // 通し番号昇順
+      await serial.trigger('click'); // 通し番号降順
+      await furigana.trigger('click');
+
+      expect(shownIds(wrapper)).toEqual(['N01', 'N02', 'N03']);
+      expect(furigana.attributes('aria-pressed')).toBe('true');
+      expect(serial.attributes('aria-pressed')).toBe('false');
     });
   });
 

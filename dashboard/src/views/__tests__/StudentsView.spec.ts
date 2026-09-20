@@ -4,6 +4,7 @@ import { createRouter, createMemoryHistory } from 'vue-router';
 import { defineComponent, h, nextTick } from 'vue';
 import StudentsView from '../StudentsView.vue';
 import { installViewport, resizeTo, resetViewport } from '../../test/viewport';
+import { linkedStudentIds } from '../../test/dom';
 import type { Student } from '../../types/models';
 
 // 受講生一覧: <1280px はカード、≥1280px は従来の表（どちらか一方だけ描画する）。
@@ -69,9 +70,7 @@ async function mountView(width: number) {
 
 /** 表示中の受講生（カード or 表の行）の日介番号を、表示順に返す */
 function shownIds(wrapper: VueWrapper) {
-  return wrapper
-    .findAll('a[href^="/students/N"]')
-    .map((a) => a.attributes('href')!.replace('/students/', ''));
+  return linkedStudentIds(wrapper.element);
 }
 
 const cards = (wrapper: VueWrapper) => wrapper.find('ul[aria-label="受講生一覧"]');
@@ -157,11 +156,11 @@ describe('StudentsView (responsive table / cards)', () => {
       expect(wide.text()).toContain('該当する受講生が見つかりませんでした');
     });
 
-    it('should give the search box and filters a 44px touch target below lg', async () => {
+    it('should give the search box and filters a 44px touch target while cards are shown (below xl)', async () => {
       const wrapper = await mountView(390);
 
       for (const selector of ['#search-query', '#class-filter', '#group-filter']) {
-        expect(wrapper.get(selector).classes(), selector).toEqual(expect.arrayContaining(['min-h-11', 'lg:min-h-0']));
+        expect(wrapper.get(selector).classes(), selector).toEqual(expect.arrayContaining(['min-h-11', 'xl:min-h-0']));
       }
     });
   });
@@ -215,6 +214,19 @@ describe('StudentsView (responsive table / cards)', () => {
       expect(serial.attributes('aria-pressed')).toBe('true');
       expect(furigana.attributes('aria-pressed')).toBe('false');
       expect(shownIds(wrapper)).toEqual(['N02', 'N03', 'N01']);
+    });
+
+    it('should switch from serial number to furigana ascending (only one sort key stays active)', async () => {
+      const wrapper = await mountView(390);
+      const [furigana, serial] = sortGroup(wrapper).findAll('button');
+
+      await serial.trigger('click'); // 通し番号昇順
+      await serial.trigger('click'); // 通し番号降順
+      await furigana.trigger('click');
+
+      expect(shownIds(wrapper)).toEqual(['N01', 'N02', 'N03']);
+      expect(furigana.attributes('aria-pressed')).toBe('true');
+      expect(serial.attributes('aria-pressed')).toBe('false');
     });
   });
 
