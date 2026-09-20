@@ -62,7 +62,8 @@ describe('summarizeByStudent', () => {
   });
 
   it('should give an empty date when the submit date is missing or not a string', () => {
-    const { byStudent } = summarizeByStudent([file('N1', '合格', undefined), file('N2', '合格', 20260920)]);
+    // undefined を渡すと file() の既定値になってしまうため、欠損は null で表す
+    const { byStudent } = summarizeByStudent([file('N1', '合格', null), file('N2', '合格', 20260920)]);
 
     expect(byStudent.get('N1')?.latestSubmitDate).toBe('');
     expect(byStudent.get('N2')?.latestSubmitDate).toBe('');
