@@ -102,6 +102,22 @@ describe('App header (mobile-first)', () => {
       }
     });
 
+    it('should make the brand link a 44px touch target below lg', async () => {
+      const wrapper = await mountApp();
+      const brand = wrapper.get('header a[href="/"]');
+
+      expect(brand.get('h1').text()).toBe('Carewell Dashboard');
+      expect(brand.classes()).toEqual(expect.arrayContaining(['min-h-11', 'lg:min-h-0']));
+    });
+
+    it('should never shrink the nav tabs below their content width (no horizontal overflow)', async () => {
+      const wrapper = await mountApp();
+      const nav = wrapper.get('header nav');
+
+      // 2件でも3件（管理者の重複一覧あり）でも、タブが内容幅より縮まず横にはみ出さない
+      expect(nav.classes()).toEqual(expect.arrayContaining(['flex-1', 'min-w-fit', 'lg:flex-none', 'lg:min-w-0']));
+    });
+
     it('should show a shortened login label below sm while keeping the accessible name', async () => {
       const wrapper = await mountApp();
       const login = wrapper.get('header button[aria-label="管理者ログイン"]');
@@ -136,6 +152,8 @@ describe('App header (mobile-first)', () => {
       const sync = header.findAll('button').find((b) => b.text().includes('データ同期'));
       expect(sync).toBeDefined();
       expect(sync!.classes()).toEqual(expect.arrayContaining(['min-h-11', 'lg:min-h-0']));
+      // <lg は行を詰めやすいよう末尾へ、≥lg は従来どおり先頭（DOM順）
+      expect(sync!.classes()).toEqual(expect.arrayContaining(['order-last', 'lg:order-none']));
 
       const duplicates = header.findAll('nav a').find((a) => a.text() === '重複一覧');
       expect(duplicates).toBeDefined();

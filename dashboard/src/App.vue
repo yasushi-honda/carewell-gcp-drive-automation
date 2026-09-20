@@ -14,9 +14,9 @@
       基準値・計測手順: docs/dashboard-mobile-measurement.md
     -->
     <header class="bg-white shadow">
-      <div class="max-w-7xl mx-auto py-3 px-4 sm:px-6 lg:py-6 lg:px-8">
-        <div class="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between lg:gap-0">
-          <router-link to="/" class="cursor-pointer flex items-center gap-2 lg:gap-3">
+      <div class="max-w-7xl mx-auto py-2 px-4 sm:px-6 lg:py-6 lg:px-8">
+        <div class="flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between lg:gap-0">
+          <router-link to="/" class="cursor-pointer flex items-center gap-2 min-h-11 lg:min-h-0 lg:gap-3">
             <h1 class="text-xl sm:text-2xl lg:text-3xl font-bold text-gray-900 hover:text-gray-700 transition-colors whitespace-nowrap">
               Carewell Dashboard
             </h1>
@@ -25,12 +25,12 @@
             </span>
           </router-link>
           <div class="flex flex-wrap items-center gap-2 lg:flex-nowrap lg:gap-4">
-            <!-- 管理者モード: 同期ボタン -->
+            <!-- 管理者モード: 同期ボタン（<lg は行を詰めやすいよう末尾に回し、≥lg は従来どおり先頭） -->
             <button
               v-if="isAdmin"
               @click="handleSync"
               :disabled="syncing"
-              class="inline-flex items-center justify-center min-h-11 lg:min-h-0 px-4 py-2 text-sm font-medium rounded-md transition-all duration-200 shadow-sm"
+              class="order-last lg:order-none inline-flex items-center justify-center min-h-11 lg:min-h-0 px-4 py-2 text-sm font-medium rounded-md transition-all duration-200 shadow-sm"
               :class="syncing
                 ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
                 : 'bg-green-600 text-white hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2'"
@@ -73,8 +73,8 @@
               </svg>
               {{ syncing ? '同期中...' : 'データ同期' }}
             </button>
-            <!-- <lg: 残り幅いっぱいに広げたタブ（min 12rem=各リンク94px×2+間隔）。≥lg: 従来の内容幅 -->
-            <nav aria-label="メインナビゲーション" class="flex flex-1 min-w-[12rem] gap-1 lg:flex-none lg:min-w-0 lg:gap-4">
+            <!-- <lg: 残り幅いっぱいに広げたタブ（min-w-fit=リンク内容の幅より縮めない＝2件でも3件でも横にはみ出さない）。≥lg: 従来の内容幅 -->
+            <nav aria-label="メインナビゲーション" class="flex flex-1 min-w-fit gap-1 lg:flex-none lg:min-w-0 lg:gap-4">
               <router-link
                 to="/"
                 class="flex flex-1 items-center justify-center min-h-11 lg:flex-none lg:min-h-0 text-gray-700 hover:text-gray-900 px-3 py-2 rounded-md text-sm font-medium whitespace-nowrap hover:bg-gray-100"
