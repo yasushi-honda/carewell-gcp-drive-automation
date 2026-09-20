@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { mount, RouterLinkStub } from '@vue/test-utils';
 import StudentCardList from '../StudentCardList.vue';
 import type { Student } from '../../types/models';
+import type { StudentSubmission } from '../../composables/useStudentSubmissions';
 
 function student(overrides: Partial<Student> = {}): Student {
   return {
@@ -20,7 +21,13 @@ function student(overrides: Partial<Student> = {}): Student {
   };
 }
 
-function mountList(props: { students: Student[]; showClass?: boolean; showGroup?: boolean }) {
+function mountList(props: {
+  students: Student[];
+  showClass?: boolean;
+  showGroup?: boolean;
+  submissionState?: 'loading' | 'ready' | 'error' | 'mismatch';
+  submissions?: Map<string, StudentSubmission>;
+}) {
   return mount(StudentCardList, {
     props,
     global: { stubs: { RouterLink: RouterLinkStub } },
@@ -118,5 +125,32 @@ describe('StudentCardList', () => {
     for (const link of wrapper.findAllComponents(RouterLinkStub)) {
       expect(link.classes()).toContain('min-h-11');
     }
+  });
+  describe('提出状況（グループ内の一覧のみ）', () => {
+    it('should not show a submission row unless submissionState is given (the all-students list has none)', () => {
+      const wrapper = mountList({ students: [student()] });
+
+      expect(wrapper.text()).not.toContain('提出状況');
+      expect(wrapper.find('[data-testid="submission-cell"]').exists()).toBe(false);
+    });
+
+    it('should show each student\'s own status, and 未提出 for a student without files', () => {
+      const wrapper = mountList({
+        students: [student({ student_id: 'N1' }), student({ student_id: 'N2' })],
+        submissionState: 'ready',
+        submissions: new Map([['N1', { status: 'failed', latestSubmitDate: '2026/09/20 10:00:00', fileCount: 1 }]]),
+      });
+
+      const badges = wrapper.findAll('[data-status]').map((b) => b.attributes('data-status'));
+      expect(badges).toEqual(['failed', 'not_submitted']);
+    });
+
+    it('should not claim 未提出 while loading or when the status could not be fetched', () => {
+      for (const submissionState of ['loading', 'error', 'mismatch'] as const) {
+        const wrapper = mountList({ students: [student()], submissionState, submissions: new Map() });
+
+        expect(wrapper.text()).not.toContain('未提出');
+      }
+    });
   });
 });

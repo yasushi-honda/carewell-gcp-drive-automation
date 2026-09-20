@@ -1,11 +1,13 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { mount, type VueWrapper } from '@vue/test-utils';
+import { mount, flushPromises, type VueWrapper } from '@vue/test-utils';
 import { createRouter, createMemoryHistory } from 'vue-router';
 import { defineComponent, h, nextTick } from 'vue';
 import GroupStudentsView from '../GroupStudentsView.vue';
 import { installViewport, resizeTo, resetViewport } from '../../test/viewport';
 import { linkedStudentIds } from '../../test/dom';
 import type { Student } from '../../types/models';
+import type { SubmissionFile } from '../../composables/useGroupStats';
+import * as useFirestore from '../../composables/useFirestore';
 
 // グループ内の受講生一覧: <1024px はカード、≥1024px は従来の表（表の最小幅は約812px）。
 // 受講者番号・ふりがなの並べ替えは「昇順 ⇄ 降順」の2状態（受講生一覧の3状態とは別仕様）。
@@ -21,6 +23,12 @@ vi.mock('../../composables/useStudents', async () => {
     __state: { students, loading, error },
   };
 });
+
+// 提出状況（この課題の提出ファイル）は Firestore から取る。既定は「提出なし」
+vi.mock('../../composables/useFirestore', () => ({ getDocuments: vi.fn() }));
+vi.mock('../../config/firebase', () => ({ getDb: vi.fn(() => ({})) }));
+
+const getDocuments = vi.mocked(useFirestore.getDocuments);
 
 const studentsState = (await import('../../composables/useStudents') as any).__state;
 
@@ -87,11 +95,15 @@ describe('GroupStudentsView (responsive table / cards)', () => {
     studentsState.students.value = DATA;
     studentsState.loading.value = false;
     studentsState.error.value = null;
+    getDocuments.mockReset();
+    getDocuments.mockResolvedValue([]);
+    vi.spyOn(console, 'error').mockImplementation(() => {});
   });
 
   afterEach(() => {
     mounted.splice(0).forEach((wrapper) => wrapper.unmount());
     resetViewport();
+    vi.restoreAllMocks();
   });
 
   describe('表示の切替（単一描画）', () => {
@@ -307,6 +319,202 @@ describe('GroupStudentsView (responsive table / cards)', () => {
 
       expect(wrapper.text()).toContain('取得に失敗しました');
       expect(cards(wrapper).exists()).toBe(false);
+    });
+  });
+  describe('提出状況（誰が提出済みかを一覧で分かるようにする）', () => {
+    const file = (studentId: unknown, passStatus: unknown, submitDate = '2026/09/20 10:00:00'): SubmissionFile => ({
+      student_id: studentId,
+      submit_date: submitDate,
+      metadata: { pass_status: passStatus },
+    });
+
+    // グループ A（N03, N01, N02）: N01=合格（不合格→合格の再提出）/ N03=採点待ち / N02=未提出。N09 は別グループ
+    const FILES = [
+      file('N01', '不合格', '2026/09/19 09:00:00'),
+      file('N01', '合格', '2026/09/20 09:00:00'),
+      file('N03', ''),
+      file('N09', '合格'),
+    ];
+
+    const statuses = (wrapper: VueWrapper) => wrapper.findAll('[data-status]').map((b) => b.attributes('data-status'));
+    const chip = (wrapper: VueWrapper, key: string) => wrapper.get(`[data-chip="${key}"]`);
+    const chipCounts = (wrapper: VueWrapper) =>
+      Object.fromEntries(
+        wrapper.findAll('[data-chip]').map((c) => [c.attributes('data-chip'), c.get('span').text()])
+      );
+
+    it('should read the files of this class and task', async () => {
+      await mountView(1280);
+      await flushPromises();
+
+      expect(getDocuments).toHaveBeenCalledWith('submissions', 'No1', 'tasks', 'task1', 'files');
+    });
+
+    it('should show each student\'s status in the table (in the row order: N03, N01, N02)', async () => {
+      getDocuments.mockResolvedValue(FILES);
+      const wrapper = await mountView(1280);
+      await flushPromises();
+
+      expect(wrapper.findAll('th').some((th) => th.text() === '提出状況')).toBe(true);
+      expect(statuses(wrapper)).toEqual(['pending', 'passed', 'not_submitted']);
+    });
+
+    it('should show the latest submit time and the number of submissions for a resubmission', async () => {
+      getDocuments.mockResolvedValue(FILES);
+      const wrapper = await mountView(1280);
+      await flushPromises();
+
+      const n01Row = wrapper.findAll('tbody tr')[1];
+      expect(n01Row.text()).toContain('合格');
+      expect(n01Row.text()).toContain('最終提出 2026/09/20 09:00');
+      expect(n01Row.text()).toContain('（2回）');
+    });
+
+    it('should show each student\'s status on the cards too', async () => {
+      getDocuments.mockResolvedValue(FILES);
+      const wrapper = await mountView(390);
+      await flushPromises();
+
+      expect(wrapper.find('table').exists()).toBe(false);
+      expect(statuses(wrapper)).toEqual(['pending', 'passed', 'not_submitted']);
+    });
+
+    it('should count only this group in the chips, and never count another group\'s submissions', async () => {
+      getDocuments.mockResolvedValue(FILES);
+      const wrapper = await mountView(1280);
+      await flushPromises();
+
+      expect(chipCounts(wrapper)).toEqual({ all: '3', not_submitted: '1', passed: '1', pending: '1', failed: '0' });
+    });
+
+    it('should treat everyone as 未提出 when the task has no files yet (a real zero, not an error)', async () => {
+      getDocuments.mockResolvedValue([]);
+      const wrapper = await mountView(1280);
+      await flushPromises();
+
+      expect(statuses(wrapper)).toEqual(['not_submitted', 'not_submitted', 'not_submitted']);
+      expect(chipCounts(wrapper)).toMatchObject({ all: '3', not_submitted: '3' });
+      expect(wrapper.find('[role="alert"]').exists()).toBe(false);
+    });
+
+    it('should narrow the list to one status by the chips, and back to everyone', async () => {
+      getDocuments.mockResolvedValue(FILES);
+      const wrapper = await mountView(1280);
+      await flushPromises();
+      expect(chip(wrapper, 'all').attributes('aria-pressed')).toBe('true');
+
+      await chip(wrapper, 'not_submitted').trigger('click');
+      expect(shownIds(wrapper)).toEqual(['N02']);
+      expect(chip(wrapper, 'not_submitted').attributes('aria-pressed')).toBe('true');
+      expect(chip(wrapper, 'all').attributes('aria-pressed')).toBe('false');
+
+      await chip(wrapper, 'passed').trigger('click');
+      expect(shownIds(wrapper)).toEqual(['N01']);
+
+      await chip(wrapper, 'all').trigger('click');
+      expect(shownIds(wrapper).sort()).toEqual(['N01', 'N02', 'N03']);
+    });
+
+    it('should combine the status filter with the search, and keep the chip counts for the whole group', async () => {
+      getDocuments.mockResolvedValue(FILES);
+      const wrapper = await mountView(390);
+      await flushPromises();
+
+      await chip(wrapper, 'passed').trigger('click');
+      await wrapper.get('#search-query').setValue('N02');
+
+      expect(shownIds(wrapper)).toEqual([]);
+      expect(wrapper.text()).toContain('該当する受講生が見つかりませんでした');
+      expect(chipCounts(wrapper)).toMatchObject({ all: '3', passed: '1' });
+    });
+
+    it('should show the empty state for a status nobody has (不合格 0)', async () => {
+      getDocuments.mockResolvedValue(FILES);
+      const wrapper = await mountView(1280);
+      await flushPromises();
+
+      await chip(wrapper, 'failed').trigger('click');
+
+      expect(shownIds(wrapper)).toEqual([]);
+      expect(wrapper.text()).toContain('該当する受講生が見つかりませんでした');
+    });
+
+    it('should keep the chips and status column in the same place while loading (skeletons), without claiming 未提出', async () => {
+      getDocuments.mockReturnValue(new Promise(() => {}) as never);
+      const wrapper = await mountView(1280);
+      await flushPromises();
+
+      expect(wrapper.find('[data-testid="chips-skeleton"]').exists()).toBe(true);
+      expect(wrapper.findAll('[data-testid="submission-cell-loading"]')).toHaveLength(3);
+      expect(wrapper.find('[data-chip]').exists()).toBe(false);
+      expect(wrapper.text()).not.toContain('未提出');
+      expect(shownIds(wrapper).sort()).toEqual(['N01', 'N02', 'N03']);
+    });
+
+    it('should keep the list and warn when the submissions cannot be fetched (never everyone 未提出), then recover on retry', async () => {
+      getDocuments.mockRejectedValueOnce(new Error('permission-denied')).mockResolvedValueOnce(FILES);
+      const wrapper = await mountView(1280);
+      await flushPromises();
+
+      expect(wrapper.get('[role="alert"]').text()).toContain('提出状況を取得できませんでした');
+      expect(shownIds(wrapper).sort()).toEqual(['N01', 'N02', 'N03']);
+      expect(wrapper.find('[data-status]').exists()).toBe(false);
+      expect(wrapper.text()).not.toContain('未提出');
+      expect(wrapper.find('[data-chip]').exists()).toBe(false);
+
+      await wrapper.get('[role="alert"] button').trigger('click');
+      await flushPromises();
+
+      expect(wrapper.find('[role="alert"]').exists()).toBe(false);
+      expect(statuses(wrapper)).toEqual(['pending', 'passed', 'not_submitted']);
+    });
+
+    it('should warn instead of showing everyone as 未提出 when no file matches anyone in the class (mismatch)', async () => {
+      getDocuments.mockResolvedValue([file('N99', '合格'), file('', '合格')]);
+      const wrapper = await mountView(1280);
+      await flushPromises();
+
+      expect(wrapper.get('[role="alert"]').text()).toContain('提出データと受講生名簿が一致しなかった');
+      expect(wrapper.find('[data-status]').exists()).toBe(false);
+      expect(wrapper.text()).not.toContain('未提出');
+      expect(wrapper.find('[data-chip]').exists()).toBe(false);
+      expect(shownIds(wrapper).sort()).toEqual(['N01', 'N02', 'N03']);
+    });
+
+    it('should not treat a class where only another group has submitted as a mismatch', async () => {
+      // N09 は別グループだが同じクラス。名簿と一致しているので不一致ではなく、このグループは全員未提出
+      getDocuments.mockResolvedValue([file('N09', '合格')]);
+      const wrapper = await mountView(1280);
+      await flushPromises();
+
+      expect(wrapper.find('[role="alert"]').exists()).toBe(false);
+      expect(statuses(wrapper)).toEqual(['not_submitted', 'not_submitted', 'not_submitted']);
+    });
+
+    it('should tell how many files have no student id (those students look 未提出)', async () => {
+      getDocuments.mockResolvedValue([file('N01', '合格'), file('', '合格'), file(undefined, '合格')]);
+      const wrapper = await mountView(1280);
+      await flushPromises();
+
+      expect(wrapper.text()).toContain('日介番号が空の提出ファイルが 2 件あります');
+    });
+
+    it('should not show that note when every file has a student id', async () => {
+      getDocuments.mockResolvedValue(FILES);
+      const wrapper = await mountView(1280);
+      await flushPromises();
+
+      expect(wrapper.text()).not.toContain('日介番号が空の提出ファイル');
+    });
+
+    it('should give the chips a 44px touch target below lg', async () => {
+      getDocuments.mockResolvedValue(FILES);
+      const wrapper = await mountView(390);
+      await flushPromises();
+
+      for (const c of wrapper.findAll('[data-chip]')) {
+        expect(c.classes()).toEqual(expect.arrayContaining(['min-h-11', 'lg:min-h-0']));
+      }
     });
   });
 });

@@ -39,6 +39,15 @@
             <dt class="text-gray-500">サービス種別</dt>
             <dd class="text-gray-900">{{ student.service_type }}</dd>
           </div>
+          <div v-if="submissionState" class="col-span-2">
+            <dt class="mb-0.5 text-gray-500">提出状況</dt>
+            <dd>
+              <StudentSubmissionCell
+                :state="submissionState"
+                :submission="submissions?.get(student.student_id)"
+              />
+            </dd>
+          </div>
         </dl>
       </router-link>
     </li>
@@ -47,10 +56,16 @@
 
 <script setup lang="ts">
 import type { Student } from '../types/models';
+import type { StudentSubmission } from '../composables/useStudentSubmissions';
+import StudentSubmissionCell from './StudentSubmissionCell.vue';
 
 withDefaults(
   defineProps<{
     students: Student[];
+    /** 指定すると各カードに提出状況を出す（グループ内の一覧）。未指定なら出さない */
+    submissionState?: 'loading' | 'ready' | 'error' | 'mismatch';
+    /** 日介番号 → 提出状況。無い受講生は「未提出」 */
+    submissions?: Map<string, StudentSubmission>;
     /** クラスを表示する（受講生一覧。グループ内の一覧では全員同じクラスなので不要） */
     showClass?: boolean;
     /** グループを表示する（受講生一覧。グループ内の一覧では全員同じグループなので不要） */
