@@ -24,8 +24,8 @@
 
         <dl class="mt-3 grid grid-cols-2 gap-x-3 gap-y-2 text-xs">
           <div>
-            <dt class="text-gray-500">通し番号</dt>
-            <dd class="text-gray-900">{{ student.serial_number || '-' }}</dd>
+            <dt class="text-gray-500">受講者番号</dt>
+            <dd class="text-gray-900">{{ student.student_number || '-' }}</dd>
           </div>
           <div v-if="showClass">
             <dt class="text-gray-500">クラス</dt>

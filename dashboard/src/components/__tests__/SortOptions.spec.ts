@@ -11,7 +11,7 @@ function mountOptions(options: Options) {
 describe('SortOptions', () => {
   const idle: Options = [
     { key: 'furigana', label: 'ふりがな', order: null },
-    { key: 'serial_number', label: '通し番号', order: null },
+    { key: 'student_number', label: '受講者番号', order: null },
   ];
 
   it('should render a labelled group with one button per option', () => {
@@ -22,7 +22,7 @@ describe('SortOptions', () => {
     const buttons = group.findAll('button');
     expect(buttons.map((b) => b.text())).toEqual([
       expect.stringContaining('ふりがな'),
-      expect.stringContaining('通し番号'),
+      expect.stringContaining('受講者番号'),
     ]);
   });
 
@@ -41,7 +41,7 @@ describe('SortOptions', () => {
     await wrapper.findAll('button')[1].trigger('click');
     await wrapper.findAll('button')[0].trigger('click');
 
-    expect(wrapper.emitted('toggle')).toEqual([['serial_number'], ['furigana']]);
+    expect(wrapper.emitted('toggle')).toEqual([['student_number'], ['furigana']]);
   });
 
   it('should show the idle indicator and mark nothing as pressed when no sort is active', () => {
@@ -57,7 +57,7 @@ describe('SortOptions', () => {
   it('should show ▲ / 昇順 and mark the active option as pressed for ascending order', () => {
     const wrapper = mountOptions([
       { key: 'furigana', label: 'ふりがな', order: 'asc' },
-      { key: 'serial_number', label: '通し番号', order: null },
+      { key: 'student_number', label: '受講者番号', order: null },
     ]);
 
     const [furigana, serial] = wrapper.findAll('button');
@@ -70,7 +70,7 @@ describe('SortOptions', () => {
   it('should show ▼ / 降順 for descending order', () => {
     const wrapper = mountOptions([
       { key: 'furigana', label: 'ふりがな', order: null },
-      { key: 'serial_number', label: '通し番号', order: 'desc' },
+      { key: 'student_number', label: '受講者番号', order: 'desc' },
     ]);
 
     const serial = wrapper.findAll('button')[1];

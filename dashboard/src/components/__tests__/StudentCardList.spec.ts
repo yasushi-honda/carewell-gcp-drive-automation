@@ -46,11 +46,11 @@ describe('StudentCardList', () => {
     expect(wrapper.text()).toContain('N0000001');
   });
 
-  it('should show serial number and service type', () => {
-    const wrapper = mountList({ students: [student({ serial_number: 14, service_type: '入所・居住系' })] });
+  it('should show student number and service type', () => {
+    const wrapper = mountList({ students: [student({ student_number: 'A014', service_type: '入所・居住系' })] });
 
-    expect(wrapper.text()).toContain('通し番号');
-    expect(wrapper.text()).toContain('14');
+    expect(wrapper.text()).toContain('受講者番号');
+    expect(wrapper.text()).toContain('A014');
     expect(wrapper.text()).toContain('入所・居住系');
   });
 
@@ -74,15 +74,26 @@ describe('StudentCardList', () => {
     expect(wrapper.text()).toContain('K');
   });
 
-  it('should show "-" for a missing serial number and class name', () => {
+  it('should show "-" for a missing student number and class name', () => {
     const wrapper = mountList({
-      students: [student({ serial_number: 0, class_name: '' })],
+      students: [student({ student_number: '', class_name: '' })],
       showClass: true,
     });
 
     const values = wrapper.findAll('dd').map((dd) => dd.text());
-    // 通し番号 / クラス / サービス種別
+    // 受講者番号 / クラス / サービス種別
     expect(values.slice(0, 2)).toEqual(['-', '-']);
+  });
+
+  it('should show "-" only for the missing student number, not for the other fields', () => {
+    const wrapper = mountList({
+      students: [student({ student_number: '', class_name: 'No1' })],
+      showClass: true,
+    });
+
+    const values = wrapper.findAll('dd').map((dd) => dd.text());
+    expect(values[0]).toBe('-');
+    expect(values[1]).not.toBe('-');
   });
 
   it('should visually mute withdrawn students, like the table rows do', () => {
