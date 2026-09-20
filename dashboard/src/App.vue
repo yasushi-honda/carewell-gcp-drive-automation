@@ -8,24 +8,30 @@
       メインコンテンツへスキップ
     </a>
 
+    <!--
+      モバイルファースト: <lg(1024px) は2行（1行目=タイトル+年度、2行目=ナビのタブ+認証）、
+      ≥lg は従来の1行（管理者表示で幅が足りない 1024〜約1100px は、行が折り返して2行になる）。
+      タップ領域は <lg で44px以上（≥lg は従来の高さのまま）。
+      基準値・計測手順: docs/dashboard-mobile-measurement.md
+    -->
     <header class="bg-white shadow">
-      <div class="max-w-7xl mx-auto py-6 px-4 sm:px-6 lg:px-8">
-        <div class="flex items-center justify-between">
-          <router-link to="/" class="cursor-pointer flex items-center gap-3">
-            <h1 class="text-3xl font-bold text-gray-900 hover:text-gray-700 transition-colors">
+      <div class="max-w-7xl mx-auto py-2 px-4 sm:px-6 lg:py-6 lg:px-8">
+        <div class="flex flex-col gap-2 lg:flex-row lg:flex-wrap lg:items-center lg:justify-between lg:gap-x-0 lg:gap-y-2">
+          <router-link to="/" class="cursor-pointer flex items-center gap-2 self-start lg:self-auto min-h-11 lg:min-h-0 lg:gap-3">
+            <h1 class="text-xl sm:text-2xl lg:text-3xl font-bold text-gray-900 hover:text-gray-700 transition-colors whitespace-nowrap">
               Carewell Dashboard
             </h1>
-            <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-sm font-medium bg-blue-100 text-blue-800">
+            <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs sm:text-sm font-medium bg-blue-100 text-blue-800 whitespace-nowrap">
               令和8年度
             </span>
           </router-link>
-          <div class="flex items-center space-x-4">
-            <!-- 管理者モード: 同期ボタン -->
+          <div class="flex flex-wrap items-center gap-2 lg:flex-nowrap lg:gap-4">
+            <!-- 管理者モード: 同期ボタン（<lg は行を詰めやすいよう末尾に回し、≥lg は従来どおり先頭） -->
             <button
               v-if="isAdmin"
               @click="handleSync"
               :disabled="syncing"
-              class="inline-flex items-center px-4 py-2 text-sm font-medium rounded-md transition-all duration-200 shadow-sm"
+              class="order-last lg:order-none inline-flex items-center justify-center min-h-11 lg:min-h-0 px-4 py-2 text-sm font-medium rounded-md transition-all duration-200 shadow-sm"
               :class="syncing
                 ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
                 : 'bg-green-600 text-white hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2'"
@@ -68,17 +74,18 @@
               </svg>
               {{ syncing ? '同期中...' : 'データ同期' }}
             </button>
-            <nav class="flex space-x-4">
+            <!-- <lg: 残り幅いっぱいに広げたタブ（min-w-fit=リンク内容の幅より縮めない＝2件でも3件でも横にはみ出さない）。≥lg: 従来の内容幅 -->
+            <nav aria-label="メインナビゲーション" class="flex flex-1 min-w-fit gap-1 lg:flex-none lg:min-w-0 lg:gap-4">
               <router-link
                 to="/"
-                class="text-gray-700 hover:text-gray-900 px-3 py-2 rounded-md text-sm font-medium hover:bg-gray-100"
+                class="flex flex-1 items-center justify-center min-h-11 lg:flex-none lg:min-h-0 text-gray-700 hover:text-gray-900 px-3 py-2 rounded-md text-sm font-medium whitespace-nowrap hover:bg-gray-100"
                 active-class="bg-gray-100 text-gray-900"
               >
                 クラス一覧
               </router-link>
               <router-link
                 to="/students"
-                class="text-gray-700 hover:text-gray-900 px-3 py-2 rounded-md text-sm font-medium hover:bg-gray-100"
+                class="flex flex-1 items-center justify-center min-h-11 lg:flex-none lg:min-h-0 text-gray-700 hover:text-gray-900 px-3 py-2 rounded-md text-sm font-medium whitespace-nowrap hover:bg-gray-100"
                 active-class="bg-gray-100 text-gray-900"
               >
                 受講生一覧
@@ -87,7 +94,7 @@
               <router-link
                 v-if="isAdmin"
                 to="/admin/duplicates"
-                class="text-red-600 hover:text-red-800 px-3 py-2 rounded-md text-sm font-medium hover:bg-red-50"
+                class="flex flex-1 items-center justify-center min-h-11 lg:flex-none lg:min-h-0 text-red-600 hover:text-red-800 px-3 py-2 rounded-md text-sm font-medium whitespace-nowrap hover:bg-red-50"
                 active-class="bg-red-50 text-red-800"
               >
                 重複一覧
@@ -110,7 +117,7 @@
     >
       <div
         v-if="showToast"
-        class="fixed top-4 right-4 z-50 max-w-sm w-full shadow-lg rounded-lg pointer-events-auto"
+        class="fixed top-4 left-4 right-4 sm:left-auto z-50 sm:max-w-sm sm:w-full shadow-lg rounded-lg pointer-events-auto"
         :class="toastType === 'success' ? 'bg-green-50 border border-green-200' : 'bg-red-50 border border-red-200'"
       >
         <div class="p-4">
