@@ -33,7 +33,7 @@ export interface GroupStat {
  */
 export type SubmissionState = 'loading' | 'ready' | 'error' | 'mismatch';
 
-type SubmissionStatus = 'passed' | 'pending' | 'failed';
+export type SubmissionStatus = 'passed' | 'pending' | 'failed';
 
 /** 提出ファイル（Firestore の files ドキュメントのうち、集計に使う項目だけ） */
 export interface SubmissionFile {
@@ -65,7 +65,7 @@ export function classifyPassStatus(value: unknown): SubmissionStatus {
 }
 
 /** 提出日時（"YYYY/MM/DD HH:mm:ss"）。文字列のまま比較できる。欠損・不正は最古扱い（空文字） */
-function submitDateKey(file: SubmissionFile): string {
+export function submitDateKey(file: SubmissionFile): string {
   return typeof file.submit_date === 'string' ? file.submit_date.trim() : '';
 }
 

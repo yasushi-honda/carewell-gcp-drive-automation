@@ -12,9 +12,10 @@
     />
 
     <!-- ページタイトル -->
-    <h1 class="text-3xl font-bold text-gray-900 mb-6 mt-6">
+    <h1 class="text-3xl font-bold text-gray-900 mb-2 mt-6">
       {{ groupName }} グループの受講生一覧
     </h1>
+    <p class="text-gray-600 mb-6">{{ className }} - {{ taskId }} の提出状況</p>
 
     <!-- 検索ボックス -->
     <div class="bg-white shadow-sm rounded-lg p-4 mb-6">
@@ -43,7 +44,67 @@
     <ErrorAlert v-else-if="error" :message="error" />
 
     <!-- 受講生一覧テーブル -->
-    <div v-else class="bg-white shadow-sm rounded-lg overflow-hidden">
+    <div v-else>
+    <!-- 提出状況の取得失敗（一覧は残す）。「全員未提出」とは区別する -->
+    <div
+      v-if="submissionState === 'error'"
+      role="alert"
+      class="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-md border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900"
+    >
+      <p>提出状況を取得できませんでした。受講生のみ表示しています。</p>
+      <button
+        type="button"
+        class="inline-flex min-h-11 items-center rounded-md border border-amber-400 bg-white px-4 font-medium text-amber-900 hover:bg-amber-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-500"
+        @click="refetchSubmissions"
+      >
+        再取得
+      </button>
+    </div>
+
+    <!-- 提出ファイルはあるのに、誰も受講生名簿と一致しない（状態は出さない） -->
+    <div
+      v-else-if="submissionState === 'mismatch'"
+      role="alert"
+      class="mb-4 rounded-md border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900"
+    >
+      提出データと受講生名簿が一致しなかったため、提出状況を表示できません。提出データの日介番号が空、または受講生名簿と食い違っている可能性があります。
+    </div>
+
+    <!-- 取得中: チップと同じ高さの骨格を出し、届いたときに一覧が動かないようにする -->
+    <div
+      v-else-if="submissionState === 'loading'"
+      class="mb-4 h-11 w-2/3 max-w-md animate-pulse rounded-full bg-gray-200 lg:h-8"
+      aria-hidden="true"
+      data-testid="chips-skeleton"
+    ></div>
+
+    <!-- 提出状況の集計（押すと、その状態の受講生だけに絞り込む） -->
+    <div v-else-if="submissionState === 'ready'" class="mb-4">
+      <ul class="flex flex-wrap gap-2" aria-label="提出状況で絞り込み">
+        <li v-for="chip in statusChips" :key="chip.key">
+          <button
+            type="button"
+            class="inline-flex min-h-11 items-center gap-1.5 rounded-full border px-4 text-sm font-medium focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 lg:min-h-0 lg:py-1.5"
+            :class="
+              statusFilter === chip.key
+                ? 'border-blue-600 bg-blue-600 text-white'
+                : 'border-gray-300 bg-white text-gray-700 hover:bg-gray-50'
+            "
+            :aria-pressed="statusFilter === chip.key"
+            :data-chip="chip.key"
+            @click="statusFilter = chip.key"
+          >
+            {{ chip.label }}
+            <span class="font-semibold">{{ chip.count }}</span>
+          </button>
+        </li>
+      </ul>
+      <p v-if="unidentifiedFiles > 0" role="status" class="mt-2 text-sm font-medium text-amber-800">
+        日介番号が空の提出ファイルが {{ unidentifiedFiles }} 件あります（該当する受講生は「未提出」と表示されます）。
+      </p>
+    </div>
+
+    <div class="bg-white shadow-sm rounded-lg overflow-hidden">
       <!-- テーブルヘッダー -->
       <div class="px-4 py-3 border-b border-gray-200 bg-gray-50">
         <p class="text-sm text-gray-700">
@@ -54,7 +115,11 @@
       <!-- 1024px未満（表は最小幅が約812px）: カードリスト -->
       <template v-if="isCompact">
         <SortOptions :options="sortOptions" @toggle="onSortToggle" />
-        <StudentCardList :students="filteredAndSortedStudents" />
+        <StudentCardList
+          :students="filteredAndSortedStudents"
+          :submission-state="submissionState"
+          :submissions="byStudent"
+        />
       </template>
 
       <!-- 広い画面: テーブル本体（従来どおり） -->
@@ -95,6 +160,9 @@
               <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                 サービス種別
               </th>
+              <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                提出状況
+              </th>
             </tr>
           </thead>
           <tbody class="bg-white divide-y divide-gray-200">
@@ -126,6 +194,13 @@
               <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                 {{ student.service_type }}
               </td>
+              <td class="px-6 py-4 whitespace-nowrap">
+                <StudentSubmissionCell
+                  :state="submissionState"
+                  :submission="byStudent.get(student.student_id)"
+                  :not-required="student.status === 'withdrawn'"
+                />
+              </td>
             </tr>
           </tbody>
         </table>
@@ -139,6 +214,7 @@
         <p class="mt-2 text-sm text-gray-500">該当する受講生が見つかりませんでした</p>
       </div>
     </div>
+    </div>
   </div>
 </template>
 
@@ -146,12 +222,14 @@
 import { ref, computed } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { useStudents } from '../composables/useStudents';
+import { useStudentSubmissions, statusOf, type StudentStatus } from '../composables/useStudentSubmissions';
 import { convertToShortClassName } from '../config/classes';
 import Breadcrumb from '../components/Breadcrumb.vue';
 import LoadingSkeleton from '../components/LoadingSkeleton.vue';
 import ErrorAlert from '../components/ErrorAlert.vue';
 import StudentCardList from '../components/StudentCardList.vue';
 import SortOptions from '../components/SortOptions.vue';
+import StudentSubmissionCell from '../components/StudentSubmissionCell.vue';
 import { useMediaQuery, BELOW_LG } from '../composables/useMediaQuery';
 
 const route = useRoute();
@@ -162,6 +240,7 @@ const taskId = route.params.taskId as string;
 const groupName = route.params.groupName as string;
 
 const searchQuery = ref('');
+const statusFilter = ref<'all' | StudentStatus>('all');
 const sortBy = ref<'furigana' | 'student_number' | null>(null);
 const sortOrder = ref<'asc' | 'desc' | null>(null);
 
@@ -170,24 +249,57 @@ const shortClassName = convertToShortClassName(className);
 
 const { students, loading, error } = useStudents();
 
+// この課題の提出状況。受講生の取得が終わってから取り始め（一覧の初回表示を遅らせない）、届くまでは骨格を出す
+const {
+  state: submissionsState,
+  byStudent,
+  fileCount,
+  unidentifiedFiles,
+  refetch: refetchSubmissions,
+} = useStudentSubmissions(className, taskId, () => !loading.value && !error.value);
+
 // 表は最小幅が約812pxのため、1024px未満ではカード表示にする
 const isCompact = useMediaQuery(BELOW_LG);
 
-// フィルタリング（クラス、グループ、検索クエリ）
+// このクラスの受講生（無効な受講生を除く）
+const classStudents = computed(() =>
+  students.value.filter((student) => student.status !== 'inactive' && student.class_name === shortClassName)
+);
+
+// 提出ファイルはあるのに、このクラスの誰とも日介番号が一致しない場合は、「全員未提出」と誤表示せず警告に回す
+const submissionState = computed<'loading' | 'ready' | 'error' | 'mismatch'>(() => {
+  if (submissionsState.value !== 'ready') return submissionsState.value;
+  const anyMatched = classStudents.value.some((student) => byStudent.value.has(student.student_id));
+  return fileCount.value > 0 && !anyMatched ? 'mismatch' : 'ready';
+});
+
+// グループの受講生（提出状況・検索での絞り込み前）
+const groupStudents = computed(() => classStudents.value.filter((student) => student.group === groupName));
+
+// 提出状況の集計・絞り込みの対象は在籍中の受講生のみ（グループ一覧カードと同じ基準。退会者は提出の対象外）
+const activeGroupStudents = computed(() => groupStudents.value.filter((student) => student.status === 'active'));
+
+// 提出状況の集計チップ（グループの在籍者に対する人数）
+const statusChips = computed(() => {
+  const counts: Record<StudentStatus, number> = { not_submitted: 0, passed: 0, pending: 0, failed: 0 };
+  for (const student of activeGroupStudents.value) counts[statusOf(byStudent.value, student.student_id)] += 1;
+  return [
+    { key: 'all' as const, label: '全員', count: activeGroupStudents.value.length },
+    { key: 'not_submitted' as const, label: '未提出', count: counts.not_submitted },
+    { key: 'passed' as const, label: '合格', count: counts.passed },
+    { key: 'pending' as const, label: '採点待ち', count: counts.pending },
+    { key: 'failed' as const, label: '不合格', count: counts.failed },
+  ];
+});
+
+// フィルタリング（提出状況、検索クエリ）
 const filteredStudents = computed(() => {
-  return students.value.filter((student) => {
-    // 無効な受講生を除外（status が inactive の場合）
-    if (student.status === 'inactive') {
-      return false;
-    }
-
-    // クラスフィルター（短縮形で比較）
-    if (student.class_name !== shortClassName) {
-      return false;
-    }
-
-    // グループフィルター
-    if (student.group !== groupName) {
+  return groupStudents.value.filter((student) => {
+    // 状態で絞り込むときは在籍者だけ（チップの人数と一覧の人数を一致させる）
+    if (
+      statusFilter.value !== 'all' &&
+      (student.status !== 'active' || statusOf(byStudent.value, student.student_id) !== statusFilter.value)
+    ) {
       return false;
     }
 
