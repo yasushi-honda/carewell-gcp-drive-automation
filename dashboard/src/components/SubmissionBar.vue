@@ -6,8 +6,9 @@
   -->
   <div v-if="loading" class="mt-4 animate-pulse" aria-hidden="true" data-testid="submission-skeleton">
     <div class="h-2.5 w-full rounded-full bg-gray-200"></div>
-    <div class="mt-2 h-4 w-2/3 rounded bg-gray-200"></div>
-    <div class="mt-1 h-3 w-1/2 rounded bg-gray-100"></div>
+    <!-- 実際の行の高さ（text-sm=20px / text-xs=16px）に合わせ、データが届いてもカードが動かないようにする -->
+    <div class="mt-2 flex h-5 items-center"><div class="h-3.5 w-2/3 rounded bg-gray-200"></div></div>
+    <div class="mt-1 flex h-4 items-center"><div class="h-2.5 w-1/2 rounded bg-gray-100"></div></div>
   </div>
 
   <div v-else-if="submission" class="mt-4" data-testid="submission-bar">
