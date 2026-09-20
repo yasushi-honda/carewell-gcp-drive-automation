@@ -19,7 +19,7 @@
     <!-- ログイン済み: 省略表示（truncate）するのはメールだけ。「（権限なし）」は縮めず常に見せる。ログアウトは <lg で44px以上 -->
     <div v-else class="flex items-center gap-2 text-sm min-w-0">
       <span class="text-gray-600 inline-flex items-baseline min-w-0 max-w-[12rem] sm:max-w-[18rem] lg:max-w-none">
-        <span class="truncate">{{ user.email }}</span><span v-if="!isAdmin" class="text-gray-400 shrink-0 whitespace-nowrap">（権限なし）</span>
+        <span class="truncate" :title="user.email">{{ user.email }}</span><span v-if="!isAdmin" class="text-gray-400 shrink-0 whitespace-nowrap">（権限なし）</span>
       </span>
       <button
         @click="handleLogout"

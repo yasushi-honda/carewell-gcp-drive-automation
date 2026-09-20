@@ -10,13 +10,14 @@
 
     <!--
       モバイルファースト: <lg(1024px) は2行（1行目=タイトル+年度、2行目=ナビのタブ+認証）、
-      ≥lg は従来の1行。タップ領域は <lg で44px以上（≥lg は従来の高さのまま）。
+      ≥lg は従来の1行（管理者表示で幅が足りない 1024〜約1100px は、行が折り返して2行になる）。
+      タップ領域は <lg で44px以上（≥lg は従来の高さのまま）。
       基準値・計測手順: docs/dashboard-mobile-measurement.md
     -->
     <header class="bg-white shadow">
       <div class="max-w-7xl mx-auto py-2 px-4 sm:px-6 lg:py-6 lg:px-8">
-        <div class="flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between lg:gap-0">
-          <router-link to="/" class="cursor-pointer flex items-center gap-2 min-h-11 lg:min-h-0 lg:gap-3">
+        <div class="flex flex-col gap-2 lg:flex-row lg:flex-wrap lg:items-center lg:justify-between lg:gap-x-0 lg:gap-y-2">
+          <router-link to="/" class="cursor-pointer flex items-center gap-2 self-start lg:self-auto min-h-11 lg:min-h-0 lg:gap-3">
             <h1 class="text-xl sm:text-2xl lg:text-3xl font-bold text-gray-900 hover:text-gray-700 transition-colors whitespace-nowrap">
               Carewell Dashboard
             </h1>
