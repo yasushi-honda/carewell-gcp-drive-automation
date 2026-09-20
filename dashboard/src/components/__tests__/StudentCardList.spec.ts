@@ -85,6 +85,17 @@ describe('StudentCardList', () => {
     expect(values.slice(0, 2)).toEqual(['-', '-']);
   });
 
+  it('should show "-" only for the missing student number, not for the other fields', () => {
+    const wrapper = mountList({
+      students: [student({ student_number: '', class_name: 'No1' })],
+      showClass: true,
+    });
+
+    const values = wrapper.findAll('dd').map((dd) => dd.text());
+    expect(values[0]).toBe('-');
+    expect(values[1]).not.toBe('-');
+  });
+
   it('should visually mute withdrawn students, like the table rows do', () => {
     const wrapper = mountList({
       students: [student({ student_id: 'N0000009', status: 'withdrawn' }), student({ student_id: 'N0000010' })],

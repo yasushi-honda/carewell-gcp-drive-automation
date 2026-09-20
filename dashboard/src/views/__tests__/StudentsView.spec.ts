@@ -204,6 +204,23 @@ describe('StudentsView (responsive table / cards)', () => {
       expect(serial().attributes('aria-pressed')).toBe('false');
     });
 
+    it('should compare the number part of student numbers numerically and put an empty one first', async () => {
+      // A9 < A10 は数値比較のときだけ成り立つ（文字列比較なら A10 が先）。空の番号は昇順で先頭
+      studentsState.students.value = [
+        student('N01', { student_number: 'A10' }),
+        student('N02', { student_number: '' }),
+        student('N03', { student_number: 'A9' }),
+      ];
+      const wrapper = await mountView(390);
+      const serial = () => sortGroup(wrapper).findAll('button')[1];
+
+      await serial().trigger('click');
+      expect(shownIds(wrapper)).toEqual(['N02', 'N03', 'N01']);
+
+      await serial().trigger('click');
+      expect(shownIds(wrapper)).toEqual(['N01', 'N03', 'N02']);
+    });
+
     it('should let only one sort key be active at a time', async () => {
       const wrapper = await mountView(390);
       const [furigana, serial] = sortGroup(wrapper).findAll('button');
