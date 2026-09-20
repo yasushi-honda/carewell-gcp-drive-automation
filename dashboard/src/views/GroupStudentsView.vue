@@ -112,7 +112,7 @@
         </p>
       </div>
 
-      <!-- 1024px未満（表は最小幅が約812px）: カードリスト -->
+      <!-- 1280px未満（表は最小幅が約1029px）: カードリスト -->
       <template v-if="isCompact">
         <SortOptions :options="sortOptions" @toggle="onSortToggle" />
         <StudentCardList
@@ -230,7 +230,7 @@ import ErrorAlert from '../components/ErrorAlert.vue';
 import StudentCardList from '../components/StudentCardList.vue';
 import SortOptions from '../components/SortOptions.vue';
 import StudentSubmissionCell from '../components/StudentSubmissionCell.vue';
-import { useMediaQuery, BELOW_LG } from '../composables/useMediaQuery';
+import { useMediaQuery, BELOW_XL } from '../composables/useMediaQuery';
 
 const route = useRoute();
 const router = useRouter();
@@ -258,8 +258,9 @@ const {
   refetch: refetchSubmissions,
 } = useStudentSubmissions(className, taskId, () => !loading.value && !error.value);
 
-// 表は最小幅が約812pxのため、1024px未満ではカード表示にする
-const isCompact = useMediaQuery(BELOW_LG);
+// 表は最小幅が約1029px（提出状況の列を足して広がった。本番で実測）で、余白を引いた表示領域が
+// 1029px 以上になるのは約1157px から。/students と同じ 1280px 未満をカード表示にする
+const isCompact = useMediaQuery(BELOW_XL);
 
 // このクラスの受講生（無効な受講生を除く）
 const classStudents = computed(() =>
