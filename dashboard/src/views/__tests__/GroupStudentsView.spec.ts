@@ -136,6 +136,41 @@ describe('GroupStudentsView (responsive table / cards)', () => {
     });
   });
 
+  describe('受講者番号の列（表・1024px 以上）', () => {
+    const header = (wrapper: VueWrapper) =>
+      wrapper.findAll('th').find((th) => th.text().includes('受講者番号'))!;
+    const numberCells = (wrapper: VueWrapper) =>
+      wrapper.findAll('tbody tr').map((row) => row.findAll('td')[0].text());
+
+    it('should show the student number column and its values in the table', async () => {
+      const wrapper = await mountView(1024);
+
+      expect(header(wrapper).exists()).toBe(true);
+      expect(wrapper.text()).not.toContain('通し番号');
+      expect(numberCells(wrapper)).toEqual(['A002', 'A003', 'A001']);
+    });
+
+    it('should show "-" in the cell of a student without a student number', async () => {
+      studentsState.students.value = [student('N01', { student_number: '' })];
+      const wrapper = await mountView(1024);
+
+      expect(numberCells(wrapper)).toEqual(['-']);
+    });
+
+    it('should sort by the header and show the direction indicator', async () => {
+      const wrapper = await mountView(1024);
+      expect(header(wrapper).text()).toContain('⇅');
+
+      await header(wrapper).trigger('click');
+      expect(header(wrapper).text()).toContain('▲');
+      expect(shownIds(wrapper)).toEqual(['N02', 'N03', 'N01']);
+
+      await header(wrapper).trigger('click');
+      expect(header(wrapper).text()).toContain('▼');
+      expect(shownIds(wrapper)).toEqual(['N01', 'N03', 'N02']);
+    });
+  });
+
   describe('検索', () => {
     it('should filter the cards by the search box', async () => {
       const wrapper = await mountView(390);
