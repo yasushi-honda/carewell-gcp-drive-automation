@@ -64,15 +64,22 @@ describe('useTaskList', () => {
       });
 
     // Mock subcollection documents for student count
-    vi.mocked(useFirestore.getDocuments)
-      .mockResolvedValueOnce([
-        { student_id: 'S001', student_name: '森平太郎' },
-        { student_id: 'S002', student_name: '田中花子' },
-        { student_id: 'S001', student_name: '森平太郎' }, // Duplicate
-      ] as any)
-      .mockResolvedValueOnce([
-        { student_id: 'S003', student_name: '佐藤次郎' },
-      ] as any);
+    // 課題IDで引く（並列取得ではタスク間の呼び出し順が実装のtick構造に依存するため、Onceの消費順に頼らない）
+    vi.mocked(useFirestore.getDocuments).mockImplementation(((
+      _collection: string,
+      _className: string,
+      _tasks: string,
+      taskId: string
+    ) =>
+      Promise.resolve(
+        taskId === '課題①'
+          ? [
+              { student_id: 'S001', student_name: '森平太郎' },
+              { student_id: 'S002', student_name: '田中花子' },
+              { student_id: 'S001', student_name: '森平太郎' }, // Duplicate
+            ]
+          : [{ student_id: 'S003', student_name: '佐藤次郎' }]
+      )) as any);
 
     const { tasks, loading, error, fetchTasks } = useTaskList(className);
 
@@ -188,11 +195,14 @@ describe('useTaskList', () => {
       vi.mocked(useFirestore.getDocuments).mockImplementation(((_a: string, _b: string, _c: string, taskId: string) =>
         Promise.resolve(taskId === '課題①' ? [{ student_id: 'S001' }, { student_id: 'S002' }] : [{ student_id: 'S003' }])) as any);
 
-      const { tasks, fetchTasks } = useTaskList(className);
+      const { tasks, loading, fetchTasks } = useTaskList(className);
       const fetchPromise = fetchTasks();
 
-      // 課題② の応答が先に届き、課題① は最後に届く
-      await Promise.resolve();
+      // 課題② の応答が先に届き、課題① は最後に届く。
+      // マイクロタスクが確実に掃けるまで待ち（1tick任せにしない）、課題② の処理が先に進んだことを確認する
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      expect(useFirestore.getDocuments).toHaveBeenCalledTimes(1); // 課題② のぶんだけ
+      expect(loading.value).toBe(true);
       slowTask1.resolve(taskDoc('課題①', 10, '2025-10-13T12:00:00.000Z'));
       await fetchPromise;
 
@@ -214,6 +224,35 @@ describe('useTaskList', () => {
 
       expect(error.value).toBeNull();
       expect(tasks.value).toEqual([
+        { taskId: '課題②', fileCount: 5, studentCount: 1, lastSubmit: '2025-10-13T11:00:00.000Z' },
+      ]);
+    });
+
+    it('should keep both tasks when only one task fails to load its student documents', async () => {
+      // 課題ごとの getDocuments の成否が分かれても、互いに巻き込まない（内側 catch の位置が保たれている）
+      vi.mocked(useFirestore.getTaskDocument).mockImplementation((_cls, taskId) =>
+        Promise.resolve(
+          taskId === '課題①'
+            ? taskDoc('課題①', 10, '2025-10-13T12:00:00.000Z')
+            : taskDoc('課題②', 5, '2025-10-13T11:00:00.000Z')
+        )
+      );
+      vi.mocked(useFirestore.getDocuments).mockImplementation(((
+        _collection: string,
+        _className: string,
+        _tasks: string,
+        taskId: string
+      ) =>
+        taskId === '課題①'
+          ? Promise.reject(new Error('documents fetch error'))
+          : Promise.resolve([{ student_id: 'S003' }])) as any);
+
+      const { tasks, error, fetchTasks } = useTaskList(className);
+      await fetchTasks();
+
+      expect(error.value).toBeNull();
+      expect(tasks.value).toEqual([
+        { taskId: '課題①', fileCount: 10, studentCount: 0, lastSubmit: '2025-10-13T12:00:00.000Z' },
         { taskId: '課題②', fileCount: 5, studentCount: 1, lastSubmit: '2025-10-13T11:00:00.000Z' },
       ]);
     });

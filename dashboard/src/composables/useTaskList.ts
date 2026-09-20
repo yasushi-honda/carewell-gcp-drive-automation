@@ -40,6 +40,8 @@ export function useTaskList(className: string): UseTaskListReturn {
    * パフォーマンス向上:
    * - ファイル数と最終更新日時はメタデータから即座に取得可能
    * - サブコレクションスキャンは学生数計算のみ
+   * - 課題ごとの取得は同時に発行する（結果の並びはKNOWN_TASK_IDS順。
+   *   以前は for…await で直列に待っていた。計測: docs/dashboard-mobile-measurement.md）
    */
   const fetchTasks = async (): Promise<void> => {
     loading.value = true;

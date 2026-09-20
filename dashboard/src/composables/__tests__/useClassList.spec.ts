@@ -226,11 +226,13 @@ describe('useClassList', () => {
         return Promise.resolve(null);
       });
 
-      const { classes, fetchClasses } = useClassList();
+      const { classes, loading, fetchClasses } = useClassList();
       const fetchPromise = fetchClasses();
 
-      // №02 の応答が先に届き、№01 は最後に届く
-      await Promise.resolve();
+      // №02 の応答が先に届き、№01 は最後に届く。
+      // マイクロタスクが確実に掃けるまで待ち（1tick任せにしない）、№01 が未解決のため取得中であることを確認する
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      expect(loading.value).toBe(true);
       slowClass1.resolve(taskDoc('課題①', 4, '2025-10-13T09:00:00.000Z'));
       await fetchPromise;
 
@@ -281,15 +283,96 @@ describe('useClassList', () => {
       ]);
     });
 
-    it('should return an empty list when there are no known classes', async () => {
-      mockConfig.KNOWN_CLASSES.splice(0, mockConfig.KNOWN_CLASSES.length);
+    it('should replace previous results with an empty list when there are no known classes', async () => {
+      // 初期値の [] と区別するため、先に非空の結果を作ってから空にして再取得する
+      vi.mocked(useFirestore.getTaskDocument).mockResolvedValue(taskDoc('課題①', 1, '2025-10-13T09:00:00.000Z'));
 
       const { classes, error, fetchClasses } = useClassList();
       await fetchClasses();
+      expect(classes.value).toHaveLength(1);
+      expect(useFirestore.getTaskDocument).toHaveBeenCalledTimes(3);
 
-      expect(useFirestore.getTaskDocument).not.toHaveBeenCalled();
+      mockConfig.KNOWN_CLASSES.splice(0, mockConfig.KNOWN_CLASSES.length);
+      await fetchClasses();
+
+      expect(useFirestore.getTaskDocument).toHaveBeenCalledTimes(3); // 2回目は取得しない
       expect(error.value).toBeNull();
       expect(classes.value).toEqual([]);
+    });
+
+    it('should select the latest last_updated regardless of task order or completion order', async () => {
+      // 最新(課題②)が中間に位置し、かつ最後に解決する。「先頭が最新」「完了順の最後が最新」を仮定した実装を検出する
+      const slowLatest = deferred<ReturnType<typeof taskDoc> | null>();
+      vi.mocked(useFirestore.getTaskDocument).mockImplementation((_className, taskId) => {
+        if (taskId === '課題①') return Promise.resolve(taskDoc('課題①', 1, '2025-10-10T00:00:00.000Z'));
+        if (taskId === '課題②') return slowLatest.promise;
+        return Promise.resolve(taskDoc('課題③', 4, '2025-10-12T00:00:00.000Z'));
+      });
+
+      const { classes, fetchClasses } = useClassList();
+      const fetchPromise = fetchClasses();
+
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      slowLatest.resolve(taskDoc('課題②', 2, '2025-10-15T00:00:00.000Z'));
+      await fetchPromise;
+
+      expect(classes.value[0]).toEqual({
+        name: CLASS_1,
+        taskCount: 3,
+        fileCount: 7, // 1 + 2 + 4
+        lastUpdated: '2025-10-15T00:00:00.000Z',
+      });
+    });
+
+    it('should map each class×task cell to the right class even when responses are shuffled', async () => {
+      // セルごとに一意の値を与え、添字の取り違え・クラス間のアキュムレータ共有を検出する
+      mockConfig.KNOWN_CLASSES.splice(0, mockConfig.KNOWN_CLASSES.length, CLASS_1, CLASS_2);
+      const cells: Record<string, ReturnType<typeof taskDoc> | null> = {
+        [`${CLASS_1}|課題①`]: taskDoc('課題①', 1, '2025-10-01T00:00:00.000Z'),
+        [`${CLASS_1}|課題②`]: null, // 文書なし
+        [`${CLASS_1}|課題③`]: taskDoc('課題③', 0, '2025-10-03T00:00:00.000Z'), // file_count 0 でも文書は存在する
+        [`${CLASS_2}|課題①`]: taskDoc('課題①', 10, '2025-10-20T00:00:00.000Z'),
+        [`${CLASS_2}|課題②`]: taskDoc('課題②', 20, '2025-10-10T00:00:00.000Z'),
+        [`${CLASS_2}|課題③`]: taskDoc('課題③', 30, '2025-10-15T00:00:00.000Z'),
+      };
+      // 呼び出し順と逆順に近い遅延で応答させる（完了順 ≠ 発行順）
+      const delays: Record<string, number> = {
+        [`${CLASS_1}|課題①`]: 6,
+        [`${CLASS_1}|課題②`]: 5,
+        [`${CLASS_1}|課題③`]: 4,
+        [`${CLASS_2}|課題①`]: 3,
+        [`${CLASS_2}|課題②`]: 2,
+        [`${CLASS_2}|課題③`]: 1,
+      };
+      vi.mocked(useFirestore.getTaskDocument).mockImplementation((className, taskId) => {
+        const key = `${className}|${taskId}`;
+        return new Promise((resolve) => setTimeout(() => resolve(cells[key]), delays[key]));
+      });
+
+      const { classes, fetchClasses } = useClassList();
+      await fetchClasses();
+
+      expect(classes.value).toEqual([
+        { name: CLASS_1, taskCount: 2, fileCount: 1, lastUpdated: '2025-10-03T00:00:00.000Z' },
+        { name: CLASS_2, taskCount: 3, fileCount: 60, lastUpdated: '2025-10-20T00:00:00.000Z' },
+      ]);
+    });
+
+    it('should keep loading true until every pending request has completed', async () => {
+      const pending = [deferred<null>(), deferred<null>(), deferred<null>()]; // 1クラス×3課題
+      pending.forEach((d) => vi.mocked(useFirestore.getTaskDocument).mockReturnValueOnce(d.promise));
+
+      const { loading, fetchClasses } = useClassList();
+      const fetchPromise = fetchClasses();
+
+      pending[0].resolve(null);
+      pending[1].resolve(null);
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      expect(loading.value).toBe(true); // 1件が未完了の間は取得中のまま
+
+      pending[2].resolve(null);
+      await fetchPromise;
+      expect(loading.value).toBe(false);
     });
   });
 });
