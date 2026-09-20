@@ -7,7 +7,8 @@ import Breadcrumb from '../Breadcrumb.vue';
 async function mountBreadcrumb(items: { label: string; to?: string }[]) {
   const Stub = defineComponent({ render: () => h('div') });
   const router = createRouter({ history: createMemoryHistory(), routes: [{ path: '/:pathMatch(.*)*', component: Stub }] });
-  await router.push('/');
+  // どの項目のリンク先とも一致しない現在地にする（一致すると router-link が aria-current="page" を自動で付ける）
+  await router.push('/current-page');
   await router.isReady();
   return mount(Breadcrumb, { props: { items }, global: { plugins: [router] } });
 }
