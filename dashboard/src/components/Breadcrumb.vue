@@ -27,7 +27,7 @@
         <!-- Home icon for first item -->
         <router-link
           v-if="index === 0"
-          :to="item.to"
+          :to="item.to ?? '/'"
           class="inline-flex items-center text-sm font-medium text-gray-700 hover:text-blue-600"
         >
           <svg
@@ -46,12 +46,20 @@
 
         <!-- Link for middle items -->
         <router-link
-          v-else-if="index < items.length - 1"
+          v-else-if="index < items.length - 1 && item.to"
           :to="item.to"
           class="inline-flex items-center text-sm font-medium text-gray-700 hover:text-blue-600"
         >
           {{ item.label }}
         </router-link>
+
+        <!-- Middle item without link (context label only, not clickable) -->
+        <span
+          v-else-if="index < items.length - 1"
+          class="inline-flex items-center text-sm font-medium text-gray-700"
+        >
+          {{ item.label }}
+        </span>
 
         <!-- Current page (last item, not clickable) -->
         <span
@@ -76,7 +84,8 @@
 
 export interface BreadcrumbItem {
   label: string;
-  to: string;
+  /** 省略時はリンクにしない（導線のない画面を指す項目など） */
+  to?: string;
 }
 
 interface Props {

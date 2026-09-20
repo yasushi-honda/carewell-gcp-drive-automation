@@ -5,7 +5,7 @@
       :items="[
         { label: 'ホーム', to: '/' },
         { label: className, to: `/class/${className}` },
-        { label: taskId, to: `/class/${className}/task/${taskId}` },
+        { label: taskId },
         { label: 'グループ一覧', to: `/class/${className}/task/${taskId}/groups` },
         { label: `${groupName}グループ` }
       ]"
