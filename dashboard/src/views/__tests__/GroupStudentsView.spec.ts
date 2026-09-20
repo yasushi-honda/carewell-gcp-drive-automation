@@ -109,6 +109,17 @@ describe('GroupStudentsView (responsive table / cards)', () => {
     consoleError.mockRestore();
   });
 
+  describe('パンくず', () => {
+    it('should show the task name as plain text and keep the group list as a link', async () => {
+      const wrapper = await mountView(1280);
+
+      const nav = wrapper.get('nav[aria-label="Breadcrumb"]');
+      expect(nav.text()).toContain('task1');
+      const hrefs = nav.findAll('a').map((a) => a.attributes('href'));
+      expect(hrefs).toEqual(['/', '/class/No1', '/class/No1/task/task1/groups']);
+    });
+  });
+
   describe('表示の切替（単一描画）', () => {
     it('should render cards (and no table) on a phone', async () => {
       const wrapper = await mountView(390);

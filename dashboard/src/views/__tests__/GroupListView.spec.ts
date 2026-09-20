@@ -97,6 +97,16 @@ describe('GroupListView', () => {
     expect(toValue(composable.args[1] as never)).toBe('課題②');
   });
 
+  it('should show the task name in the breadcrumb as plain text (the all-files page is not on the navigation path)', async () => {
+    const { wrapper } = await mountView('/class/クラスX/task/課題①/groups');
+
+    const nav = wrapper.get('nav[aria-label="Breadcrumb"]');
+    expect(nav.text()).toContain('課題①');
+    const hrefs = nav.findAll('a').map((a) => a.attributes('href'));
+    expect(hrefs).toEqual(['/', '/class/クラスX']);
+    expect(hrefs.some((h) => h?.includes('/task/'))).toBe(false);
+  });
+
   it('should render a card per group with the legend and no banner when everything is ready', async () => {
     const { wrapper } = await mountView();
 
