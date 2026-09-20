@@ -19,6 +19,8 @@ vi.mock('../../composables/useGroupStats', async () => {
   const error = ref<string | null>(null);
   const submissionState = ref<SubmissionState>('ready');
   const unmatchedSubmitters = ref(0);
+  const unidentifiedFiles = ref(0);
+  const submitters = ref(0);
   return {
     useGroupStats: (...args: unknown[]) => {
       composable.args = args;
@@ -29,10 +31,12 @@ vi.mock('../../composables/useGroupStats', async () => {
         refetch: composable.refetch,
         submissionState,
         unmatchedSubmitters,
+        unidentifiedFiles,
+        submitters,
         refetchSubmissions: composable.refetchSubmissions,
       };
     },
-    __state: { groupStats, loading, error, submissionState, unmatchedSubmitters },
+    __state: { groupStats, loading, error, submissionState, unmatchedSubmitters, unidentifiedFiles, submitters },
   };
 });
 
@@ -75,6 +79,8 @@ describe('GroupListView', () => {
     state.error.value = null;
     state.submissionState.value = 'ready';
     state.unmatchedSubmitters.value = 0;
+    state.unidentifiedFiles.value = 0;
+    state.submitters.value = 0;
   });
 
   afterEach(() => {
@@ -101,7 +107,7 @@ describe('GroupListView', () => {
     expect(wrapper.find('[role="alert"]').exists()).toBe(false);
   });
 
-  it('should show skeleton bars on the cards (and no legend or banner) while the submissions are loading', async () => {
+  it('should show skeleton bars and the legend (so the cards do not move on arrival) while the submissions are loading', async () => {
     state.submissionState.value = 'loading';
     state.groupStats.value = STATS.map(({ group, studentCount }) => ({ group, studentCount }));
 
@@ -109,8 +115,9 @@ describe('GroupListView', () => {
 
     expect(cards(wrapper)).toHaveLength(2);
     expect(wrapper.findAll('[data-testid="submission-skeleton"]')).toHaveLength(2);
-    expect(wrapper.find('ul[aria-label="バーの凡例"]').exists()).toBe(false);
+    expect(wrapper.find('ul[aria-label="バーの凡例"]').exists()).toBe(true);
     expect(wrapper.find('[role="alert"]').exists()).toBe(false);
+    expect(wrapper.find('[role="status"]').exists()).toBe(false);
   });
 
   it('should keep the cards and offer a retry when only the submissions failed', async () => {
@@ -121,6 +128,7 @@ describe('GroupListView', () => {
 
     expect(cards(wrapper)).toHaveLength(2);
     expect(wrapper.get('[role="alert"]').text()).toContain('提出状況を取得できませんでした');
+    expect(wrapper.find('ul[aria-label="バーの凡例"]').exists()).toBe(false);
     // 「全員未提出」のような数字は出さない
     expect(wrapper.find('[data-testid="submission-bar"]').exists()).toBe(false);
     expect(wrapper.find('[data-testid="submission-skeleton"]').exists()).toBe(false);
@@ -138,19 +146,55 @@ describe('GroupListView', () => {
 
     expect(cards(wrapper)).toHaveLength(2);
     expect(wrapper.get('[role="alert"]').text()).toContain('受講生名簿が一致しなかった');
+    expect(wrapper.find('ul[aria-label="バーの凡例"]').exists()).toBe(false);
     expect(wrapper.find('[data-testid="submission-bar"]').exists()).toBe(false);
   });
 
-  it('should note submitters who are not on the roster (excluded from the breakdown)', async () => {
+  it('should note a few submitters who are not on the roster, below the cards, in the normal tone', async () => {
     state.unmatchedSubmitters.value = 2;
+    state.submitters.value = 13;
 
     const { wrapper } = await mountView();
 
-    expect(wrapper.get('[role="status"]').text()).toContain('2 人分');
+    const note = wrapper.get('[role="status"]');
+    expect(note.text()).toContain('2 人分');
+    expect(note.text()).not.toContain('食い違い');
+    expect(note.classes()).not.toContain('text-amber-800');
+    // カードより後ろ（下）に出る
+    const html = wrapper.html();
+    expect(html.indexOf('受講生名簿にない提出')).toBeGreaterThan(html.lastIndexOf('role="button"'));
     expect(cards(wrapper)).toHaveLength(2);
   });
 
-  it('should not show the unmatched note when there are none', async () => {
+  it('should raise the tone and suspect a student id mismatch when most submitters are not on the roster', async () => {
+    state.unmatchedSubmitters.value = 7;
+    state.submitters.value = 13;
+
+    const { wrapper } = await mountView();
+
+    const note = wrapper.get('[role="status"]');
+    expect(note.text()).toContain('食い違いの可能性');
+    expect(note.classes()).toContain('text-amber-800');
+  });
+
+  it('should treat exactly half as most (the boundary)', async () => {
+    state.unmatchedSubmitters.value = 5;
+    state.submitters.value = 10;
+
+    const { wrapper } = await mountView();
+
+    expect(wrapper.get('[role="status"]').text()).toContain('食い違いの可能性');
+  });
+
+  it('should note files with an empty student id', async () => {
+    state.unidentifiedFiles.value = 3;
+
+    const { wrapper } = await mountView();
+
+    expect(wrapper.get('[role="status"]').text()).toContain('日介番号が空の提出ファイルが 3 件');
+  });
+
+  it('should not show any note when nothing is excluded', async () => {
     const { wrapper } = await mountView();
 
     expect(wrapper.find('[role="status"]').exists()).toBe(false);

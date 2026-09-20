@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { mount, flushPromises } from '@vue/test-utils';
 import { defineComponent, h, ref } from 'vue';
 import {
@@ -92,6 +92,21 @@ describe('pickCurrentStatus', () => {
     expect(pickCurrentStatus([file('N1', '不合格', same), file('N1', '', same)])).toBe('pending');
   });
 
+  it('should break the tie by rank regardless of the input order (not last-wins)', () => {
+    const same = '2026/09/20 10:00:00';
+    expect(pickCurrentStatus([file('N1', '合格', same), file('N1', '', same), file('N1', '不合格', same)])).toBe('passed');
+    expect(pickCurrentStatus([file('N1', '', same), file('N1', '合格', same)])).toBe('passed');
+    expect(pickCurrentStatus([file('N1', '', same), file('N1', '不合格', same)])).toBe('pending');
+  });
+
+  it('should not pick an undated file just because it comes last (a dated file is newer)', () => {
+    const files: SubmissionFile[] = [
+      file('N1', '不合格', '2026/09/20 10:00:00'),
+      { student_id: 'N1', metadata: { pass_status: '合格' } },
+    ];
+    expect(pickCurrentStatus(files)).toBe('failed');
+  });
+
   it('should treat a missing or invalid submit_date as the oldest', () => {
     const files: SubmissionFile[] = [
       { student_id: 'N1', metadata: { pass_status: '合格' } },
@@ -158,10 +173,12 @@ describe('summarizeSubmissions', () => {
       file('N1', '合格'),
     ];
 
-    const { submitters, unmatchedSubmitters, byGroup } = summarizeSubmissions(roster, files);
+    const { submitters, unmatchedSubmitters, unidentifiedFiles, byGroup } = summarizeSubmissions(roster, files);
 
     expect(submitters).toBe(1);
     expect(unmatchedSubmitters).toBe(0);
+    // 誰の提出か分からないファイルは集計に含めず、数だけ返す
+    expect(unidentifiedFiles).toBe(4);
     expect(byGroup.get('A')?.submitted).toBe(1);
   });
 
@@ -208,6 +225,10 @@ describe('useGroupStats', () => {
     getDocs.mockReset();
     getDocuments.mockReset();
     vi.spyOn(console, 'error').mockImplementation(() => {});
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
   });
 
   function mountComposable(className: string | { value: string } = CLASS_FULL, taskId: string | { value: string } = TASK) {
@@ -360,6 +381,24 @@ describe('useGroupStats', () => {
     expect(result.error.value).toBe('グループ統計の取得に失敗しました');
     expect(result.loading.value).toBe(false);
     expect(result.groupStats.value).toEqual([]);
+    // 取得中のまま固まらない
+    expect(result.submissionState.value).toBe('error');
+  });
+
+  it('should clear the previous cards when the students fail after a successful load', async () => {
+    const taskId = ref('課題①');
+    getDocs.mockResolvedValueOnce(ROSTER as never).mockRejectedValueOnce(new Error('offline'));
+    getDocuments.mockResolvedValue([]);
+
+    const { result } = mountComposable(CLASS_FULL, taskId);
+    await flushPromises();
+    expect(result.groupStats.value).toHaveLength(3);
+
+    taskId.value = '課題②';
+    await flushPromises();
+
+    expect(result.error.value).toBe('グループ統計の取得に失敗しました');
+    expect(result.groupStats.value).toEqual([]);
   });
 
   it('should not leave an unhandled rejection when both requests fail', async () => {
@@ -397,6 +436,169 @@ describe('useGroupStats', () => {
     expect(a).toEqual({ submitted: 1, notSubmitted: 1, passed: 0, pending: 0, failed: 1 });
   });
 
+  it('should report a mismatch when every file has an unusable student id (never everyone-not-submitted)', async () => {
+    getDocs.mockResolvedValue(ROSTER as never);
+    getDocuments.mockResolvedValue([{}, { student_id: '' }, { student_id: 42 }, { student_id: '  ' }]);
+
+    const { result } = mountComposable();
+    await flushPromises();
+
+    expect(result.submissionState.value).toBe('mismatch');
+    expect(result.unidentifiedFiles.value).toBe(4);
+    expect(result.groupStats.value.every((s) => s.submission === undefined)).toBe(true);
+  });
+
+  it('should stay ready and count the files without a student id when only some are unusable', async () => {
+    getDocs.mockResolvedValue(ROSTER as never);
+    getDocuments.mockResolvedValue([file('N1', '合格'), { student_id: '' }, {}]);
+
+    const { result } = mountComposable();
+    await flushPromises();
+
+    expect(result.submissionState.value).toBe('ready');
+    expect(result.unidentifiedFiles.value).toBe(2);
+    expect(result.submitters.value).toBe(1);
+    expect(result.groupStats.value.find((s) => s.group === 'A')?.submission?.passed).toBe(1);
+  });
+
+  it('should sort the groups (A to Z) whatever order the students come in', async () => {
+    getDocs.mockResolvedValue(
+      studentsSnapshot([
+        { id: 'N1', group: 'C' },
+        { id: 'N2', group: 'A' },
+        { id: 'N3', group: 'B' },
+      ]) as never
+    );
+    getDocuments.mockResolvedValue([]);
+
+    const { result } = mountComposable();
+    await flushPromises();
+
+    expect(result.groupStats.value.map((s) => s.group)).toEqual(['A', 'B', 'C']);
+  });
+
+  it('should ignore an older students response arriving late (cards and loading follow the latest fetch)', async () => {
+    const taskId = ref('課題①');
+    const firstStudents = deferred<unknown>();
+    getDocs
+      .mockReturnValueOnce(firstStudents.promise as never)
+      .mockResolvedValueOnce(studentsSnapshot([{ id: 'Z1', group: 'Z' }]) as never);
+    getDocuments.mockResolvedValue([]);
+
+    const { result } = mountComposable(CLASS_FULL, taskId);
+    taskId.value = '課題②';
+    await flushPromises();
+    expect(result.groupStats.value.map((s) => s.group)).toEqual(['Z']);
+    expect(result.loading.value).toBe(false);
+
+    // 古い課題の受講生が、あとから届く
+    firstStudents.resolve(ROSTER);
+    await flushPromises();
+
+    expect(result.groupStats.value.map((s) => s.group)).toEqual(['Z']);
+    expect(result.loading.value).toBe(false);
+    expect(result.error.value).toBeNull();
+  });
+
+  it('should not let an older students failure arriving late set the error', async () => {
+    const taskId = ref('課題①');
+    const firstStudents = deferred<unknown>();
+    getDocs
+      .mockReturnValueOnce(firstStudents.promise as never)
+      .mockResolvedValueOnce(studentsSnapshot([{ id: 'Z1', group: 'Z' }]) as never);
+    getDocuments.mockResolvedValue([]);
+
+    const { result } = mountComposable(CLASS_FULL, taskId);
+    taskId.value = '課題②';
+    await flushPromises();
+
+    firstStudents.reject(new Error('late failure'));
+    await flushPromises();
+
+    expect(result.error.value).toBeNull();
+    expect(result.groupStats.value.map((s) => s.group)).toEqual(['Z']);
+    expect(result.submissionState.value).toBe('ready');
+  });
+
+  describe('refetchSubmissions', () => {
+    async function mountFailed() {
+      getDocs.mockResolvedValue(ROSTER as never);
+      getDocuments.mockRejectedValueOnce(new Error('offline'));
+      const taskId = ref('課題①');
+      const mounted = mountComposable(CLASS_FULL, taskId);
+      await flushPromises();
+      expect(mounted.result.submissionState.value).toBe('error');
+      return { ...mounted, taskId };
+    }
+
+    it('should do nothing while the students are still loading (no aggregation against an empty roster)', async () => {
+      const students = deferred<unknown>();
+      getDocs.mockReturnValue(students.promise as never);
+      getDocuments.mockResolvedValue([file('N1', '合格')]);
+
+      const { result } = mountComposable();
+      await result.refetchSubmissions();
+
+      expect(getDocuments).toHaveBeenCalledTimes(1);
+      students.resolve(ROSTER);
+      await flushPromises();
+      expect(result.submissionState.value).toBe('ready');
+      expect(result.groupStats.value.find((s) => s.group === 'A')?.submission?.passed).toBe(1);
+    });
+
+    it('should let the latest of two quick retries win (double click)', async () => {
+      const { result } = await mountFailed();
+      const first = deferred<SubmissionFile[]>();
+      const second = deferred<SubmissionFile[]>();
+      getDocuments.mockReturnValueOnce(first.promise as never).mockReturnValueOnce(second.promise as never);
+
+      const p1 = result.refetchSubmissions();
+      const p2 = result.refetchSubmissions();
+      second.resolve([file('N1', '合格')]);
+      await flushPromises();
+      first.resolve([file('N2', '不合格')]);
+      await Promise.all([p1, p2]);
+      await flushPromises();
+
+      const a = result.groupStats.value.find((s) => s.group === 'A')?.submission;
+      expect(a).toEqual({ submitted: 1, notSubmitted: 1, passed: 1, pending: 0, failed: 0 });
+    });
+
+    it('should not overwrite a newer fetch when the task changes while a retry is in flight', async () => {
+      const { result, taskId } = await mountFailed();
+      const retry = deferred<SubmissionFile[]>();
+      getDocuments.mockReturnValueOnce(retry.promise as never).mockResolvedValueOnce([file('N3', '合格')]);
+
+      const pending = result.refetchSubmissions();
+      taskId.value = '課題②';
+      await flushPromises();
+      retry.resolve([file('N1', '不合格')]);
+      await pending;
+      await flushPromises();
+
+      const b = result.groupStats.value.find((s) => s.group === 'B')?.submission;
+      const a = result.groupStats.value.find((s) => s.group === 'A')?.submission;
+      expect(b?.passed).toBe(1);
+      expect(a?.submitted).toBe(0);
+    });
+
+    it('should not turn a newer successful state into an error when an older retry fails late', async () => {
+      const { result, taskId } = await mountFailed();
+      const retry = deferred<SubmissionFile[]>();
+      getDocuments.mockReturnValueOnce(retry.promise as never).mockResolvedValueOnce([file('N3', '合格')]);
+
+      const pending = result.refetchSubmissions();
+      taskId.value = '課題②';
+      await flushPromises();
+      expect(result.submissionState.value).toBe('ready');
+      retry.reject(new Error('late failure'));
+      await pending;
+      await flushPromises();
+
+      expect(result.submissionState.value).toBe('ready');
+    });
+  });
+
   it('should refetch when the class changes', async () => {
     const className = ref(CLASS_FULL);
     getDocs.mockResolvedValue(ROSTER as never);
@@ -409,5 +611,6 @@ describe('useGroupStats', () => {
 
     expect(getDocs).toHaveBeenCalledTimes(2);
     expect(firestore.where).toHaveBeenCalledWith('class_name', '==', 'No2');
+    expect(getDocuments).toHaveBeenLastCalledWith('submissions', '令和8年度 デジタル中核人材養成研修 №02', 'tasks', TASK, 'files');
   });
 });

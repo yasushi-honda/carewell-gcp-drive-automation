@@ -34,6 +34,25 @@ describe('SubmissionBar', () => {
     ]);
   });
 
+  it('should round the widths to two decimals (no floating point noise)', () => {
+    expect(widths(mountBar({ total: 3, submission: { submitted: 1, notSubmitted: 2, passed: 1, pending: 0, failed: 0 } }))).toEqual([
+      ['passed', '33.33%'],
+    ]);
+    expect(widths(mountBar({ total: 7, submission: { submitted: 1, notSubmitted: 6, passed: 0, pending: 1, failed: 0 } }))).toEqual([
+      ['pending', '14.29%'],
+    ]);
+    expect(widths(mountBar({ total: 15, submission: { submitted: 3, notSubmitted: 12, passed: 0, pending: 0, failed: 3 } }))).toEqual([
+      ['failed', '20%'],
+    ]);
+  });
+
+  it('should never let the segments add up to more than the bar', () => {
+    const wrapper = mountBar({ total: 3, submission: { submitted: 3, notSubmitted: 0, passed: 1, pending: 1, failed: 1 } });
+
+    const sum = wrapper.findAll('[data-segment]').reduce((acc, el) => acc + parseFloat((el.element as HTMLElement).style.width), 0);
+    expect(sum).toBeLessThanOrEqual(100.01);
+  });
+
   it('should omit segments with zero people', () => {
     const wrapper = mountBar({ total: 10, submission: { submitted: 4, notSubmitted: 6, passed: 4, pending: 0, failed: 0 } });
 

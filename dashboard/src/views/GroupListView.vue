@@ -45,23 +45,20 @@
         role="alert"
         class="mb-4 rounded-md border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900"
       >
-        提出データと受講生名簿が一致しなかったため、提出状況を表示できません。日介番号の食い違いの可能性があります。
+        提出データと受講生名簿が一致しなかったため、提出状況を表示できません。提出データの日介番号が空、または受講生名簿と食い違っている可能性があります。
       </div>
 
-      <template v-else-if="submissionState === 'ready'">
-        <!-- 名簿外の提出（退会・無効化・名簿の反映待ち等）は集計に含めない -->
-        <p v-if="unmatchedSubmitters > 0" role="status" class="mb-3 text-sm text-gray-600">
-          受講生名簿にない提出が {{ unmatchedSubmitters }} 人分あります（下の集計には含まれません）。
-        </p>
-
-        <!-- 凡例（色だけに頼らず、カードにも数字を出している） -->
-        <ul class="mb-4 flex flex-wrap gap-x-4 gap-y-1 text-xs text-gray-600" aria-label="バーの凡例">
-          <li class="flex items-center gap-1.5"><span class="h-2.5 w-2.5 rounded-full bg-green-500"></span>合格</li>
-          <li class="flex items-center gap-1.5"><span class="h-2.5 w-2.5 rounded-full bg-blue-500"></span>採点待ち</li>
-          <li class="flex items-center gap-1.5"><span class="h-2.5 w-2.5 rounded-full bg-red-500"></span>不合格</li>
-          <li class="flex items-center gap-1.5"><span class="h-2.5 w-2.5 rounded-full bg-gray-300"></span>未提出</li>
-        </ul>
-      </template>
+      <!-- 凡例（色だけに頼らず、カードにも数字を出している）。取得中から出して、データ到着時にカードが動かないようにする -->
+      <ul
+        v-else
+        class="mb-4 flex flex-wrap gap-x-4 gap-y-1 text-xs text-gray-600"
+        aria-label="バーの凡例"
+      >
+        <li class="flex items-center gap-1.5"><span class="h-2.5 w-2.5 rounded-full bg-green-500"></span>合格</li>
+        <li class="flex items-center gap-1.5"><span class="h-2.5 w-2.5 rounded-full bg-blue-500"></span>採点待ち</li>
+        <li class="flex items-center gap-1.5"><span class="h-2.5 w-2.5 rounded-full bg-red-500"></span>不合格</li>
+        <li class="flex items-center gap-1.5"><span class="h-2.5 w-2.5 rounded-full bg-gray-300"></span>未提出</li>
+      </ul>
 
       <!-- グループカード一覧 -->
       <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -75,6 +72,21 @@
           :submission="stat.submission"
           :submissionLoading="submissionState === 'loading'"
         />
+      </div>
+
+      <!-- 集計に含まれない提出（カードの下に出し、データ到着時にカードが動かないようにする） -->
+      <div v-if="submissionState === 'ready'" class="mt-4 space-y-1 text-sm">
+        <p
+          v-if="unmatchedSubmitters > 0"
+          role="status"
+          :class="unmatchedIsMostSubmitters ? 'font-medium text-amber-800' : 'text-gray-600'"
+        >
+          受講生名簿にない提出が {{ unmatchedSubmitters }} 人分あります（上の集計には含まれません）。
+          <template v-if="unmatchedIsMostSubmitters">日介番号の食い違いの可能性があります。</template>
+        </p>
+        <p v-if="unidentifiedFiles > 0" role="status" class="font-medium text-amber-800">
+          日介番号が空の提出ファイルが {{ unidentifiedFiles }} 件あります（上の集計には含まれません）。
+        </p>
       </div>
     </template>
 
@@ -105,6 +117,20 @@ const route = useRoute();
 const className = computed(() => route.params.className as string);
 const taskId = computed(() => route.params.taskId as string);
 
-const { groupStats, loading, error, refetch, submissionState, unmatchedSubmitters, refetchSubmissions } =
-  useGroupStats(className, taskId);
+const {
+  groupStats,
+  loading,
+  error,
+  refetch,
+  submissionState,
+  unmatchedSubmitters,
+  unidentifiedFiles,
+  submitters,
+  refetchSubmissions,
+} = useGroupStats(className, taskId);
+
+// 名簿外が提出者の半数以上なら、退会などではなく日介番号の食い違いを疑って目立たせる
+const unmatchedIsMostSubmitters = computed(
+  () => unmatchedSubmitters.value > 0 && unmatchedSubmitters.value * 2 >= submitters.value
+);
 </script>

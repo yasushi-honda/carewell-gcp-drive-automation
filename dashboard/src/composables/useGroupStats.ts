@@ -94,6 +94,8 @@ export interface SubmissionSummary {
   submitters: number;
   /** そのうち active 名簿に存在しない人（集計に含まれない） */
   unmatchedSubmitters: number;
+  /** 日介番号が取れない（空・欠損・文字列以外）ファイル数。誰の提出か分からないため集計に含まれない */
+  unidentifiedFiles: number;
 }
 
 /**
@@ -102,10 +104,13 @@ export interface SubmissionSummary {
  */
 export function summarizeSubmissions(roster: RosterStudent[], files: SubmissionFile[]): SubmissionSummary {
   const filesByStudent = new Map<string, SubmissionFile[]>();
+  let unidentifiedFiles = 0;
   for (const file of files) {
-    if (typeof file.student_id !== 'string') continue;
-    const id = file.student_id.trim();
-    if (!id) continue;
+    const id = typeof file.student_id === 'string' ? file.student_id.trim() : '';
+    if (!id) {
+      unidentifiedFiles += 1;
+      continue;
+    }
     const list = filesByStudent.get(id);
     if (list) list.push(file);
     else filesByStudent.set(id, [file]);
@@ -134,7 +139,7 @@ export function summarizeSubmissions(roster: RosterStudent[], files: SubmissionF
     if (!rosterIds.has(id)) unmatched += 1;
   }
 
-  return { byGroup, submitters: filesByStudent.size, unmatchedSubmitters: unmatched };
+  return { byGroup, submitters: filesByStudent.size, unmatchedSubmitters: unmatched, unidentifiedFiles };
 }
 
 export function useGroupStats(className: MaybeRefOrGetter<string>, taskId: MaybeRefOrGetter<string>) {
@@ -145,6 +150,8 @@ export function useGroupStats(className: MaybeRefOrGetter<string>, taskId: Maybe
   const submissionState = ref<SubmissionState>('loading');
   const submissionByGroup = ref<Map<string, GroupSubmission>>(new Map());
   const unmatchedSubmitters = ref(0);
+  const unidentifiedFiles = ref(0);
+  const submitters = ref(0);
 
   // active な受講生（提出状況の再取得に使う）
   let roster: RosterStudent[] = [];
@@ -163,10 +170,13 @@ export function useGroupStats(className: MaybeRefOrGetter<string>, taskId: Maybe
   const applyFiles = (files: SubmissionFile[]) => {
     const summary = summarizeSubmissions(roster, files);
     unmatchedSubmitters.value = summary.unmatchedSubmitters;
+    unidentifiedFiles.value = summary.unidentifiedFiles;
+    submitters.value = summary.submitters;
     submissionByGroup.value = summary.byGroup;
-    // ファイルはあるのに誰も名簿に紐付かない場合は、「全員未提出」と誤表示せず警告に回す
-    submissionState.value =
-      summary.submitters > 0 && summary.unmatchedSubmitters === summary.submitters ? 'mismatch' : 'ready';
+    // ファイルはあるのに誰も名簿に紐付かない（日介番号が空・欠損、または全員が名簿外）場合は、
+    // 「全員未提出」と誤表示せず警告に回す
+    const matchedSubmitters = summary.submitters - summary.unmatchedSubmitters;
+    submissionState.value = files.length > 0 && matchedSubmitters === 0 ? 'mismatch' : 'ready';
   };
 
   /** 提出ファイルだけを取得して反映する（再取得用）。失敗しても例外を投げず、状態に反映する */
@@ -195,6 +205,9 @@ export function useGroupStats(className: MaybeRefOrGetter<string>, taskId: Maybe
     error.value = null;
     submissionState.value = 'loading';
     unmatchedSubmitters.value = 0;
+    unidentifiedFiles.value = 0;
+    submitters.value = 0;
+    baseStats.value = [];
     roster = [];
 
     // 提出データは受講生の取得と同時に開始する（カードは提出データを待たずに表示する）
@@ -243,6 +256,8 @@ export function useGroupStats(className: MaybeRefOrGetter<string>, taskId: Maybe
       if (studentsGen !== studentsGeneration) return;
       console.error('Error fetching group stats:', err);
       error.value = 'グループ統計の取得に失敗しました';
+      // 提出状況は受講生（名簿）が無いと集計できないため、取得中のまま残さない
+      submissionState.value = 'error';
       return;
     } finally {
       if (studentsGen === studentsGeneration) loading.value = false;
@@ -262,6 +277,8 @@ export function useGroupStats(className: MaybeRefOrGetter<string>, taskId: Maybe
 
   /** 提出状況だけを取り直す（受講生の再取得はしない） */
   const refetchSubmissions = async () => {
+    // 受講生の取得中・失敗後は名簿が無く、空の名簿で集計してしまうため何もしない（全体の再取得を使う）
+    if (loading.value || roster.length === 0) return;
     const generation = ++submissionsGeneration;
     await loadSubmissions(generation, toValue(className), toValue(taskId));
   };
@@ -282,6 +299,8 @@ export function useGroupStats(className: MaybeRefOrGetter<string>, taskId: Maybe
     refetch: fetchGroupStats,
     submissionState,
     unmatchedSubmitters,
+    unidentifiedFiles,
+    submitters,
     refetchSubmissions,
   };
 }
