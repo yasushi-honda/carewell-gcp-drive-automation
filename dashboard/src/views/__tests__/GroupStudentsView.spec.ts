@@ -9,7 +9,8 @@ import type { Student } from '../../types/models';
 import type { SubmissionFile } from '../../composables/useGroupStats';
 import * as useFirestore from '../../composables/useFirestore';
 
-// グループ内の受講生一覧: <1024px はカード、≥1024px は従来の表（表の最小幅は約812px）。
+// グループ内の受講生一覧: <1280px はカード、≥1280px は表（提出状況の列を足した表の最小幅は約1029px。
+// 本番で実測し、1024px では右端の提出状況の列が画面外になったため、/students と同じ 1280px を境にする）。
 // 受講者番号・ふりがなの並べ替えは「昇順 ⇄ 降順」の2状態（受講生一覧の3状態とは別仕様）。
 // レイアウトは happy-dom では計算できないため、docs/dashboard-mobile-measurement.md の手順で実測する。
 
@@ -117,15 +118,15 @@ describe('GroupStudentsView (responsive table / cards)', () => {
       expect(sortGroup(wrapper).exists()).toBe(true);
     });
 
-    it('should still render cards just below 1024px', async () => {
-      const wrapper = await mountView(1023);
+    it('should still render cards just below 1280px (the table would need horizontal scrolling and hide the status column)', async () => {
+      const wrapper = await mountView(1279);
 
       expect(wrapper.find('table').exists()).toBe(false);
       expect(cards(wrapper).exists()).toBe(true);
     });
 
-    it('should render the table (and no cards or sort buttons) from 1024px', async () => {
-      const wrapper = await mountView(1024);
+    it('should render the table (and no cards or sort buttons) from 1280px', async () => {
+      const wrapper = await mountView(1280);
 
       expect(wrapper.find('table').exists()).toBe(true);
       expect(wrapper.findAll('tbody tr')).toHaveLength(3);
@@ -150,14 +151,14 @@ describe('GroupStudentsView (responsive table / cards)', () => {
     });
   });
 
-  describe('受講者番号の列（表・1024px 以上）', () => {
+  describe('受講者番号の列（表・1280px 以上）', () => {
     const header = (wrapper: VueWrapper) =>
       wrapper.findAll('th').find((th) => th.text().includes('受講者番号'))!;
     const numberCells = (wrapper: VueWrapper) =>
       wrapper.findAll('tbody tr').map((row) => row.findAll('td')[0].text());
 
     it('should show the student number column and its values in the table', async () => {
-      const wrapper = await mountView(1024);
+      const wrapper = await mountView(1280);
 
       expect(header(wrapper).exists()).toBe(true);
       expect(wrapper.text()).not.toContain('通し番号');
@@ -166,13 +167,13 @@ describe('GroupStudentsView (responsive table / cards)', () => {
 
     it('should show "-" in the cell of a student without a student number', async () => {
       studentsState.students.value = [student('N01', { student_number: '' })];
-      const wrapper = await mountView(1024);
+      const wrapper = await mountView(1280);
 
       expect(numberCells(wrapper)).toEqual(['-']);
     });
 
     it('should sort by the header and show the direction indicator', async () => {
-      const wrapper = await mountView(1024);
+      const wrapper = await mountView(1280);
       expect(header(wrapper).text()).toContain('⇅');
 
       await header(wrapper).trigger('click');
@@ -290,11 +291,15 @@ describe('GroupStudentsView (responsive table / cards)', () => {
   });
 
   describe('画面幅の変化（回転・リサイズ）', () => {
-    it('should switch from cards to the table across 1024px and keep search and sort state', async () => {
+    it('should switch from cards to the table across 1280px and keep search and sort state', async () => {
       const wrapper = await mountView(390);
       await wrapper.get('#search-query').setValue('氏名');
       await sortGroup(wrapper).findAll('button')[0].trigger('click'); // ふりがな昇順
       expect(shownIds(wrapper)).toEqual(['N01', 'N02', 'N03']);
+
+      resizeTo(1279);
+      await nextTick();
+      expect(wrapper.find('table').exists()).toBe(false);
 
       resizeTo(1280);
       await nextTick();
