@@ -173,13 +173,33 @@ describe('App header (mobile-first)', () => {
       const wrapper = await mountApp();
       const header = wrapper.get('header');
 
-      const email = header.findAll('span').find((s) => s.text().includes('a-very-long-address'));
+      // 省略（truncate）するのはメールだけ。全体の幅は <lg で上限を設け、≥lg は従来どおり無制限
+      const email = header.findAll('span').find((s) => s.classes().includes('truncate') && s.text().includes('a-very-long-address'));
       expect(email).toBeDefined();
-      expect(email!.classes()).toEqual(expect.arrayContaining(['truncate', 'max-w-[9rem]', 'lg:max-w-none']));
+      const wrapper_ = email!.element.parentElement!;
+      expect(wrapper_.classList.contains('max-w-[12rem]')).toBe(true);
+      expect(wrapper_.classList.contains('lg:max-w-none')).toBe(true);
 
       const logout = header.findAll('button').find((b) => b.text() === 'ログアウト');
       expect(logout).toBeDefined();
       expect(logout!.classes()).toEqual(expect.arrayContaining(['min-h-11', 'lg:min-h-0']));
+    });
+
+    it('should keep the 「権限なし」 label visible (not truncated) for a non-admin user with a long e-mail', async () => {
+      authState.user.value = { email: 'a-very-long-address-for-layout-check@example.co.jp' };
+      authState.isAdmin.value = false;
+      const wrapper = await mountApp();
+      const header = wrapper.get('header');
+
+      const label = header.findAll('span').find((s) => s.text() === '（権限なし）');
+      expect(label).toBeDefined();
+      // 縮まず改行もしない（省略されるのはメール側のみ）
+      expect(label!.classes()).toEqual(expect.arrayContaining(['shrink-0', 'whitespace-nowrap']));
+      expect(label!.classes()).not.toContain('truncate');
+      // 省略対象のメールとは別要素
+      const email = header.findAll('span').find((s) => s.classes().includes('truncate'));
+      expect(email).toBeDefined();
+      expect(email!.text()).not.toContain('権限なし');
     });
 
     it('should show the syncing state and disable the sync button', async () => {
