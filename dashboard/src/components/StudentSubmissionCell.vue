@@ -5,6 +5,9 @@
   -->
   <span v-if="state === 'loading'" class="inline-block h-5 w-16 animate-pulse rounded-full bg-gray-200" aria-hidden="true" data-testid="submission-cell-loading"></span>
 
+  <!-- 退会した受講生で提出が無い場合は、提出の対象外（「未提出」とは言わない） -->
+  <span v-else-if="state === 'ready' && !submission && notRequired" class="text-sm text-gray-500" data-testid="submission-cell-not-required">対象外</span>
+
   <span v-else-if="state === 'ready'" class="inline-flex flex-col items-start gap-0.5" data-testid="submission-cell">
     <span
       class="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold"
@@ -31,6 +34,8 @@ const props = defineProps<{
   state: 'loading' | 'ready' | 'error' | 'mismatch';
   /** 提出ファイルがある受講生のみ。無ければ「未提出」 */
   submission?: StudentSubmission;
+  /** 提出の対象外（退会した受講生）。提出が無いときだけ「未提出」の代わりに「対象外」を出す */
+  notRequired?: boolean;
 }>();
 
 const BADGES: Record<StudentStatus, { label: string; color: string }> = {

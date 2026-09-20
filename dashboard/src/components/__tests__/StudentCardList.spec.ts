@@ -145,6 +145,17 @@ describe('StudentCardList', () => {
       expect(badges).toEqual(['failed', 'not_submitted']);
     });
 
+    it('should say 対象外 (not 未提出) on the card of a withdrawn student without files', () => {
+      const wrapper = mountList({
+        students: [student({ student_id: 'N1', status: 'withdrawn' })],
+        submissionState: 'ready',
+        submissions: new Map(),
+      });
+
+      expect(wrapper.text()).toContain('対象外');
+      expect(wrapper.text()).not.toContain('未提出');
+    });
+
     it('should not claim 未提出 while loading or when the status could not be fetched', () => {
       for (const submissionState of ['loading', 'error', 'mismatch'] as const) {
         const wrapper = mountList({ students: [student()], submissionState, submissions: new Map() });

@@ -45,6 +45,7 @@
               <StudentSubmissionCell
                 :state="submissionState"
                 :submission="submissions?.get(student.student_id)"
+                :not-required="student.status === 'withdrawn'"
               />
             </dd>
           </div>

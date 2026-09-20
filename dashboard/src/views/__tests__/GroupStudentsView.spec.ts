@@ -343,6 +343,50 @@ describe('GroupStudentsView (responsive table / cards)', () => {
         wrapper.findAll('[data-chip]').map((c) => [c.attributes('data-chip'), c.get('span').text()])
       );
 
+    describe('退会した受講生', () => {
+      // 在籍 N03・N01・N02 に、退会 N04（提出なし）と退会 N05（提出あり・不合格）を加える
+      const WITH_WITHDRAWN = [
+        ...DATA.filter((s) => s.group === 'A' && s.class_name === 'No1'),
+        student('N04', { furigana: 'か', student_number: 'A006', status: 'withdrawn' }),
+        student('N05', { furigana: 'き', student_number: 'A007', status: 'withdrawn' }),
+      ];
+
+      beforeEach(() => {
+        studentsState.students.value = WITH_WITHDRAWN;
+        getDocuments.mockResolvedValue([...FILES, file('N05', '不合格')]);
+      });
+
+      it('should count only enrolled students in the chips (same basis as the group cards)', async () => {
+        const wrapper = await mountView(1280);
+        await flushPromises();
+
+        expect(chipCounts(wrapper)).toEqual({ all: '3', not_submitted: '1', passed: '1', pending: '1', failed: '0' });
+      });
+
+      it('should keep withdrawn students in the list, saying 対象外 (not 未提出) when they have no submission', async () => {
+        const wrapper = await mountView(1280);
+        await flushPromises();
+
+        expect(shownIds(wrapper).sort()).toEqual(['N01', 'N02', 'N03', 'N04', 'N05']);
+        const rowOf = (id: string) => wrapper.findAll('tbody tr').find((r) => r.text().includes(`${id}の氏名`))!;
+        expect(rowOf('N04').text()).toContain('対象外');
+        expect(rowOf('N04').text()).not.toContain('未提出');
+        // 提出している退会者は、実際の状態を出す
+        expect(rowOf('N05').find('[data-status]').attributes('data-status')).toBe('failed');
+      });
+
+      it('should leave withdrawn students out when narrowing by status, so the list matches the chip count', async () => {
+        const wrapper = await mountView(1280);
+        await flushPromises();
+
+        await chip(wrapper, 'not_submitted').trigger('click');
+        expect(shownIds(wrapper)).toEqual(['N02']);
+
+        await chip(wrapper, 'failed').trigger('click');
+        expect(shownIds(wrapper)).toEqual([]);
+      });
+    });
+
     it('should read the files of this class and task', async () => {
       await mountView(1280);
       await flushPromises();

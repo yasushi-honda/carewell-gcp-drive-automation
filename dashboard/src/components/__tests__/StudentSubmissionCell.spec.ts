@@ -3,7 +3,11 @@ import { mount } from '@vue/test-utils';
 import StudentSubmissionCell from '../StudentSubmissionCell.vue';
 import type { StudentSubmission } from '../../composables/useStudentSubmissions';
 
-function mountCell(props: { state: 'loading' | 'ready' | 'error' | 'mismatch'; submission?: StudentSubmission }) {
+function mountCell(props: {
+  state: 'loading' | 'ready' | 'error' | 'mismatch';
+  submission?: StudentSubmission;
+  notRequired?: boolean;
+}) {
   return mount(StudentSubmissionCell, { props });
 }
 
@@ -36,6 +40,21 @@ describe('StudentSubmissionCell', () => {
     expect(badge.text()).toBe('未提出');
     expect(badge.attributes('data-status')).toBe('not_submitted');
     expect(wrapper.text()).not.toContain('最終提出');
+  });
+
+  it('should say 対象外 instead of 未提出 for a withdrawn student without a submission', () => {
+    const wrapper = mountCell({ state: 'ready', notRequired: true });
+
+    expect(wrapper.text()).toBe('対象外');
+    expect(wrapper.text()).not.toContain('未提出');
+    expect(wrapper.find('[data-status]').exists()).toBe(false);
+  });
+
+  it('should still show the real status of a withdrawn student who did submit', () => {
+    const wrapper = mountCell({ state: 'ready', notRequired: true, submission: submission({ status: 'passed' }) });
+
+    expect(wrapper.find('[data-status]').text()).toBe('合格');
+    expect(wrapper.text()).not.toContain('対象外');
   });
 
   it('should show the number of submissions only for a resubmission', () => {

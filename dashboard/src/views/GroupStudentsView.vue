@@ -195,7 +195,11 @@
                 {{ student.service_type }}
               </td>
               <td class="px-6 py-4 whitespace-nowrap">
-                <StudentSubmissionCell :state="submissionState" :submission="byStudent.get(student.student_id)" />
+                <StudentSubmissionCell
+                  :state="submissionState"
+                  :submission="byStudent.get(student.student_id)"
+                  :not-required="student.status === 'withdrawn'"
+                />
               </td>
             </tr>
           </tbody>
@@ -272,12 +276,15 @@ const submissionState = computed<'loading' | 'ready' | 'error' | 'mismatch'>(() 
 // グループの受講生（提出状況・検索での絞り込み前）
 const groupStudents = computed(() => classStudents.value.filter((student) => student.group === groupName));
 
-// 提出状況の集計チップ（グループの全員に対する人数）
+// 提出状況の集計・絞り込みの対象は在籍中の受講生のみ（グループ一覧カードと同じ基準。退会者は提出の対象外）
+const activeGroupStudents = computed(() => groupStudents.value.filter((student) => student.status === 'active'));
+
+// 提出状況の集計チップ（グループの在籍者に対する人数）
 const statusChips = computed(() => {
   const counts: Record<StudentStatus, number> = { not_submitted: 0, passed: 0, pending: 0, failed: 0 };
-  for (const student of groupStudents.value) counts[statusOf(byStudent.value, student.student_id)] += 1;
+  for (const student of activeGroupStudents.value) counts[statusOf(byStudent.value, student.student_id)] += 1;
   return [
-    { key: 'all' as const, label: '全員', count: groupStudents.value.length },
+    { key: 'all' as const, label: '全員', count: activeGroupStudents.value.length },
     { key: 'not_submitted' as const, label: '未提出', count: counts.not_submitted },
     { key: 'passed' as const, label: '合格', count: counts.passed },
     { key: 'pending' as const, label: '採点待ち', count: counts.pending },
@@ -288,7 +295,11 @@ const statusChips = computed(() => {
 // フィルタリング（提出状況、検索クエリ）
 const filteredStudents = computed(() => {
   return groupStudents.value.filter((student) => {
-    if (statusFilter.value !== 'all' && statusOf(byStudent.value, student.student_id) !== statusFilter.value) {
+    // 状態で絞り込むときは在籍者だけ（チップの人数と一覧の人数を一致させる）
+    if (
+      statusFilter.value !== 'all' &&
+      (student.status !== 'active' || statusOf(byStudent.value, student.student_id) !== statusFilter.value)
+    ) {
       return false;
     }
 
