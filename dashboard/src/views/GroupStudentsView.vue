@@ -245,14 +245,14 @@ const shortClassName = convertToShortClassName(className);
 
 const { students, loading, error } = useStudents();
 
-// この課題の提出状況（受講生一覧の取得とは別に取り、届くまでは骨格を出す）
+// この課題の提出状況。受講生の取得が終わってから取り始め（一覧の初回表示を遅らせない）、届くまでは骨格を出す
 const {
   state: submissionsState,
   byStudent,
   fileCount,
   unidentifiedFiles,
   refetch: refetchSubmissions,
-} = useStudentSubmissions(className, taskId);
+} = useStudentSubmissions(className, taskId, () => !loading.value && !error.value);
 
 // 表は最小幅が約812pxのため、1024px未満ではカード表示にする
 const isCompact = useMediaQuery(BELOW_LG);

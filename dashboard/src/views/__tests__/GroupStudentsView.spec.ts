@@ -350,6 +350,27 @@ describe('GroupStudentsView (responsive table / cards)', () => {
       expect(getDocuments).toHaveBeenCalledWith('submissions', 'No1', 'tasks', 'task1', 'files');
     });
 
+    it('should request the files only after the students have arrived (so the list is not slowed by the larger download)', async () => {
+      studentsState.loading.value = true;
+      const wrapper = await mountView(1280);
+      await flushPromises();
+      expect(getDocuments).not.toHaveBeenCalled();
+
+      studentsState.loading.value = false;
+      await flushPromises();
+
+      expect(getDocuments).toHaveBeenCalledTimes(1);
+      expect(wrapper.find('table').exists()).toBe(true);
+    });
+
+    it('should not request the files when the students failed to load', async () => {
+      studentsState.error.value = '取得に失敗しました';
+      await mountView(1280);
+      await flushPromises();
+
+      expect(getDocuments).not.toHaveBeenCalled();
+    });
+
     it('should show each student\'s status in the table (in the row order: N03, N01, N02)', async () => {
       getDocuments.mockResolvedValue(FILES);
       const wrapper = await mountView(1280);

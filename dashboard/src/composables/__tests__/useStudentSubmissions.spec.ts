@@ -103,11 +103,11 @@ describe('useStudentSubmissions', () => {
     vi.restoreAllMocks();
   });
 
-  function mountComposable(className: unknown = CLASS_FULL, taskId: unknown = TASK) {
+  function mountComposable(className: unknown = CLASS_FULL, taskId: unknown = TASK, enabled: unknown = true) {
     let result!: ReturnType<typeof useStudentSubmissions>;
     const Host = defineComponent({
       setup() {
-        result = useStudentSubmissions(className as never, taskId as never);
+        result = useStudentSubmissions(className as never, taskId as never, enabled as never);
         return () => h('div');
       },
     });
@@ -130,6 +130,24 @@ describe('useStudentSubmissions', () => {
     expect(result.byStudent.value.get('N1')?.status).toBe('passed');
     expect(result.fileCount.value).toBe(2);
     expect(result.unidentifiedFiles.value).toBe(1);
+  });
+
+  it('should not request the files until enabled (so it never slows the first paint of the list), then load once', async () => {
+    getDocuments.mockResolvedValue([file('N1', '合格')]);
+    const enabled = ref(false);
+
+    const { result } = mountComposable(CLASS_FULL, TASK, enabled);
+    await flushPromises();
+
+    expect(getDocuments).not.toHaveBeenCalled();
+    expect(result.state.value).toBe('loading');
+
+    enabled.value = true;
+    await flushPromises();
+
+    expect(getDocuments).toHaveBeenCalledTimes(1);
+    expect(result.state.value).toBe('ready');
+    expect(result.byStudent.value.get('N1')?.status).toBe('passed');
   });
 
   it('should be ready with nobody submitted when the task has no files (not an error)', async () => {

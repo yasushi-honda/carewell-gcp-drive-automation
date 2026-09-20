@@ -1,7 +1,7 @@
 // src/composables/useStudentSubmissions.ts
 // 課題ごとの「受講生ごとの提出状況」の取得（受講生一覧で、誰が提出済みかを一目で分かるようにする）
 
-import { ref, watch, onMounted, toValue, type MaybeRefOrGetter } from 'vue';
+import { ref, watch, toValue, type MaybeRefOrGetter } from 'vue';
 import { getDocuments } from './useFirestore';
 import {
   pickCurrentStatus,
@@ -63,7 +63,15 @@ export function statusOf(byStudent: Map<string, StudentSubmission>, studentId: s
   return byStudent.get(studentId)?.status ?? 'not_submitted';
 }
 
-export function useStudentSubmissions(className: MaybeRefOrGetter<string>, taskId: MaybeRefOrGetter<string>) {
+/**
+ * @param enabled 取得を始めてよいか。受講生の取得が終わるまで false にしておくと、提出データ（全員提出で約630KB）が
+ *   同じ回線を分け合って受講生の初回表示を遅らせるのを防げる（グループ一覧の PR #49 と同じ理由）。それまでは loading のまま
+ */
+export function useStudentSubmissions(
+  className: MaybeRefOrGetter<string>,
+  taskId: MaybeRefOrGetter<string>,
+  enabled: MaybeRefOrGetter<boolean> = true
+) {
   const state = ref<StudentSubmissionsState>('loading');
   const byStudent = ref<Map<string, StudentSubmission>>(new Map());
   /** 提出ファイルの総数（受講生名簿と突き合わせて、日介番号の食い違いを検出するために使う） */
@@ -99,8 +107,14 @@ export function useStudentSubmissions(className: MaybeRefOrGetter<string>, taskI
     state.value = 'ready';
   };
 
-  onMounted(load);
-  watch([() => toValue(className), () => toValue(taskId)], load);
+  // 取得を始めてよくなったとき、および同じ画面のまま className / taskId だけが変わったときに取得する
+  watch(
+    [() => toValue(className), () => toValue(taskId), () => toValue(enabled)],
+    ([, , canLoad]) => {
+      if (canLoad) load();
+    },
+    { immediate: true }
+  );
 
   return { state, byStudent, fileCount, unidentifiedFiles, refetch: load };
 }
