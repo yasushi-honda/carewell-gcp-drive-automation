@@ -42,11 +42,11 @@ function student(id: string, overrides: Partial<Student> = {}): Student {
   };
 }
 
-// 元の並び（N03, N01, N02）は、ふりがな昇順・通し番号昇順のどちらとも一致しない
+// 元の並び（N03, N01, N02）は、ふりがな昇順・受講者番号昇順のどちらとも一致しない
 const DATA: Student[] = [
-  student('N03', { furigana: 'う', serial_number: 2, class_name: 'No1' }),
-  student('N01', { furigana: 'あ', serial_number: 3, class_name: 'No1' }),
-  student('N02', { furigana: 'い', serial_number: 1, class_name: 'No2' }),
+  student('N03', { furigana: 'う', student_number: 'A002', class_name: 'No1' }),
+  student('N01', { furigana: 'あ', student_number: 'A003', class_name: 'No1' }),
+  student('N02', { furigana: 'い', student_number: 'A001', class_name: 'No2' }),
 ];
 
 const mounted: VueWrapper[] = [];
@@ -189,7 +189,7 @@ describe('StudentsView (responsive table / cards)', () => {
       expect(furigana().attributes('aria-pressed')).toBe('false');
     });
 
-    it('should cycle serial number sort: ascending → descending → none', async () => {
+    it('should cycle student number sort: ascending → descending → none', async () => {
       const wrapper = await mountView(390);
       const serial = () => sortGroup(wrapper).findAll('button')[1];
 
@@ -216,12 +216,12 @@ describe('StudentsView (responsive table / cards)', () => {
       expect(shownIds(wrapper)).toEqual(['N02', 'N03', 'N01']);
     });
 
-    it('should switch from serial number to furigana ascending (only one sort key stays active)', async () => {
+    it('should switch from student number to furigana ascending (only one sort key stays active)', async () => {
       const wrapper = await mountView(390);
       const [furigana, serial] = sortGroup(wrapper).findAll('button');
 
-      await serial.trigger('click'); // 通し番号昇順
-      await serial.trigger('click'); // 通し番号降順
+      await serial.trigger('click'); // 受講者番号昇順
+      await serial.trigger('click'); // 受講者番号降順
       await furigana.trigger('click');
 
       expect(shownIds(wrapper)).toEqual(['N01', 'N02', 'N03']);

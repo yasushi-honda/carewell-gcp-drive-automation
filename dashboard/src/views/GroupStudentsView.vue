@@ -65,12 +65,12 @@
               <th
                 scope="col"
                 class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 select-none"
-                @click="toggleSortSerialNumber"
+                @click="toggleSortStudentNumber"
               >
                 <div class="flex items-center gap-2">
-                  <span>通し番号</span>
-                  <span class="text-xs" v-if="sortBy === 'serial_number' && sortOrder === 'asc'">▲</span>
-                  <span class="text-xs" v-else-if="sortBy === 'serial_number' && sortOrder === 'desc'">▼</span>
+                  <span>受講者番号</span>
+                  <span class="text-xs" v-if="sortBy === 'student_number' && sortOrder === 'asc'">▲</span>
+                  <span class="text-xs" v-else-if="sortBy === 'student_number' && sortOrder === 'desc'">▼</span>
                   <span class="text-xs text-gray-300" v-else>⇅</span>
                 </div>
               </th>
@@ -106,7 +106,7 @@
               @click="navigateToDetail(student.student_id)"
             >
               <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                {{ student.serial_number || '-' }}
+                {{ student.student_number || '-' }}
               </td>
               <td class="px-6 py-4 whitespace-nowrap">
                 <router-link
@@ -162,7 +162,7 @@ const taskId = route.params.taskId as string;
 const groupName = route.params.groupName as string;
 
 const searchQuery = ref('');
-const sortBy = ref<'furigana' | 'serial_number' | null>(null);
+const sortBy = ref<'furigana' | 'student_number' | null>(null);
 const sortOrder = ref<'asc' | 'desc' | null>(null);
 
 // URLから来たクラス名（フルネーム）を短縮形に変換
@@ -214,11 +214,11 @@ const toggleSortFurigana = () => {
   }
 };
 
-const toggleSortSerialNumber = () => {
-  if (sortBy.value === 'serial_number') {
+const toggleSortStudentNumber = () => {
+  if (sortBy.value === 'student_number') {
     sortOrder.value = sortOrder.value === 'asc' ? 'desc' : 'asc';
   } else {
-    sortBy.value = 'serial_number';
+    sortBy.value = 'student_number';
     sortOrder.value = 'asc';
   }
 };
@@ -232,9 +232,9 @@ const filteredAndSortedStudents = computed(() => {
       const comparison = a.furigana.localeCompare(b.furigana, 'ja');
       return sortOrder.value === 'asc' ? comparison : -comparison;
     });
-  } else if (sortBy.value === 'serial_number' && sortOrder.value) {
+  } else if (sortBy.value === 'student_number' && sortOrder.value) {
     result.sort((a, b) => {
-      const comparison = (a.serial_number || 0) - (b.serial_number || 0);
+      const comparison = (a.student_number || '').localeCompare(b.student_number || '', 'ja', { numeric: true });
       return sortOrder.value === 'asc' ? comparison : -comparison;
     });
   }
@@ -245,12 +245,12 @@ const filteredAndSortedStudents = computed(() => {
 // カード表示用の並べ替えボタン（テーブルの見出しクリックと同じ状態遷移: 昇順 ⇄ 降順）
 const sortOptions = computed(() => [
   { key: 'furigana', label: 'ふりがな', order: sortBy.value === 'furigana' ? sortOrder.value : null },
-  { key: 'serial_number', label: '通し番号', order: sortBy.value === 'serial_number' ? sortOrder.value : null },
+  { key: 'student_number', label: '受講者番号', order: sortBy.value === 'student_number' ? sortOrder.value : null },
 ]);
 
 const onSortToggle = (key: string) => {
-  if (key === 'serial_number') {
-    toggleSortSerialNumber();
+  if (key === 'student_number') {
+    toggleSortStudentNumber();
   } else {
     toggleSortFurigana();
   }
