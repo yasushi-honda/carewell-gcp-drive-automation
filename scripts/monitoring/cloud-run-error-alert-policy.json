@@ -1,0 +1,23 @@
+{
+  "displayName": "carewell-file-collector エラー検知",
+  "documentation": {
+    "subject": "🚨【carewell】ファイル収集システムでエラーを検知しました",
+    "content": "carewell-file-collector（Cloud Run、課題ファイル自動収集）でERRORレベルのログを検知しました。\n\n**注意**: この通知にはGCPが自動付加する一致ログの抜粋が含まれる場合があり、受講者名等の個人情報を含むことがあります。本メールは転送せず、内容確認後は速やかに対応してください。\n\n**対応手順**: リポジトリのCLAUDE.md「Incident Response Workflow」を参照してください。\n\n**ログ確認**:\nhttps://console.cloud.google.com/logs/query;query=resource.type%3D%22cloud_run_revision%22%20resource.labels.service_name%3D%22carewell-file-collector%22%20textPayload%3A%22%20-%20ERROR%20-%20%22?project=carewell-automation",
+    "mimeType": "text/markdown"
+  },
+  "combiner": "OR",
+  "conditions": [
+    {
+      "displayName": "carewell-file-collector app ERROR log lines",
+      "conditionMatchedLog": {
+        "filter": "resource.type=\"cloud_run_revision\" AND resource.labels.service_name=\"carewell-file-collector\" AND logName=(\"projects/carewell-automation/logs/run.googleapis.com%2Fstdout\" OR \"projects/carewell-automation/logs/run.googleapis.com%2Fstderr\") AND textPayload:\" - ERROR - \""
+      }
+    }
+  ],
+  "alertStrategy": {
+    "notificationRateLimit": {
+      "period": "1800s"
+    },
+    "autoClose": "1800s"
+  }
+}

@@ -1,5 +1,11 @@
 # Cloud Monitoring セットアップガイド
 
+> **2026-09-25追記**: Cloud Run（carewell-file-collector）のERRORログ緊急通知アラートは
+> `scripts/setup-monitoring.sh`のステップ4で自動化済み（`DRY_RUN=false bash scripts/setup-monitoring.sh`
+> で作成、GCPコンソールでの手動作成は不要）。以下の「ステップ3」に記載の3アラート
+> （エラー率20%超過・連続3回失敗・実行時間8分超過）は今回のスコープ外のため、
+> 本ドキュメントの手動手順のまま未実施。
+
 ## 目次
 
 1. [概要](#概要)
