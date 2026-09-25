@@ -577,6 +577,25 @@ class TestApplyRosterProtection:
         )
         assert _apply_roster_protection("02") is True
 
+    def test_returns_false_when_applied_status_but_verification_flags_false(
+        self, monkeypatch, tmp_path
+    ):
+        """codex review指摘(PR #61): statusが"applied"でも、書込み直後の読み戻しで
+        after_hidden/after_protectedがFalseなら(同時編集者による巻き戻し等)、
+        文字列だけで成功と誤判定してはならない。"""
+        self._patch_hide_sensitive_sheets(
+            monkeypatch,
+            tmp_path,
+            lambda class_num, commit, backup_dir: {
+                "roster": {
+                    "status": "applied",
+                    "after_hidden": True,
+                    "after_protected": False,
+                }
+            },
+        )
+        assert _apply_roster_protection("02") is False
+
     def test_returns_true_when_already_applied(self, monkeypatch, tmp_path):
         self._patch_hide_sensitive_sheets(
             monkeypatch,

@@ -841,8 +841,18 @@ def _apply_roster_protection(class_num: str) -> bool:
         )
         return False
     print(f"[受講者リスト保護] {result['roster']}")
-    roster_status = (result.get("roster") or {}).get("status")
-    if roster_status not in ("applied", "already_applied"):
+    roster_result = result.get("roster") or {}
+    roster_status = roster_result.get("status")
+    # statusが"applied"でも、書込み直後の読み戻し確認(process_class内)で
+    # after_hidden/after_protectedがFalseになりうる(共同編集者による巻き戻し等、
+    # zenkoukai.jpと共同編集中のファイルでは非現実的ではない)。statusの文字列だけ
+    # 見て成功と誤判定しないよう、実際のフラグも突き合わせる(codex review指摘)。
+    protection_confirmed = roster_status == "already_applied" or (
+        roster_status == "applied"
+        and roster_result.get("after_hidden") is True
+        and roster_result.get("after_protected") is True
+    )
+    if not protection_confirmed:
         print(
             f"[エラー] 受講者リストタブの非表示化・保護が完了しませんでした"
             f"(status={roster_status})。手動で"
