@@ -86,6 +86,26 @@ GROUP_CATEGORY_MAP_BY_CLASS = {
         "Q": "通所系訪問系",
         "R": "居宅介護支援",
     },
+    # 2026-09-25、クラス01と同じ推定ルールをクラス02に適用(decision-maker承認済み)。
+    # サービス種別内訳を確認: A-J全件施設系、K/M/N/P/Q全件通所・訪問系、R主体が
+    # 居宅介護支援事業所(15/17件)で内部一貫性を確認済み。
+    "02": {
+        "A": "入所系居住系",
+        "B": "入所系居住系",
+        "C": "入所系居住系",
+        "D": "入所系居住系",
+        "E": "入所系居住系",
+        "F": "入所系居住系",
+        "G": "入所系居住系",
+        "H": "入所系居住系",
+        "J": "入所系居住系",
+        "K": "通所系訪問系",
+        "M": "通所系訪問系",
+        "N": "通所系訪問系",
+        "P": "通所系訪問系",
+        "Q": "通所系訪問系",
+        "R": "居宅介護支援",
+    },
 }
 
 # 自動正規化(NFKC/カタカナ→ひらがな変換)では解決できない名寄せ例外のみ登録する。
@@ -94,6 +114,12 @@ MATCH_EXCEPTIONS_BY_CLASS = {
     "01": {
         # 植田隆介: クライアント側ふりがな「りゆうすけ」/ 申込データ側「リュウスケ」(拗音表記ゆれ)
         "K165": "N9905863",
+    },
+    "02": {
+        # 深野準: クライアント側ふりがな「ふかのじゆん」/ 申込データ側「フカノジュン」(拗音表記ゆれ)
+        "G106": "N9905980",
+        # 亀澤龍一: クライアント側ふりがな「かめざわりゆういち」/ 申込データ側「カメザワリュウイチ」(拗音表記ゆれ)
+        "M171": "N9906725",
     },
 }
 
@@ -104,6 +130,7 @@ MATCH_EXCEPTIONS_BY_CLASS = {
 # サイレントな名簿破損(既存の正しいマッピングを空行で上書きしてしまう事故)を防ぐ。
 EXPECTED_STUDENT_COUNT_BY_CLASS = {
     "01": 254,
+    "02": 249,
 }
 
 
@@ -768,14 +795,14 @@ def main() -> int:
             f"[成功(要注意)] 書き込みAPI呼び出しは例外({write_error})を報告しましたが、"
             f"読み戻し検証では{write_range}の内容が意図通りであることを確認しました。"
         )
-        return 0
+        return 0 if _apply_roster_protection(class_num) else 1
 
     manifest["result"] = "success"
     _write_manifest(scratch_dir, class_num, timestamp, manifest)
     print(
         f"[成功] {write_range} へ{len(new_matrix)}行を書き込み、読み戻し検証も一致しました。"
     )
-    return 0
+    return 0 if _apply_roster_protection(class_num) else 1
 
 
 def _write_manifest(
@@ -785,6 +812,55 @@ def _write_manifest(
     manifest_path.write_text(json.dumps(manifest, ensure_ascii=False, indent=2))
     manifest_path.chmod(0o600)
     print(f"[実行記録] {manifest_path}")
+
+
+def _apply_roster_protection(class_num: str) -> bool:
+    """「受講者リスト」タブへのデータ書込み成功直後に、非表示化+保護を自動適用する。
+
+    2026-09-25、№02で「merge_student_roster.py --commitの後、
+    hide_sensitive_sheets.py --commitの実行を人間/AIが忘れる」ヒヤリハットが発生
+    (実害は未確定だが、実データ書込みから保護適用までの間、氏名・日介番号が
+    無防備な状態で存在する空白時間が生まれる)。データ書込みと同一コマンド内で
+    保護まで完結させることで、この空白時間・実行忘れのリスクを構造的に無くす。
+    hide_sensitive_sheets.py側との循環importを避けるため遅延importする。
+    """
+    from scripts.hide_sensitive_sheets import _scratch_dir, process_class
+
+    scratch_dir = _scratch_dir()
+    timestamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    backup_dir = scratch_dir / timestamp
+    backup_dir.mkdir(parents=True, exist_ok=True, mode=0o700)
+    try:
+        result = process_class(class_num, True, backup_dir)
+    except Exception as e:  # noqa: BLE001
+        print(
+            f"[エラー] 受講者リストタブの非表示化・保護の自動適用に失敗しました: {e}\n"
+            f"データ書込み自体は成功していますが、保護は未適用です。手動で"
+            f"`python scripts/hide_sensitive_sheets.py --class {class_num} --commit`"
+            f"を実行してください。"
+        )
+        return False
+    print(f"[受講者リスト保護] {result['roster']}")
+    roster_result = result.get("roster") or {}
+    roster_status = roster_result.get("status")
+    # statusが"applied"でも、書込み直後の読み戻し確認(process_class内)で
+    # after_hidden/after_protectedがFalseになりうる(共同編集者による巻き戻し等、
+    # zenkoukai.jpと共同編集中のファイルでは非現実的ではない)。statusの文字列だけ
+    # 見て成功と誤判定しないよう、実際のフラグも突き合わせる(codex review指摘)。
+    protection_confirmed = roster_status == "already_applied" or (
+        roster_status == "applied"
+        and roster_result.get("after_hidden") is True
+        and roster_result.get("after_protected") is True
+    )
+    if not protection_confirmed:
+        print(
+            f"[エラー] 受講者リストタブの非表示化・保護が完了しませんでした"
+            f"(status={roster_status})。手動で"
+            f"`python scripts/hide_sensitive_sheets.py --class {class_num} --commit`"
+            f"を実行して状態を確認してください。"
+        )
+        return False
+    return True
 
 
 if __name__ == "__main__":

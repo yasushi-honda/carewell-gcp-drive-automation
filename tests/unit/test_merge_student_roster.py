@@ -16,6 +16,7 @@ from merge_student_roster import (  # noqa: E402
     CLIENT_SOURCE_HEADER,
     PROJECT_ROOT,
     ValidationError,
+    _apply_roster_protection,
     _find_key_duplicates,
     _rstrip_blank_rows,
     _scratch_dir,
@@ -550,3 +551,90 @@ class TestScratchDir:
         assert (
             _scratch_dir() == PROJECT_ROOT / "var" / "scratch" / "merge_student_roster"
         )
+
+
+class TestApplyRosterProtection:
+    """2026-09-25: データ書込み成功直後にhide_sensitive_sheets.pyの非表示化・保護を
+    自動適用する回帰テスト(№02で発生した「保護の適用忘れ」ヒヤリハット対応)。"""
+
+    def _patch_hide_sensitive_sheets(self, monkeypatch, tmp_path, process_class_fn):
+        import scripts.hide_sensitive_sheets as hss
+
+        monkeypatch.setattr(hss, "process_class", process_class_fn)
+        monkeypatch.setattr(hss, "_scratch_dir", lambda: tmp_path)
+
+    def test_returns_true_when_protection_applied(self, monkeypatch, tmp_path):
+        self._patch_hide_sensitive_sheets(
+            monkeypatch,
+            tmp_path,
+            lambda class_num, commit, backup_dir: {
+                "roster": {
+                    "status": "applied",
+                    "after_hidden": True,
+                    "after_protected": True,
+                }
+            },
+        )
+        assert _apply_roster_protection("02") is True
+
+    def test_returns_false_when_applied_status_but_verification_flags_false(
+        self, monkeypatch, tmp_path
+    ):
+        """codex review指摘(PR #61): statusが"applied"でも、書込み直後の読み戻しで
+        after_hidden/after_protectedがFalseなら(同時編集者による巻き戻し等)、
+        文字列だけで成功と誤判定してはならない。"""
+        self._patch_hide_sensitive_sheets(
+            monkeypatch,
+            tmp_path,
+            lambda class_num, commit, backup_dir: {
+                "roster": {
+                    "status": "applied",
+                    "after_hidden": True,
+                    "after_protected": False,
+                }
+            },
+        )
+        assert _apply_roster_protection("02") is False
+
+    def test_returns_true_when_already_applied(self, monkeypatch, tmp_path):
+        self._patch_hide_sensitive_sheets(
+            monkeypatch,
+            tmp_path,
+            lambda class_num, commit, backup_dir: {
+                "roster": {"status": "already_applied"}
+            },
+        )
+        assert _apply_roster_protection("02") is True
+
+    def test_returns_false_when_status_is_error(self, monkeypatch, tmp_path):
+        self._patch_hide_sensitive_sheets(
+            monkeypatch,
+            tmp_path,
+            lambda class_num, commit, backup_dir: {
+                "roster": {"status": "error", "detail": "権限不足"}
+            },
+        )
+        assert _apply_roster_protection("02") is False
+
+    def test_returns_false_when_process_class_raises(self, monkeypatch, tmp_path):
+        def _raise(class_num, commit, backup_dir):
+            raise RuntimeError("API障害")
+
+        self._patch_hide_sensitive_sheets(monkeypatch, tmp_path, _raise)
+        assert _apply_roster_protection("02") is False
+
+    def test_commit_flag_is_always_true_regardless_of_dry_run_caller(
+        self, monkeypatch, tmp_path
+    ):
+        """merge_student_roster.py側はdry-run/--commitを問わず、この関数自体は
+        commit成功パスからのみ呼ばれる設計。process_classへは常にcommit=Trueを渡す
+        (呼び出し側がdry-runのまま保護だけ実行してしまう事故を防ぐ)。"""
+        captured = {}
+
+        def _capture(class_num, commit, backup_dir):
+            captured["commit"] = commit
+            return {"roster": {"status": "already_applied"}}
+
+        self._patch_hide_sensitive_sheets(monkeypatch, tmp_path, _capture)
+        _apply_roster_protection("02")
+        assert captured["commit"] is True
