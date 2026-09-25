@@ -260,6 +260,103 @@ fi
 echo ""
 
 # ========================================
+# 4. Cloud Runエラー検知アラートポリシーの作成
+# ========================================
+#
+# 2026-09-25追加（Issue: decision-maker依頼「問題があったら緊急通知メールを」対応）。
+# plan-crossreview（grip+codex 2パス）+ 実装後の本番ログ実地検証で以下を確認済み:
+# - 通知チャネルはこのステップでは新規作成しない。既存のcarewell-email-notification
+#   チャネルが「ちょうど1件」「type=email」「宛先一致」「enabled」「VERIFIED」の
+#   全条件を満たす場合のみ再利用し、満たさない場合はfail-close(エラー終了)する
+#   （上のステップ1は無ければ新規作成する設計のため、あえて独立したロジックにする）
+# - フィルタはseverityフィールドを使わない。carewell-file-collectorはプレーン
+#   テキストでログ出力しており(google-cloud-loggingは依存関係にあるだけで未配線)、
+#   Cloud Runはプレーンテキストのstderr/stdoutに対してPythonのログレベルを
+#   自動解析しないため、実際のlogger.error()呼び出しもseverity=DEFAULT(空欄)の
+#   ままであることを本番ログで直接確認した(severity=ERRORでフィルタすると
+#   ほぼ何も一致しない)。代わりにログ本文のテキストパターン
+#   (" - ERROR - "、Pythonのlogging.Formatterが出力する%(levelname)s)で一致させる
+# - 「Table wait failed」等を一度は既知の定型ログとして除外する案を検討したが、
+#   src/playwright_automation.py の実装(2026-09-11修正、confirmed_zero_submissions)
+#   を確認したところ、提出0件が確定した場合はこのtry節自体に入らずlogger.infoで
+#   別途ログされる設計だった。つまりこのtry節のexcept(Table wait failed等)に
+#   到達する時点で、確定0件ではない本物のタイムアウト失敗を意味する
+#   (codex review指摘、コード確認で反証済み)。除外はせず全件を対象とする。
+#   修正後(2026-09-11以降)の実績は過去14日で297件(1日あたり約21件)
+
+echo -e "${BLUE}========================================${NC}"
+echo -e "${BLUE}ステップ${STEP}: Cloud Runエラー検知アラートポリシーの作成${NC}"
+echo -e "${BLUE}========================================${NC}"
+STEP=$((STEP + 1))
+echo ""
+
+ERROR_ALERT_NAME="carewell-file-collector エラー検知"
+ERROR_ALERT_POLICY_FILE="$(dirname "${BASH_SOURCE[0]}")/monitoring/cloud-run-error-alert-policy.json"
+ERROR_ALERT_STATUS="skipped"  # サマリーで参照(既存/作成成功/チャネル未検証等)
+
+echo "[4/4] ${ERROR_ALERT_NAME}"
+echo "条件: carewell-file-collectorのstdout/stderrに\" - ERROR - \"を含むログが出力された場合"
+echo ""
+
+if gcloud monitoring policies list --project="${PROJECT_ID}" --filter="displayName='${ERROR_ALERT_NAME}'" --format="value(name)" | grep -q .; then
+    echo -e "${YELLOW}⚠️  アラートポリシーは既に存在します${NC}"
+    ERROR_ALERT_STATUS="already_exists"
+else
+    # 通知チャネルのfail-close検証（新規作成しない）
+    CHANNEL_JSON=$(gcloud alpha monitoring channels list \
+      --project="${PROJECT_ID}" \
+      --filter="displayName='${NOTIFICATION_CHANNEL_NAME}'" \
+      --format="json" 2>/dev/null)
+    CHANNEL_COUNT=$(echo "${CHANNEL_JSON}" | python3 -c "import json,sys; print(len(json.load(sys.stdin)))" 2>/dev/null || echo 0)
+
+    if [ "${CHANNEL_COUNT}" != "1" ]; then
+        echo -e "${RED}✗ エラー: 通知チャネル「${NOTIFICATION_CHANNEL_NAME}」が${CHANNEL_COUNT}件見つかりました(1件である必要があります)${NC}"
+        echo -e "${RED}   新規作成は行いません。手動で確認してください。${NC}"
+        ERROR_ALERT_STATUS="channel_invalid"
+        [ "$DRY_RUN" = true ] || exit 1
+    else
+        CHANNEL_TYPE=$(echo "${CHANNEL_JSON}" | python3 -c "import json,sys; print(json.load(sys.stdin)[0].get('type',''))")
+        CHANNEL_EMAIL=$(echo "${CHANNEL_JSON}" | python3 -c "import json,sys; print(json.load(sys.stdin)[0].get('labels',{}).get('email_address',''))")
+        CHANNEL_ENABLED=$(echo "${CHANNEL_JSON}" | python3 -c "import json,sys; print(json.load(sys.stdin)[0].get('enabled', False))")
+        CHANNEL_VERIFIED=$(echo "${CHANNEL_JSON}" | python3 -c "import json,sys; print(json.load(sys.stdin)[0].get('verificationStatus',''))")
+        CHANNEL_ID=$(echo "${CHANNEL_JSON}" | python3 -c "import json,sys; print(json.load(sys.stdin)[0].get('name',''))")
+
+        if [ "${CHANNEL_TYPE}" != "email" ] || [ "${CHANNEL_EMAIL}" != "${NOTIFICATION_EMAIL}" ] || \
+           [ "${CHANNEL_ENABLED}" != "True" ] || [ "${CHANNEL_VERIFIED}" != "VERIFIED" ]; then
+            echo -e "${RED}✗ エラー: 通知チャネルの検証に失敗しました(type=${CHANNEL_TYPE}, email=${CHANNEL_EMAIL}, enabled=${CHANNEL_ENABLED}, verified=${CHANNEL_VERIFIED})${NC}"
+            if [ "${CHANNEL_VERIFIED}" != "VERIFIED" ] && [ "${CHANNEL_TYPE}" = "email" ] && [ "${CHANNEL_EMAIL}" = "${NOTIFICATION_EMAIL}" ]; then
+                echo -e "${RED}   新規作成は行いません。${NOTIFICATION_EMAIL}に届いている確認メールのリンクをクリックして${NC}"
+                echo -e "${RED}   チャネルを検証してから、本スクリプトを再実行してください。${NC}"
+                ERROR_ALERT_STATUS="channel_unverified"
+            else
+                echo -e "${RED}   新規作成は行いません。手動で確認してください。${NC}"
+                ERROR_ALERT_STATUS="channel_invalid"
+            fi
+            [ "$DRY_RUN" = true ] || exit 1
+        else
+            echo -e "${GREEN}✓ 通知チャネル検証OK: ${CHANNEL_ID}${NC}"
+            if [ "$DRY_RUN" = true ]; then
+                echo -e "${YELLOW}[ドライラン] アラートポリシー作成コマンド:${NC}"
+                echo "gcloud monitoring policies create \\"
+                echo "  --policy-from-file=\"${ERROR_ALERT_POLICY_FILE}\" \\"
+                echo "  --notification-channels=\"${CHANNEL_ID}\" \\"
+                echo "  --project=\"${PROJECT_ID}\""
+                ERROR_ALERT_STATUS="dry_run_preview"
+            else
+                echo -e "${GREEN}アラートポリシーを作成中...${NC}"
+                gcloud monitoring policies create \
+                  --policy-from-file="${ERROR_ALERT_POLICY_FILE}" \
+                  --notification-channels="${CHANNEL_ID}" \
+                  --project="${PROJECT_ID}"
+                echo -e "${GREEN}✓ アラートポリシー作成成功${NC}"
+                ERROR_ALERT_STATUS="created"
+            fi
+        fi
+    fi
+fi
+echo ""
+
+# ========================================
 # サマリー
 # ========================================
 
@@ -287,7 +384,8 @@ if [ "$DRY_RUN" = true ]; then
     echo ""
     echo -e "${YELLOW}推奨事項:${NC}"
     echo "  1. まずこのスクリプトで通知チャネルとログベースメトリクスを作成"
-    echo "  2. アラートポリシーはGCPコンソールで作成（より柔軟な設定が可能）"
+    echo "  2. carewell-file-collectorエラー検知アラート(ステップ4)は本スクリプトで自動作成される"
+    echo "  3. 高エラー率・連続失敗・実行時間超過の3件はGCPコンソールで作成（より柔軟な設定が可能）"
     echo "     https://console.cloud.google.com/monitoring/alerting?project=${PROJECT_ID}"
 else
     echo -e "${GREEN}設定作成完了${NC}"
@@ -295,9 +393,26 @@ else
     echo "作成された設定:"
     echo "  - 通知チャネル: ${NOTIFICATION_CHANNEL_ID}"
     echo "  - ログベースメトリクス: ${METRIC_NAME_1}, ${METRIC_NAME_2}"
+    case "${ERROR_ALERT_STATUS}" in
+        created)
+            echo "  - carewell-file-collectorエラー検知アラート: 作成完了(GCPコンソールでの追加作成は不要)"
+            ;;
+        already_exists)
+            echo "  - carewell-file-collectorエラー検知アラート: 既存のものを維持(GCPコンソールでの追加作成は不要)"
+            ;;
+        channel_unverified)
+            echo "  - carewell-file-collectorエラー検知アラート: 未作成(通知チャネルのメール検証待ち。${NOTIFICATION_EMAIL}の確認メールのリンクをクリック後、本スクリプトを再実行してください)"
+            ;;
+        channel_invalid)
+            echo "  - carewell-file-collectorエラー検知アラート: 未作成(通知チャネルの検証に失敗。上記のエラー内容を確認してください)"
+            ;;
+        *)
+            echo "  - carewell-file-collectorエラー検知アラート: 未作成"
+            ;;
+    esac
     echo ""
     echo -e "${YELLOW}次のステップ:${NC}"
-    echo "  1. GCPコンソールでアラートポリシーを作成"
+    echo "  1. 高エラー率・連続失敗・実行時間超過の3件（今回のスコープ外）はGCPコンソールで作成する場合のみ"
     echo "     https://console.cloud.google.com/monitoring/alerting?project=${PROJECT_ID}"
     echo ""
     echo "  2. ダッシュボードを作成"

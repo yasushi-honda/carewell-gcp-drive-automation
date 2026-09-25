@@ -18,6 +18,7 @@ dist/
 !dashboard/firestore.indexes.json
 !tests/rules/package.json
 !tests/rules/firebase.json
+!scripts/monitoring/cloud-run-error-alert-policy.json
 *.key
 *.pem
 .env
