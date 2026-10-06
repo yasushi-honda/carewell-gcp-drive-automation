@@ -99,6 +99,25 @@ class TestParseClientSource:
         parsed = parse_client_source(rows, "テスト")
         assert len(parsed) == 1
 
+    def test_fullwidth_group_is_normalized_to_halfwidth(self):
+        # クラス03はグループ列が全角(Ａ〜Ｒ)で届く。対応表(半角)・出力列(01/02と同じ半角)に
+        # 揃えるため、パース時にNFKC正規化する。受講者番号など他列は変更しない。
+        rows = [
+            CLIENT_SOURCE_HEADER,
+            [
+                "Ａ",
+                "先生",
+                "A001",
+                "山田 太郎",
+                "やまだ たろう",
+                "介護老人保健施設",
+                "",
+            ],
+        ]
+        parsed = parse_client_source(rows, "テスト")
+        assert parsed[0]["group"] == "A"
+        assert parsed[0]["student_number"] == "A001"
+
     def test_partially_filled_row_raises(self):
         # 受講者番号・グループはあるが氏名が空(取得漏れ等)は異常系として検知する
         rows = [
