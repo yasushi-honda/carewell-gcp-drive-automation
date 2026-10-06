@@ -106,6 +106,27 @@ GROUP_CATEGORY_MAP_BY_CLASS = {
         "Q": "通所系訪問系",
         "R": "居宅介護支援",
     },
+    # 2026-10-06、クラス01・02と同じ推定ルールをクラス03に適用(decision-maker承認済み)。
+    # サービス種別内訳: A-Jは特養・老健・有料・GH中心、K/M/N/P/Qは通所・訪問・小多機・
+    # 居宅支援中心、Rは居宅介護支援15/16件で、クラス02と同程度の少数混在の範囲内。
+    # グループ表記は全角(Ａ〜Ｒ)だがNFKC正規化後は01・02と同一。
+    "03": {
+        "A": "入所系居住系",
+        "B": "入所系居住系",
+        "C": "入所系居住系",
+        "D": "入所系居住系",
+        "E": "入所系居住系",
+        "F": "入所系居住系",
+        "G": "入所系居住系",
+        "H": "入所系居住系",
+        "J": "入所系居住系",
+        "K": "通所系訪問系",
+        "M": "通所系訪問系",
+        "N": "通所系訪問系",
+        "P": "通所系訪問系",
+        "Q": "通所系訪問系",
+        "R": "居宅介護支援",
+    },
 }
 
 # 自動正規化(NFKC/カタカナ→ひらがな変換)では解決できない名寄せ例外のみ登録する。
@@ -131,6 +152,7 @@ MATCH_EXCEPTIONS_BY_CLASS = {
 EXPECTED_STUDENT_COUNT_BY_CLASS = {
     "01": 254,
     "02": 249,
+    "03": 254,
 }
 
 
@@ -184,7 +206,8 @@ def parse_client_source(rows: list[list[str]], label: str) -> list[dict]:
             )
         parsed.append(
             {
-                "group": row[0].strip(),
+                # クラス03は全角(Ａ〜Ｒ)で届くためNFKCで半角に揃える(01・02と同一表記)
+                "group": unicodedata.normalize("NFKC", row[0]).strip(),
                 "sub_teacher": row[1].strip(),
                 "student_number": row[2].strip(),
                 "name": row[3].strip(),
