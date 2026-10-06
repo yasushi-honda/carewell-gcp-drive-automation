@@ -162,6 +162,19 @@ class TestCompanyOfficeColumns:
         )
         assert "会社・事業所" in action
 
+    def test_detected_even_when_roster_is_not_imported_yet(self):
+        # 受講者番号が空(未取込み)でも、D・E列に値があれば「予定された保留」にしない
+        state, action = classify_class(
+            _facts(
+                roster_count=0,
+                source_count=0,
+                expected_registered=False,
+                company_office_filled=2,
+            )
+        )
+        assert state == STATE_REGRESSION
+        assert "会社・事業所" in action
+
     def test_empty_columns_do_not_affect_a_done_class(self):
         assert classify_class(_facts(company_office_filled=0))[0] == STATE_DONE
 

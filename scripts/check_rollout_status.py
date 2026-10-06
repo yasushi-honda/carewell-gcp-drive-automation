@@ -172,15 +172,17 @@ def count_company_office_filled(roster_rows: list[list]) -> int:
 def classify_class(f: dict) -> tuple[str, str]:
     """クラスの状態と次のアクションを返す。退行 > 要対応 > 保留 > 完了 の優先順。"""
     cn = f["class"]
+    # 個人情報の混入は名簿の取込み状況に関係なく最優先で判定する(未取込みクラスで
+    # クライアントが会社名を直接入力した場合も検出する)
+    filled = f.get("company_office_filled", 0)
+    if filled:
+        return (
+            STATE_REGRESSION,
+            f"受講者リストの会社・事業所欄(D・E列)に値が入っている行が{filled}件"
+            " (個人情報保護のため空欄が必須) → 内容を確認し、空欄に戻す"
+            f"(merge_student_roster.py --class {cn} は空欄で書き込む)",
+        )
     if f["roster_count"] > 0:
-        filled = f.get("company_office_filled", 0)
-        if filled:
-            return (
-                STATE_REGRESSION,
-                f"受講者リストの会社・事業所欄(D・E列)に値が入っている行が{filled}件"
-                " (個人情報保護のため空欄が必須) → 内容を確認し、空欄に戻す"
-                f"(merge_student_roster.py --class {cn} は空欄で書き込む)",
-            )
         if f["mapping_issues"]:
             return (
                 STATE_REGRESSION,
