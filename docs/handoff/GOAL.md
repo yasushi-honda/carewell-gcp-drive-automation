@@ -23,7 +23,7 @@ Issue #18（出欠確認シートへの課題提出状況の自動反映、令�
 - [x] №02「受講者リスト」タブの正式データ再構築（検証ゲート付きマージスクリプト、2026-09-25実施。`scripts/merge_student_roster.py`、249件書込み・読み戻し検証一致。申込データ（Team2タブ）との突合で表記ゆれ例外2件を人間確認のうえ`MATCH_EXCEPTIONS_BY_CLASS`に登録、`GROUP_CATEGORY_MAP_BY_CLASS`はクラス01と同一規則をdecision-maker承認のうえ適用）
 - [x] №03「受講者リスト」タブの正式データ再構築（2026-10-06実施、`merge_student_roster.py --class 03 --commit`、254件書込み・読み戻し一致。グループ列が全角(Ａ〜Ｒ)で届くためパース時にNFKC正規化。対応表は01・02と同一規則をdecision-maker承認のうえ適用）。提出記録シートに「課題①」タブ未作成のため数式書込みは保留
 - [x] №02 出欠確認の課題①列に数式書込み+非表示化・保護（2026-10-06、№01と同一構造・同一数式。提出25/未提出224、エラー0、提出記録の独立集計=ユニーク25名と一致。`apply_submission_formulas.py --class 02`のdry-runで書込み0件=手作業結果と完全一致を確認）
-- [ ] Step 2: 残りクラスの連携。№03は2026-10-06に`apply_submission_formulas.py --class 03 --commit --provision-submission-tab`で連携設定完了（提出記録側「課題①」タブを事前作成、提出0/未提出254、エラー0、非表示+保護適用済み）。最初の実提出後に収集〜表示の確認（提出者数＝「提出」件数）が残条件。№04〜07・09は名簿・グループ分け待ち。手順は`docs/class-rollout-runbook.md`、進捗は`scripts/check_rollout_status.py`で確認
+- [ ] Step 2: 残りクラスの連携。№03は2026-10-06に`apply_submission_formulas.py --class 03 --commit --provision-submission-tab`で連携設定完了（提出記録側「課題①」タブを事前作成、提出0/未提出254、エラー0。管理側「課題①」「受講者リスト」は非表示+保護、提出記録側「課題①」は非表示のみ）。最初の実提出後に収集〜表示の確認（提出者数＝「提出」件数）が残条件。№04〜07・09は名簿・グループ分け待ち。手順は`docs/class-rollout-runbook.md`、進捗は`scripts/check_rollout_status.py`で確認
 - [ ] Step 3: 検証（IMPORTRANGEエラーなし・数式セル正誤確認）+ Issue #18クローズ
 - [ ] （decision-maker/zenkoukai.jp側）残り7クラスの「受講者リスト」タブへの名簿データ本体入力
 

@@ -12,6 +12,7 @@ from check_rollout_status import (  # noqa: E402
     STATE_DONE,
     STATE_HOLD,
     STATE_REGRESSION,
+    STATE_REVIEW,
     STATE_TODO,
     classify_class,
     compare_source_to_roster,
@@ -36,6 +37,8 @@ def _facts(**over):
         "roster_hidden": True,
         "roster_protected": True,
         "tally_issues": [],
+        "expected_count": 254,
+        "link_issues": [],
     }
     base.update(over)
     return base
@@ -94,10 +97,37 @@ class TestClassifyClass:
         state, _ = classify_class(_facts(mapping_issues=["番号が不一致"]))
         assert state == STATE_REGRESSION
 
-    def test_source_updated_after_import_is_regression(self):
+    def test_source_updated_after_import_is_review_not_regression(self):
+        # 正本リストの取込み後更新は情報的な差分。数式・集計の退行ではない。
         state, action = classify_class(_facts(source_issues=["2件不一致"]))
-        assert state == STATE_REGRESSION
+        assert state == STATE_REVIEW
         assert "正本" in action
+
+    def test_review_is_lower_priority_than_todo(self):
+        state, _ = classify_class(_facts(source_issues=["x"], admin_protected=False))
+        assert state == STATE_TODO
+
+    def test_roster_count_differs_from_expected_is_regression(self):
+        state, action = classify_class(_facts(roster_count=250, expected_count=254))
+        assert state == STATE_REGRESSION
+        assert "期待人数" in action
+
+    def test_broken_link_is_regression_even_when_all_unsubmitted(self):
+        # 提出0件では出欠確認の表示も独立集計も一致してしまうため、A1/C1を直接見る
+        state, action = classify_class(
+            _facts(link_issues=["A1が期待のIMPORTRANGE式でない"], _submitted=0)
+        )
+        assert state == STATE_REGRESSION
+        assert "連携" in action
+
+    def test_done_with_zero_submissions_says_end_to_end_pending(self):
+        state, action = classify_class(_facts(_submitted=0))
+        assert state == STATE_DONE
+        assert "最初の実提出後" in action
+
+    def test_done_with_submissions_has_no_pending_note(self):
+        state, action = classify_class(_facts(_submitted=25))
+        assert (state, action) == (STATE_DONE, "-")
 
     def test_tally_issue_is_regression(self):
         state, _ = classify_class(_facts(tally_issues=["独立集計不一致"]))
@@ -120,6 +150,10 @@ class TestExitCode:
 
     def test_empty_is_zero(self):
         assert exit_code([]) == 0
+
+    def test_review_only_is_zero(self):
+        # 情報的な差分で毎回異常にしない(本物の退行を埋もれさせない)
+        assert exit_code([STATE_DONE, STATE_REVIEW]) == 0
 
 
 class TestCompareSourceToRoster:
@@ -158,6 +192,18 @@ class TestCompareSourceToRoster:
     def test_issue_messages_contain_no_names(self):
         issues = compare_source_to_roster([self._src(name="別人 花子")], [self._ros()])
         assert all("花子" not in i and "山田" not in i for i in issues)
+
+    def test_service_type_change_detected(self):
+        src = self._src()
+        src[5] = "別の施設種別"
+        issues = compare_source_to_roster([src], [self._ros()])
+        assert any("サービス種別" in i for i in issues)
+
+    def test_service_type_change_message_has_no_values(self):
+        src = self._src()
+        src[5] = "別の施設種別"
+        issues = compare_source_to_roster([src], [self._ros()])
+        assert all("別の施設種別" not in i for i in issues)
 
     def test_blank_rows_are_ignored(self):
         assert (

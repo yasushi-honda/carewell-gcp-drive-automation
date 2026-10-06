@@ -78,6 +78,7 @@ ROSTER_NUMBER_IDX = 7  # J列 受講者番号
 
 # 提出記録シート側の日介番号列(D列、2行目〜)
 SUBMISSION_NICHIKAI_COL = "D"
+SUBMISSION_READ_CAP = 5000  # 読取り上限行。到達したら独立集計が過小になるため失敗にする
 
 _ERROR_MARKERS = ("#REF", "#ERROR", "#N/A", "#VALUE", "#NAME", "#DIV")
 _CONNECT_MARKERS = ("connect these sheets", "接続する必要")
@@ -238,6 +239,15 @@ def validate_submission_header(values: list[list]) -> list[str]:
     if [str(v) for v in values[0]] != SUBMISSION_HEADER:
         return ["提出記録側「課題①」タブの見出しがシステムの定義と一致しません"]
     return []
+
+
+def check_row_cap(rows: list, cap: int = SUBMISSION_READ_CAP - 1) -> None:
+    """読取り上限に達した場合、独立集計が過小になるため中断する"""
+    if len(rows) >= cap:
+        raise ValidationError(
+            f"提出記録シートの読取り行数が上限({cap}行)に達しました。"
+            "SUBMISSION_READ_CAPの引き上げが必要です(独立集計が過小になります)"
+        )
 
 
 def build_provision_requests(sheet_id: int, header: list[str]) -> list[dict]:
@@ -410,8 +420,8 @@ def process_class(class_num: str, commit: bool, provision: bool) -> int:
     student_rows = select_student_rows(number_col, roster_set)
 
     # 2. 提出記録側の「課題①」タブ
-    sub_titles = _list_titles(_build_task1_sheets_service, sub_id)
-    submission_nichikai: list[str] = []
+    sub_titles = _list_titles(_build_sheets_service, sub_id)
+    need_provision = False
     if TASK_LABEL not in sub_titles:
         if not provision:
             print(
@@ -419,22 +429,21 @@ def process_class(class_num: str, commit: bool, provision: bool) -> int:
                 "最初の提出を待つか、--provision-submission-tab で事前作成してください。"
             )
             return 2
-        if not commit:
-            print(f"[DRY-RUN] 提出記録側に非表示の「{TASK_LABEL}」タブを作成予定")
-        else:
-            outcome = provision_submission_tab(sub_id)
-            print(f"[提出記録側タブ] {outcome}(見出し一致を読み戻しで確認)")
+        # 作成は、管理側の検証・計画がすべて通った後(--commit時)に行う
+        need_provision = True
+        print(f"[計画] 提出記録側に非表示の「{TASK_LABEL}」タブを作成予定")
     else:
-        hdr = _get_values(_build_task1_sheets_service, sub_id, f"'{TASK_LABEL}'!A1:H1")
+        hdr = _get_values(_build_sheets_service, sub_id, f"'{TASK_LABEL}'!A1:H1")
         issues = validate_submission_header(hdr)
         if issues:
             raise ValidationError("; ".join(issues))
-        sub_rows = _get_values(
-            _build_task1_sheets_service,
-            sub_id,
-            f"'{TASK_LABEL}'!{SUBMISSION_NICHIKAI_COL}2:{SUBMISSION_NICHIKAI_COL}5000",
+        check_row_cap(
+            _get_values(
+                _build_sheets_service,
+                sub_id,
+                f"'{TASK_LABEL}'!{SUBMISSION_NICHIKAI_COL}2:{SUBMISSION_NICHIKAI_COL}{SUBMISSION_READ_CAP}",
+            )
         )
-        submission_nichikai = [r[0] for r in sub_rows if r]
 
     # 3. 書込み計画
     att_titles = _list_titles(_build_sheets_service, att_id)
@@ -479,7 +488,380 @@ def process_class(class_num: str, commit: bool, provision: bool) -> int:
         print("[DRY-RUN] --commitが指定されていないため書き込みは行いません。")
         return 0
 
-    # 4. バックアップ → 書込み
+    # 4. 提出記録側タブの事前作成(管理側の検証・計画がすべて通った後) → バックアップ → 書込み
+    if need_provision:
+        outcome = provision_submission_tab(sub_id)
+        print(f"[提出記録側タブ] {outcome}(見出し一致を読み戻しで確認)")
+    ts = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    backup_dir = _scratch_dir() / ts
+    backup_dir.mkdir(parents=True, exist_ok=True, mode=0o700)
+    backup_path = backup_dir / f"class{class_num}_before.json"
+    fd = os.open(backup_path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    with os.fdopen(fd, "w") as f:
+        json.dump(
+            {
+                "task_col": task_col,
+                "attendance_column_before": existing_col,
+                "admin_A1_before": existing_a1,
+                "admin_C1_before": existing_c1,
+            },
+            f,
+            ensure_ascii=False,
+        )
+    print(f"[バックアップ] {backup_path}")
+
+    if not admin_tab_exists:
+        _batch_update(
+            _build_sheets_service,
+            att_id,
+            [{"addSheet": {"properties": {"title": TASK_LABEL, "hidden": True}}}],
+        )
+    if a1_kind == "empty":
+        _update_values(
+            _build_sheets_service, att_id, f"'{TASK_LABEL}'!A1", [[a1_expected]]
+        )
+    if c1_kind == "empty":
+        _update_values(
+            _build_sheets_service, att_id, f"'{TASK_LABEL}'!C1", [[XLOOKUP_FORMULA]]
+        )
+    if plan["writes"]:
+        call_with_reauth(
+            _build_sheets_service,
+            lambda svc: svc.spreadsheets()
+            .values()
+            .batchUpdate(
+                spreadsheetId=att_id,
+                body={
+                    "valueInputOption": "USER_ENTERED",
+                    "data": [
+                        {"range": f"'{att_tab}'!{task_col}{row}", "values": [[formula]]}
+                        for row, formula in plan["writes"]
+                    ],
+                },
+            )
+            .execute(),
+        )
+
+    # 5. 事後検証(IMPORTRANGEの再計算を待つため、最大3回まで間隔を空けて再確認する)
+    for attempt in range(3):
+        time.sleep(5)
+        problems = []
+        import_cells = _get_values(
+            _build_sheets_service, att_id, f"'{TASK_LABEL}'!A1:B1"
+        )
+        if any(import_cell_has_error(v) for row in import_cells for v in row):
+            problems.append(
+                "管理側「課題①」のIMPORTRANGEがエラー/接続未許可です"
+                "(シート上で「アクセスを許可」を1回押す必要があります)"
+            )
+        col_after = _get_values(
+            _build_sheets_service,
+            att_id,
+            f"'{att_tab}'!{task_col}{FIRST_STUDENT_ROW}:{task_col}{MAX_ROW}",
+        )
+        statuses = [
+            (
+                col_after[r - FIRST_STUDENT_ROW][0]
+                if r - FIRST_STUDENT_ROW < len(col_after)
+                and col_after[r - FIRST_STUDENT_ROW]
+                else ""
+            )
+            for r in student_rows
+        ]
+        sub_after = _get_values(
+            _build_sheets_service,
+            sub_id,
+            f"'{TASK_LABEL}'!{SUBMISSION_NICHIKAI_COL}2:{SUBMISSION_NICHIKAI_COL}{SUBMISSION_READ_CAP}",
+        )
+        check_row_cap(sub_after)
+        independent = independent_submitted_count(
+            [r[0] for r in sub_after if r], roster_nichikai
+        )
+        problems += verify_results(statuses, len(student_rows), independent)
+        if not problems:
+            break
+        if attempt < 2:
+            print(
+                f"[再確認] 検証未通過のため再計算を待って再確認します({attempt + 2}/3)"
+            )
+    submitted = sum(1 for s in statuses if s == "提出")
+    if submitted != independent_submitted:
+        issues.append(
+            f"「提出」件数({submitted})が独立集計({independent_submitted})と一致しません"
+        )
+    return issues
+
+
+def import_cell_has_error(value) -> bool:
+    """IMPORTRANGEセルがエラー/接続未許可の表示になっていないか"""
+    if value is None:
+        return False
+    text = str(value)
+    return any(m in text for m in _ERROR_MARKERS) or any(
+        m in text for m in _CONNECT_MARKERS
+    )
+
+
+def validate_submission_header(values: list[list]) -> list[str]:
+    """提出記録側「課題①」タブのA1:H1がシステムの見出しと一致するか"""
+    if not values or not values[0]:
+        return ["提出記録側「課題①」タブの見出し行(A1:H1)が空です"]
+    if [str(v) for v in values[0]] != SUBMISSION_HEADER:
+        return ["提出記録側「課題①」タブの見出しがシステムの定義と一致しません"]
+    return []
+
+
+def check_row_cap(rows: list, cap: int = SUBMISSION_READ_CAP - 1) -> None:
+    """読取り上限に達した場合、独立集計が過小になるため中断する"""
+    if len(rows) >= cap:
+        raise ValidationError(
+            f"提出記録シートの読取り行数が上限({cap}行)に達しました。"
+            "SUBMISSION_READ_CAPの引き上げが必要です(独立集計が過小になります)"
+        )
+
+
+def build_provision_requests(sheet_id: int, header: list[str]) -> list[dict]:
+    """タブ作成と見出し書込みを1回のbatchUpdateで原子的に行うリクエスト"""
+    return [
+        {
+            "addSheet": {
+                "properties": {"sheetId": sheet_id, "title": TASK_LABEL, "hidden": True}
+            }
+        },
+        {
+            "updateCells": {
+                "rows": [
+                    {
+                        "values": [
+                            {"userEnteredValue": {"stringValue": h}} for h in header
+                        ]
+                    }
+                ],
+                "fields": "userEnteredValue",
+                "start": {"sheetId": sheet_id, "rowIndex": 0, "columnIndex": 0},
+            }
+        },
+    ]
+
+
+# ---------------------------------------------------------------------------
+# API呼び出し層
+# ---------------------------------------------------------------------------
+
+
+def _scratch_dir() -> Path:
+    """backupの出力先(プロジェクトローカル、gitignore済み)。ホーム配下には書かない。"""
+    return PROJECT_ROOT / "var" / "scratch" / "apply_submission_formulas"
+
+
+def _get_values(build_fn, spreadsheet_id: str, range_: str, render="FORMATTED_VALUE"):
+    return call_with_reauth(
+        build_fn,
+        lambda svc: svc.spreadsheets()
+        .values()
+        .get(spreadsheetId=spreadsheet_id, range=range_, valueRenderOption=render)
+        .execute(),
+    ).get("values", [])
+
+
+def _list_titles(build_fn, spreadsheet_id: str) -> list[str]:
+    meta = call_with_reauth(
+        build_fn,
+        lambda svc: svc.spreadsheets()
+        .get(spreadsheetId=spreadsheet_id, fields="sheets.properties.title")
+        .execute(),
+    )
+    return [s["properties"]["title"] for s in meta.get("sheets", [])]
+
+
+def _batch_update(build_fn, spreadsheet_id: str, requests: list[dict]):
+    return call_with_reauth(
+        build_fn,
+        lambda svc: svc.spreadsheets()
+        .batchUpdate(spreadsheetId=spreadsheet_id, body={"requests": requests})
+        .execute(),
+    )
+
+
+def _update_values(build_fn, spreadsheet_id: str, range_: str, values, raw=False):
+    return call_with_reauth(
+        build_fn,
+        lambda svc: svc.spreadsheets()
+        .values()
+        .update(
+            spreadsheetId=spreadsheet_id,
+            range=range_,
+            valueInputOption="RAW" if raw else "USER_ENTERED",
+            body={"values": values},
+        )
+        .execute(),
+    )
+
+
+def provision_submission_tab(submission_id: str) -> str:
+    """提出記録側に非表示の「課題①」タブを見出しつきで作る。
+
+    Cloud Run(毎時、_ensure_sheet_exists/_ensure_headers)と同時に動いても壊さない:
+    タブ作成と見出しは1回のbatchUpdateで原子的に行い、「既に存在」で失敗した場合は
+    読み直して見出し一致を確認して続行する(二重作成・上書きはしない)。
+    """
+    sheet_id = random.randint(10**8, 2**31 - 2)
+    try:
+        _batch_update(
+            _build_task1_sheets_service,
+            submission_id,
+            build_provision_requests(sheet_id, SUBMISSION_HEADER),
+        )
+        outcome = "created"
+    except HttpError as e:
+        if "already exists" not in str(e):
+            raise
+        outcome = "already_exists"
+        header = _get_values(
+            _build_task1_sheets_service, submission_id, f"'{TASK_LABEL}'!A1:H1"
+        )
+        if not header or not header[0]:
+            # システムがタブだけ作って見出し書込み前の状態。システムと同じ内容を書く。
+            _update_values(
+                _build_task1_sheets_service,
+                submission_id,
+                f"'{TASK_LABEL}'!A1:H1",
+                [SUBMISSION_HEADER],
+                raw=True,
+            )
+    readback = _get_values(
+        _build_task1_sheets_service, submission_id, f"'{TASK_LABEL}'!A1:H1"
+    )
+    issues = validate_submission_header(readback)
+    if issues:
+        raise ValidationError("; ".join(issues))
+    return outcome
+
+
+def process_class(class_num: str, commit: bool, provision: bool) -> int:
+    expected = EXPECTED_STUDENT_COUNT_BY_CLASS.get(class_num)
+    if expected is None:
+        print(
+            f"[保留] クラス{class_num}は期待人数が未登録です"
+            "(merge_student_roster.pyの名簿取込みが先です)"
+        )
+        return 2
+
+    att_id = resolve_attendance_spreadsheet_id(class_num)
+    sub_id = TASK1_SUBMISSION_SPREADSHEET_IDS[class_num]
+    att_tab = f"№{class_num}_出欠確認"
+
+    # 1. 事前ゲート: 名簿
+    roster = _get_values(
+        _build_sheets_service, att_id, f"'{ROSTER_TARGET_TAB}'!C2:J{MAX_ROW}"
+    )
+    roster = [r + [""] * (8 - len(r)) for r in roster if any(str(c).strip() for c in r)]
+    roster_numbers = [r[ROSTER_NUMBER_IDX].strip() for r in roster]
+    roster_nichikai = {r[ROSTER_NICHIKAI_IDX].strip() for r in roster}
+    if len(roster_numbers) != expected:
+        raise ValidationError(
+            f"受講者リストの件数({len(roster_numbers)})が期待人数({expected})と一致しません"
+        )
+
+    # 出欠確認シート: 課題①列の特定と受講者番号の対応検証
+    header = _get_values(
+        _build_sheets_service, att_id, f"'{att_tab}'!A{HEADER_ROW}:AZ{HEADER_ROW}"
+    )
+    task_idx = find_task_column(header[0] if header else [])
+    task_col = col_letter(task_idx)
+    number_col = _get_values(
+        _build_sheets_service,
+        att_id,
+        f"'{att_tab}'!{ATTENDANCE_NUMBER_COL}{FIRST_STUDENT_ROW}:{ATTENDANCE_NUMBER_COL}{MAX_ROW}",
+    )
+    roster_set = set(roster_numbers)
+    att_numbers = [
+        str(c[0]).strip()
+        for c in number_col
+        if c
+        and (
+            str(c[0]).strip() in roster_set
+            or _STUDENT_NUMBER_LIKE.fullmatch(str(c[0]).strip())
+        )
+    ]
+    issues = validate_number_mapping(att_numbers, roster_numbers)
+    if issues:
+        raise ValidationError("事前ゲート失敗: " + "; ".join(issues))
+    student_rows = select_student_rows(number_col, roster_set)
+
+    # 2. 提出記録側の「課題①」タブ
+    sub_titles = _list_titles(_build_sheets_service, sub_id)
+    need_provision = False
+    if TASK_LABEL not in sub_titles:
+        if not provision:
+            print(
+                f"[保留] クラス{class_num}: 提出記録側に「{TASK_LABEL}」タブがありません。"
+                "最初の提出を待つか、--provision-submission-tab で事前作成してください。"
+            )
+            return 2
+        # 作成は、管理側の検証・計画がすべて通った後(--commit時)に行う
+        need_provision = True
+        print(f"[計画] 提出記録側に非表示の「{TASK_LABEL}」タブを作成予定")
+    else:
+        hdr = _get_values(_build_sheets_service, sub_id, f"'{TASK_LABEL}'!A1:H1")
+        issues = validate_submission_header(hdr)
+        if issues:
+            raise ValidationError("; ".join(issues))
+        check_row_cap(
+            _get_values(
+                _build_sheets_service,
+                sub_id,
+                f"'{TASK_LABEL}'!{SUBMISSION_NICHIKAI_COL}2:{SUBMISSION_NICHIKAI_COL}{SUBMISSION_READ_CAP}",
+            )
+        )
+
+    # 3. 書込み計画
+    att_titles = _list_titles(_build_sheets_service, att_id)
+    admin_tab_exists = TASK_LABEL in att_titles
+    a1_expected = build_import_formula(sub_id)
+    existing_a1 = existing_c1 = ""
+    if admin_tab_exists:
+        a1 = _get_values(_build_sheets_service, att_id, f"'{TASK_LABEL}'!A1", "FORMULA")
+        c1 = _get_values(_build_sheets_service, att_id, f"'{TASK_LABEL}'!C1", "FORMULA")
+        existing_a1 = a1[0][0] if a1 and a1[0] else ""
+        existing_c1 = c1[0][0] if c1 and c1[0] else ""
+    a1_kind = classify_cell(existing_a1, a1_expected)
+    c1_kind = classify_cell(existing_c1, XLOOKUP_FORMULA)
+    if "conflict" in (a1_kind, c1_kind):
+        raise ValidationError(
+            f"管理側「{TASK_LABEL}」タブのA1/C1に期待と異なる既存入力があります"
+            f"(A1={a1_kind}, C1={c1_kind})。上書きせず中断します。"
+        )
+    existing_col = _get_values(
+        _build_sheets_service,
+        att_id,
+        f"'{att_tab}'!{task_col}{FIRST_STUDENT_ROW}:{task_col}{MAX_ROW}",
+        "FORMULA",
+    )
+    existing = {
+        FIRST_STUDENT_ROW + i: (r[0] if r else "") for i, r in enumerate(existing_col)
+    }
+    plan = plan_attendance_writes(existing, student_rows)
+    if plan["conflicts"]:
+        raise ValidationError(
+            f"課題①列に期待と異なる既存入力が{len(plan['conflicts'])}行あります。"
+            "自動修正せず中断します(式の生値・参照先・計算結果を比較して原因を分類してください)。"
+        )
+
+    print(
+        f"[計画] クラス{class_num}: 受講者{len(student_rows)}行 / 課題①列={task_col}列 / "
+        f"書込み{len(plan['writes'])}行・同一式{plan['same']}行・衝突0 / "
+        f"管理側タブ={'既存' if admin_tab_exists else '新規作成'}"
+        f"(A1:{a1_kind}, C1:{c1_kind})"
+    )
+    if not commit:
+        print("[DRY-RUN] --commitが指定されていないため書き込みは行いません。")
+        return 0
+
+    # 4. 提出記録側タブの事前作成(管理側の検証・計画がすべて通った後) → バックアップ → 書込み
+    if need_provision:
+        outcome = provision_submission_tab(sub_id)
+        print(f"[提出記録側タブ] {outcome}(見出し一致を読み戻しで確認)")
     ts = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
     backup_dir = _scratch_dir() / ts
     backup_dir.mkdir(parents=True, exist_ok=True, mode=0o700)

@@ -30,12 +30,18 @@ from scripts.apply_submission_formulas import (  # noqa: E402
     MAX_ROW,
     ROSTER_NUMBER_IDX,
     SUBMISSION_NICHIKAI_COL,
+    SUBMISSION_READ_CAP,
     TASK_LABEL,
+    XLOOKUP_FORMULA,
     _get_values,
     _list_titles,
+    build_import_formula,
     build_status_formula,
+    check_row_cap,
+    classify_cell,
     col_letter,
     find_task_column,
+    import_cell_has_error,
     independent_submitted_count,
     select_student_rows,
     validate_number_mapping,
@@ -44,7 +50,6 @@ from scripts.apply_submission_formulas import (  # noqa: E402
 from scripts.hide_sensitive_sheets import (  # noqa: E402
     TARGET_CLASSES,
     TASK1_SUBMISSION_SPREADSHEET_IDS,
-    _build_task1_sheets_service,
     _find_sheet_entry,
     _get_full_sheets_list,
     _is_whole_sheet_protected,
@@ -61,6 +66,8 @@ STATE_DONE = "完了"
 STATE_HOLD = "予定された保留"
 STATE_TODO = "要対応"
 STATE_REGRESSION = "退行・検証失敗"
+# 正本リストが取込み後に更新された(情報的な差分)。数式・集計の退行ではないため終了コードは0。
+STATE_REVIEW = "要確認(名簿差分)"
 
 _NUMBER_ROW_PATTERN_COLS = 7  # 正本リストのA〜G列
 
@@ -83,21 +90,29 @@ def compare_source_to_roster(
 
     取込み後にクライアントが名簿・グループ分けを更新した場合の検出用。
     メッセージに氏名等は含めない(件数のみ)。
-    正本: A=グループ, C=受講者番号, D=氏名, E=ふりがな
-    名簿: A=氏名, B=ふりがな, H=グループ, J=受講者番号
+    正本: A=グループ, C=受講者番号, D=氏名, E=ふりがな, F=サービス種別
+    名簿: A=氏名, B=ふりがな, F=サービス種別, H=グループ, J=受講者番号
     """
     src = {}
     for r in source_rows:
         r = list(r) + [""] * (_NUMBER_ROW_PATTERN_COLS - len(r))
         number = str(r[2]).strip()
         if number:
-            src[number] = (_norm_group(r[0]), normalize_key(str(r[3]), str(r[4])))
+            src[number] = (
+                _norm_group(r[0]),
+                normalize_key(str(r[3]), str(r[4])),
+                str(r[5]).strip(),
+            )
     ros = {}
     for r in roster_rows:
         r = list(r) + [""] * (10 - len(r))
         number = str(r[9]).strip()
         if number:
-            ros[number] = (_norm_group(r[7]), normalize_key(str(r[0]), str(r[1])))
+            ros[number] = (
+                _norm_group(r[7]),
+                normalize_key(str(r[0]), str(r[1])),
+                str(r[5]).strip(),
+            )
     issues = []
     only_src = set(src) - set(ros)
     only_ros = set(ros) - set(src)
@@ -105,9 +120,13 @@ def compare_source_to_roster(
         issues.append(f"正本にあり名簿に無い受講者番号が{len(only_src)}件")
     if only_ros:
         issues.append(f"名簿にあり正本に無い受講者番号が{len(only_ros)}件")
-    changed = [n for n in set(src) & set(ros) if src[n] != ros[n]]
+    both = set(src) & set(ros)
+    changed = [n for n in both if src[n][:2] != ros[n][:2]]
     if changed:
         issues.append(f"グループまたは氏名が取込み後に変わった受講者が{len(changed)}件")
+    service = [n for n in both if src[n][2] != ros[n][2]]
+    if service:
+        issues.append(f"サービス種別が取込み後に変わった受講者が{len(service)}件")
     return issues
 
 
@@ -121,12 +140,18 @@ def classify_class(f: dict) -> tuple[str, str]:
                 "出欠確認と受講者リストの受講者番号が不一致: "
                 + "; ".join(f["mapping_issues"]),
             )
-        if f["source_issues"]:
+        expected = f.get("expected_count")
+        if expected is not None and f["roster_count"] != expected:
             return (
                 STATE_REGRESSION,
-                "正本リストが取込み後に更新された可能性: "
-                + "; ".join(f["source_issues"])
-                + f" → merge_student_roster.py --class {cn} で再確認",
+                f"受講者リストの件数({f['roster_count']})が期待人数({expected})と不一致",
+            )
+        if f.get("link_issues"):
+            return (
+                STATE_REGRESSION,
+                "管理側の連携が壊れている: "
+                + "; ".join(f["link_issues"])
+                + f" → apply_submission_formulas.py --class {cn} (dry-run)で確認",
             )
         if f["tally_issues"]:
             return STATE_REGRESSION, "検証失敗: " + "; ".join(f["tally_issues"])
@@ -170,11 +195,26 @@ def classify_class(f: dict) -> tuple[str, str]:
             STATE_TODO,
             "; ".join(missing) + f" → hide_sensitive_sheets.py --class {cn} --commit",
         )
+    if f["source_issues"]:
+        return (
+            STATE_REVIEW,
+            "正本リストが取込み後に更新された: "
+            + "; ".join(f["source_issues"])
+            + f" → 差分を確認し、再取込み(merge_student_roster.py --class {cn})の要否を判断",
+        )
+    if f.get("_submitted") == 0:
+        return (
+            STATE_DONE,
+            "設定完了。提出0件のため、最初の実提出後に収集〜表示(提出者数＝「提出」件数)を確認",
+        )
     return STATE_DONE, "-"
 
 
 def exit_code(states: list[str]) -> int:
-    """「予定された保留」だけなら0。要対応・退行があれば1(定期監視で毎回異常にしない)"""
+    """「予定された保留」「要確認(名簿差分)」だけなら0。要対応・退行があれば1。
+
+    情報的な差分や予定された待ちで毎回異常にしない(本物の退行を埋もれさせない)。
+    """
     return 1 if any(s in (STATE_TODO, STATE_REGRESSION) for s in states) else 0
 
 
@@ -215,6 +255,8 @@ def gather_facts(class_num: str) -> dict:
     facts = {
         "class": class_num,
         "expected_registered": class_num in EXPECTED_STUDENT_COUNT_BY_CLASS,
+        "expected_count": EXPECTED_STUDENT_COUNT_BY_CLASS.get(class_num),
+        "link_issues": [],
         "source_count": source_count,
         "roster_count": len(roster_numbers),
         "mapping_issues": [],
@@ -254,7 +296,9 @@ def gather_facts(class_num: str) -> dict:
         facts["source_issues"] = compare_source_to_roster(source, roster)
 
     att_full = _get_full_sheets_list(att_id, _build_sheets_service)
-    sub_full = _get_full_sheets_list(sub_id, _build_task1_sheets_service)
+    sub_full = _get_full_sheets_list(
+        sub_id, _build_sheets_service
+    )  # 読取りは閲覧SAで足りる
     facts["roster_hidden"], facts["roster_protected"] = _hidden_and_protected(
         att_full, ROSTER_TARGET_TAB
     )
@@ -289,6 +333,21 @@ def gather_facts(class_num: str) -> dict:
         else "partial" if same else "none"
     )
 
+    if facts["admin_task_tab"]:
+        a1 = _get_values(_build_sheets_service, att_id, f"'{TASK_LABEL}'!A1", "FORMULA")
+        c1 = _get_values(_build_sheets_service, att_id, f"'{TASK_LABEL}'!C1", "FORMULA")
+        shown_import = _get_values(
+            _build_sheets_service, att_id, f"'{TASK_LABEL}'!A1:B1"
+        )
+        a1_val = a1[0][0] if a1 and a1[0] else ""
+        c1_val = c1[0][0] if c1 and c1[0] else ""
+        if classify_cell(a1_val, build_import_formula(sub_id)) != "same":
+            facts["link_issues"].append("A1が期待のIMPORTRANGE式でない")
+        if classify_cell(c1_val, XLOOKUP_FORMULA) != "same":
+            facts["link_issues"].append("C1が期待のXLOOKUP式でない")
+        if any(import_cell_has_error(v) for row in shown_import for v in row):
+            facts["link_issues"].append("IMPORTRANGEがエラー/接続未許可")
+
     if facts["formulas"] == "all" and facts["sub_task_tab"] and facts["admin_task_tab"]:
         shown = _get_values(
             _build_sheets_service,
@@ -304,10 +363,11 @@ def gather_facts(class_num: str) -> dict:
             for r in student_rows
         ]
         sub_rows = _get_values(
-            _build_task1_sheets_service,
+            _build_sheets_service,
             sub_id,
-            f"'{TASK_LABEL}'!{SUBMISSION_NICHIKAI_COL}2:{SUBMISSION_NICHIKAI_COL}5000",
+            f"'{TASK_LABEL}'!{SUBMISSION_NICHIKAI_COL}2:{SUBMISSION_NICHIKAI_COL}{SUBMISSION_READ_CAP}",
         )
+        check_row_cap(sub_rows)
         nichikai = {str(r[2]).strip() for r in roster if len(r) > 2}
         independent = independent_submitted_count(
             [r[0] for r in sub_rows if r], nichikai

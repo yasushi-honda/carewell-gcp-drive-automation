@@ -19,6 +19,7 @@ from apply_submission_formulas import (  # noqa: E402
     build_import_formula,
     build_provision_requests,
     build_status_formula,
+    check_row_cap,
     classify_cell,
     col_letter,
     find_task_column,
@@ -367,3 +368,16 @@ class TestProvisionSubmissionTab:
         )
         with pytest.raises(HttpError):
             m.provision_submission_tab("sid")
+
+
+class TestCheckRowCap:
+    def test_below_cap_ok(self):
+        check_row_cap([["N"]] * 10, cap=100)
+
+    def test_at_cap_raises(self):
+        # 上限に達したら独立集計が過小になりうるため中断する
+        with pytest.raises(ValidationError):
+            check_row_cap([["N"]] * 100, cap=100)
+
+    def test_empty_ok(self):
+        check_row_cap([], cap=100)

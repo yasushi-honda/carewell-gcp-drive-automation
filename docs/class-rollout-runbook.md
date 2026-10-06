@@ -27,8 +27,8 @@
 
 | SA | 用途 | 権限 |
 |---|---|---|
-| `carewell-automation-sa` | 出欠管理ファイルの読取り・編集、提出記録シートの**閲覧のみ** | `merge_student_roster.py`, `apply_submission_formulas.py`(出欠管理側) |
-| `github-actions-sa` | **Cloud Run実行SAでもある**。提出記録シートの編集権限を持つ | `hide_sensitive_sheets.py`、`apply_submission_formulas.py --provision-submission-tab` |
+| `carewell-automation-sa` | 出欠管理ファイルの読取り・編集、提出記録シートの**閲覧のみ** | `merge_student_roster.py`、`apply_submission_formulas.py`と`check_rollout_status.py`の**すべての読取り**(提出記録シートの読取りを含む) |
+| `github-actions-sa` | **Cloud Run実行SAでもある**。提出記録シートの編集権限を持つ | 提出記録シートへの**書込みだけ**: `apply_submission_formulas.py --provision-submission-tab --commit`のタブ作成、`hide_sensitive_sheets.py` |
 
 どちらもユーザーアカウントからの権限借用(`gcloud auth login` 済みが前提、`src/gcp_sa_auth.py`)。
 共有ファイルへの `--commit` は、auto mode の権限判定で止まることがある。その場合は実行コマンドを提示して**ユーザーが実行**する。
@@ -42,7 +42,15 @@
 python scripts/check_rollout_status.py            # 全クラス
 python scripts/check_rollout_status.py --class 04
 ```
-状態: 完了 / 予定された保留（名簿待ち）/ 要対応 / 退行・検証失敗。「次のアクション」に従う。終了コードは要対応・退行のみ非0。
+| 状態 | 意味 | 終了コード |
+|---|---|---|
+| 完了 | 連携の**設定**が完了（A1/C1・数式・非表示/保護・集計が整合）。「提出」件数が0の間は、次のアクションに「最初の実提出後に収集〜表示を確認」と出る | 0 |
+| 予定された保留 | 名簿データ待ちなど、こちらでできることがない | 0 |
+| 要確認(名簿差分) | 正本リストが取込み後に更新された（グループ・氏名・ふりがな・サービス種別）。数式の退行ではない。差分を確認し再取込みの要否を判断 | 0 |
+| 要対応 | こちらで次の作業がある（取込み・連携設定・非表示/保護） | 1 |
+| 退行・検証失敗 | 番号の不一致、期待人数との不一致、連携(A1/C1/IMPORTRANGE)の切断、集計の不一致 | 1 |
+
+「次のアクション」に従う。
 
 ### 手順1: 名簿（受講者リスト）の取込み
 1. `scripts/merge_student_roster.py --class 0N`（dry-run）で検証ゲートを通す。
@@ -71,6 +79,7 @@ python scripts/apply_submission_formulas.py --class 0N --commit --provision-subm
 - 既存入力は上書きしない（期待と異なる既存入力があれば中断）。見出し行などの既存ラベルも変更しない。
 - 事後検証: エラーセル0 / 判定行数＝受講者行数 / 「提出」＝独立集計 / IMPORTRANGE が接続エラーでない。
 - 終了コード: 0=成功 / 1=検証失敗 / 2=保留（提出記録側タブなし、またはEXPECTED未登録）。
+- 検証失敗のときは、同じコマンドを再実行する（書込み0行で、検証だけが走る）。IMPORTRANGEの再計算待ちは最大3回自動で再確認するが、初回接続は遅れることがある。
 - **IMPORTRANGE の接続許可**: 新しいシートの組み合わせでは初回に許可が必要になりうる（Google公式仕様）。№02ではAPI経由の書込みで許可不要だったが、一般化できない。`#REF!`/「接続する必要」が出たら、管理側「課題①」タブのA1セルで「アクセスを許可」を**ユーザーが1回**押す。
 
 ### 手順4: 非表示・保護
@@ -86,7 +95,7 @@ python scripts/hide_sensitive_sheets.py --class 0N --commit
 ```
 python scripts/check_rollout_status.py --class 0N     # 「完了」になること
 ```
-- 初回の実提出が入ったら、**収集から表示までの確認を別途行う**: 実提出者数が「提出」と一致すること（№01では往復テスト＝テスト提出→「提出」→削除→「未提出」で確認済み）。
+- 「完了」は**設定の完了**を意味する。提出が0件の間は、収集から表示までの動作は未確認のまま。初回の実提出が入ったら、**収集から表示までの確認を別途行う**: 実提出者数が「提出」と一致すること（№01では往復テスト＝テスト提出→「提出」→削除→「未提出」で確認済み）。
 - クライアントへの報告は、検証済みの事実だけを書く（2026-09-14の「完了」報告が実際には崩れていた前例あり）。
 
 ## 4. 運用上の約束
@@ -97,14 +106,15 @@ python scripts/check_rollout_status.py --class 0N     # 「完了」になるこ
 | いつ | 名簿・グループ分けが届いたとき / 提出開始が見込まれる週は日次 / それ以外は週次 |
 | 名簿の後追い変更 | クライアントは取込み後も正本リストを更新しうる（実例: №02は取込み後の9/29に更新、№01のふりがな修正）。statusが「退行・検証失敗」を出したら、差分を確認して再取込みの要否を判断する（再取込みは共有ファイルへの書込みなので承認を取る） |
 | PII | 氏名・日介番号を会話・ログに出さない。バックアップは `var/scratch/`（gitignore済み、dir 0700 / file 0600）。ブラウザログインは作業後に必ずログアウト |
-| 報告の言葉 | 「完了」と言えるのは、`check_rollout_status.py` が「完了」で、独立した再実行結果を示せるとき |
+| 報告の言葉 | 「設定完了」と言えるのは、`check_rollout_status.py` が「完了」で、独立した再実行結果を示せるとき。「連携が動いている」と言えるのは、実提出で「提出」への切替を確認した後 |
 
 ## 5. 既知の限界
 
 - 独立集計は提出記録シート由来のため、**収集漏れは検出できない**。Cloud Runは、Firestoreに記録（`sheets_sync_status=pending`）した後でSheetsへ追記する。追記が失敗すると `failed` になり、後続の収集では既存ファイルとしてスキップされうる（`src/main.py`, `src/firestore_service.py`）。提出者から「出ていない」と言われた場合は、Firestoreの `sheets_sync_status` とCloud Runログを確認する。
 - `check_rollout_status.py` は Firestore の件数を取得しない（ローカルからFirestoreに繋がらない場合がある、`CLAUDE.md` Incident Response参照）。必要になったら別PRで追加する。
 - 提出記録側の「課題①」タブの保護は、現行の `hide_sensitive_sheets.py` では行わない（非表示のみ）。
-- Cloud Runのジョブは各クラス30分間隔（№03は課題①が毎時20分・50分起動）。事前作成とCloud Runの書込みが同時になっても、タブ作成と見出しを1回のbatchUpdateで行い、「既に存在」の場合は読み直して見出し一致を確認する設計（`provision_submission_tab`）。
+- 事前作成とCloud Runの書込みの競合: Cloud Runは各クラス30分間隔で動く（№03の課題①は毎時20分・50分起動）。スクリプト側は、タブ作成と見出しを1回のbatchUpdateで行い、「既に存在」の場合は読み直して見出し一致を確認する（`provision_submission_tab`）。**Cloud Run側**は「一覧取得→無ければ作成」が非原子的で、同時に作られると1回目の追記が失敗しうるが、`append_record_with_retry`（最大3回）が再実行するため、2回目は既存のタブに追記できる。それでも念のため、**Cloud Runの起動時刻の前後数分は事前作成を避ける**。
+- 検証の読取り上限は5,000行（提出記録シート）。到達すると独立集計が過小になるため、スクリプトは失敗する。上限は`SUBMISSION_READ_CAP`で調整する。
 
 ## 6. トラブルシュート
 
