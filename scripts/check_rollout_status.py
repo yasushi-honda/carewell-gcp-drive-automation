@@ -19,10 +19,13 @@ sheets_sync_status=failed/pending)は検出できない。
 
 import argparse
 import sys
+import time
 from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
+
+from googleapiclient.errors import HttpError  # noqa: E402
 
 from scripts.apply_submission_formulas import (  # noqa: E402
     FIRST_STUDENT_ROW,
@@ -34,16 +37,17 @@ from scripts.apply_submission_formulas import (  # noqa: E402
     TASK_LABEL,
     XLOOKUP_FORMULA,
     _get_values,
-    _list_titles,
     build_import_formula,
     build_status_formula,
     check_row_cap,
     classify_cell,
     col_letter,
+    extract_attendance_numbers,
     find_task_column,
     import_cell_has_error,
     independent_submitted_count,
     select_student_rows,
+    statuses_for_rows,
     validate_number_mapping,
     verify_results,
 )
@@ -57,6 +61,7 @@ from scripts.hide_sensitive_sheets import (  # noqa: E402
 from scripts.merge_student_roster import (  # noqa: E402
     EXPECTED_STUDENT_COUNT_BY_CLASS,
     ROSTER_TARGET_TAB,
+    ValidationError,
     _build_sheets_service,
     normalize_key,
     resolve_attendance_spreadsheet_id,
@@ -70,6 +75,7 @@ STATE_REGRESSION = "退行・検証失敗"
 STATE_REVIEW = "要確認(名簿差分)"
 
 _NUMBER_ROW_PATTERN_COLS = 7  # 正本リストのA〜G列
+RATE_LIMIT_WAIT_SEC = 60  # Sheets APIの読取りクォータ(1分あたり)の復帰待ち
 
 
 # ---------------------------------------------------------------------------
@@ -93,10 +99,21 @@ def compare_source_to_roster(
     正本: A=グループ, C=受講者番号, D=氏名, E=ふりがな, F=サービス種別
     名簿: A=氏名, B=ふりがな, F=サービス種別, H=グループ, J=受講者番号
     """
+    issues = []
     src = {}
+    seen_numbers: set[str] = set()
+    duplicated = blank_number_rows = 0
     for r in source_rows:
         r = list(r) + [""] * (_NUMBER_ROW_PATTERN_COLS - len(r))
+        if not any(str(c).strip() for c in r):
+            continue
         number = str(r[2]).strip()
+        if not number:
+            blank_number_rows += 1
+            continue
+        if number in seen_numbers:
+            duplicated += 1
+        seen_numbers.add(number)
         if number:
             src[number] = (
                 _norm_group(r[0]),
@@ -113,7 +130,12 @@ def compare_source_to_roster(
                 normalize_key(str(r[0]), str(r[1])),
                 str(r[5]).strip(),
             )
-    issues = []
+    if not src and ros:
+        issues.append("正本リストに受講者が0件になっている(名簿には登録済み)")
+    if blank_number_rows:
+        issues.append(f"正本リストに受講者番号が空の行が{blank_number_rows}件")
+    if duplicated:
+        issues.append(f"正本リストの受講者番号に重複が{duplicated}件")
     only_src = set(src) - set(ros)
     only_ros = set(ros) - set(src)
     if only_src:
@@ -155,6 +177,13 @@ def classify_class(f: dict) -> tuple[str, str]:
             )
         if f["tally_issues"]:
             return STATE_REGRESSION, "検証失敗: " + "; ".join(f["tally_issues"])
+
+    if f["roster_count"] == 0 and f["expected_registered"]:
+        return (
+            STATE_REGRESSION,
+            "取込み済み(期待人数登録済み)のクラスの受講者リストが空になっている"
+            f" → バックアップ(var/scratch)や版の履歴から確認。merge_student_roster.py --class {cn} で再取込み",
+        )
 
     if f["roster_count"] == 0:
         if f["source_count"] > 0:
@@ -210,12 +239,25 @@ def classify_class(f: dict) -> tuple[str, str]:
     return STATE_DONE, "-"
 
 
+def describe_error(e: BaseException) -> str:
+    """取得失敗の原因を、PIIを含まない形で説明する(想定内と想定外を分ける)。
+
+    HttpErrorはステータスのみ。ValidationError/RuntimeError/KeyErrorは当スクリプト・
+    既存ヘルパーが件数や定義名だけで組み立てたメッセージなので全文(長すぎる場合は切詰め)。
+    """
+    if isinstance(e, HttpError):
+        return f"Sheets API HTTP {getattr(e.resp, 'status', '?')}"
+    if isinstance(e, (ValidationError, RuntimeError, KeyError)):
+        return f"{type(e).__name__}: {str(e)[:160]}"
+    return f"想定外のエラー {type(e).__name__}(スクリプトの不具合の可能性)"
+
+
 def exit_code(states: list[str]) -> int:
     """「予定された保留」「要確認(名簿差分)」だけなら0。要対応・退行があれば1。
 
     情報的な差分や予定された待ちで毎回異常にしない(本物の退行を埋もれさせない)。
     """
-    return 1 if any(s in (STATE_TODO, STATE_REGRESSION) for s in states) else 0
+    return 0 if all(s in (STATE_DONE, STATE_HOLD, STATE_REVIEW) for s in states) else 1
 
 
 # ---------------------------------------------------------------------------
@@ -280,20 +322,9 @@ def gather_facts(class_num: str) -> dict:
         att_id,
         f"'{att_tab}'!C{FIRST_STUDENT_ROW}:C{MAX_ROW}",
     )
-    import re
-
-    att_numbers = [
-        str(c[0]).strip()
-        for c in number_col
-        if c
-        and (
-            str(c[0]).strip() in roster_set
-            or re.fullmatch(r"[A-Zー]\d{3}", str(c[0]).strip())
-        )
-    ]
+    att_numbers = extract_attendance_numbers(number_col, roster_set)
     facts["mapping_issues"] = validate_number_mapping(att_numbers, roster_numbers)
-    if source:
-        facts["source_issues"] = compare_source_to_roster(source, roster)
+    facts["source_issues"] = compare_source_to_roster(source, roster)
 
     att_full = _get_full_sheets_list(att_id, _build_sheets_service)
     sub_full = _get_full_sheets_list(
@@ -337,7 +368,7 @@ def gather_facts(class_num: str) -> dict:
         a1 = _get_values(_build_sheets_service, att_id, f"'{TASK_LABEL}'!A1", "FORMULA")
         c1 = _get_values(_build_sheets_service, att_id, f"'{TASK_LABEL}'!C1", "FORMULA")
         shown_import = _get_values(
-            _build_sheets_service, att_id, f"'{TASK_LABEL}'!A1:B1"
+            _build_sheets_service, att_id, f"'{TASK_LABEL}'!A1:C1"
         )
         a1_val = a1[0][0] if a1 and a1[0] else ""
         c1_val = c1[0][0] if c1 and c1[0] else ""
@@ -354,14 +385,7 @@ def gather_facts(class_num: str) -> dict:
             att_id,
             f"'{att_tab}'!{task_col}{FIRST_STUDENT_ROW}:{task_col}{MAX_ROW}",
         )
-        statuses = [
-            (
-                shown[r - FIRST_STUDENT_ROW][0]
-                if r - FIRST_STUDENT_ROW < len(shown) and shown[r - FIRST_STUDENT_ROW]
-                else ""
-            )
-            for r in student_rows
-        ]
+        statuses = statuses_for_rows(shown, student_rows)
         sub_rows = _get_values(
             _build_sheets_service,
             sub_id,
@@ -393,7 +417,15 @@ def main() -> int:
     print("クラス | 状態 | 正本 | 名簿 | 提出/未提出 | 次のアクション")
     for cn in classes:
         try:
-            facts = gather_facts(cn)
+            try:
+                facts = gather_facts(cn)
+            except HttpError as e:
+                if getattr(e.resp, "status", None) != 429:
+                    raise
+                time.sleep(
+                    RATE_LIMIT_WAIT_SEC
+                )  # 読取りクォータ超過: 待って1回だけ再試行
+                facts = gather_facts(cn)
             state, action = classify_class(facts)
             counts = (
                 f"{facts['_submitted']}/{facts['_unsubmitted']}"
@@ -405,7 +437,7 @@ def main() -> int:
                 f"| {counts} | {action}"
             )
         except Exception as e:  # 取得失敗は退行として扱い、他クラスの確認は続ける
-            state, action = STATE_REGRESSION, f"取得失敗: {type(e).__name__}"
+            state, action = STATE_REGRESSION, f"取得失敗: {describe_error(e)}"
             print(f"№{cn} | {state} | - | - | - | {action}")
         states.append(state)
 

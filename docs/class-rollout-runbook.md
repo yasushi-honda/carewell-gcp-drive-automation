@@ -75,7 +75,7 @@ python scripts/apply_submission_formulas.py --class 0N --commit
 # 提出記録側「課題①」タブがまだ無い場合(最初の提出前でも連携を完了したいとき):
 python scripts/apply_submission_formulas.py --class 0N --commit --provision-submission-tab
 ```
-- 事前ゲート: 受講者リストの件数＝期待人数 / 出欠確認と受講者リストの受講者番号が一対一 / 課題①列を見出し行(4行目)から特定。
+- 事前ゲート: 受講者リストの件数＝期待人数 / 受講者番号・日介番号の空欄と日介番号の重複なし（重複するとXLOOKUPが2人目を引けず、提出しても「未提出」のままになりうる）/ 出欠確認と受講者リストの受講者番号が一対一 / 課題①列を見出し行(4行目)から特定。
 - 既存入力は上書きしない（期待と異なる既存入力があれば中断）。見出し行などの既存ラベルも変更しない。
 - 事後検証: エラーセル0 / 判定行数＝受講者行数 / 「提出」＝独立集計 / IMPORTRANGE が接続エラーでない。
 - 終了コード: 0=成功 / 1=検証失敗 / 2=保留（提出記録側タブなし、またはEXPECTED未登録）。
@@ -112,6 +112,7 @@ python scripts/check_rollout_status.py --class 0N     # 「完了」になるこ
 
 - 独立集計は提出記録シート由来のため、**収集漏れは検出できない**。Cloud Runは、Firestoreに記録（`sheets_sync_status=pending`）した後でSheetsへ追記する。追記が失敗すると `failed` になり、後続の収集では既存ファイルとしてスキップされうる（`src/main.py`, `src/firestore_service.py`）。提出者から「出ていない」と言われた場合は、Firestoreの `sheets_sync_status` とCloud Runログを確認する。
 - `check_rollout_status.py` は Firestore の件数を取得しない（ローカルからFirestoreに繋がらない場合がある、`CLAUDE.md` Incident Response参照）。必要になったら別PRで追加する。
+- バックアップ（`var/scratch/apply_submission_formulas/`）は書込み前の課題①列とA1/C1の値のみで、復元スクリプトは無い。読取りから書込みまでの間の他者による同時編集も検知しない（衝突は書込み前の読取り時点でのみ判定）。復元はGoogleスプレッドシートの版の履歴から行う。
 - 提出記録側の「課題①」タブの保護は、現行の `hide_sensitive_sheets.py` では行わない（非表示のみ）。
 - 事前作成とCloud Runの書込みの競合: Cloud Runは各クラス30分間隔で動く（№03の課題①は毎時20分・50分起動）。スクリプト側は、タブ作成と見出しを1回のbatchUpdateで行い、「既に存在」の場合は読み直して見出し一致を確認する（`provision_submission_tab`）。**Cloud Run側**は「一覧取得→無ければ作成」が非原子的で、同時に作られると1回目の追記が失敗しうるが、`append_record_with_retry`（最大3回）が再実行するため、2回目は既存のタブに追記できる。それでも念のため、**Cloud Runの起動時刻の前後数分は事前作成を避ける**。
 - 検証の読取り上限は5,000行（提出記録シート）。到達すると独立集計が過小になるため、スクリプトは失敗する。上限は`SUBMISSION_READ_CAP`で調整する。

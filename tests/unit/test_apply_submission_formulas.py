@@ -22,12 +22,15 @@ from apply_submission_formulas import (  # noqa: E402
     check_row_cap,
     classify_cell,
     col_letter,
+    extract_attendance_numbers,
     find_task_column,
     import_cell_has_error,
     independent_submitted_count,
     plan_attendance_writes,
     select_student_rows,
+    statuses_for_rows,
     validate_number_mapping,
+    validate_roster_keys,
     validate_submission_header,
     verify_results,
 )
@@ -383,22 +386,435 @@ class TestCheckRowCap:
         check_row_cap([], cap=100)
 
 
-class TestNoDuplicateTopLevelDefinitions:
-    """切り貼りの編集ミスで関数が二重定義されると、後ろの定義が前を上書きし、
-    構文エラーにも通常のテスト失敗にもならずに古い実装が実行され続ける。"""
+class TestNoDuplicateDefinitions:
+    """切り貼りの編集ミスで定義が二重になると、後ろが前を黙って上書きし、構文エラーにも
+    通常のテスト失敗にもならずに古い実装が実行され続ける(実際に起きた)。
+    トップレベルだけでなく、クラス内(同名のtest_*メソッドは前者が消える)と
+    定数の二重代入も検出する。"""
 
-    @pytest.mark.parametrize(
-        "script",
-        ["scripts/apply_submission_formulas.py", "scripts/check_rollout_status.py"],
-    )
-    def test_each_function_is_defined_once(self, script):
+    ROOT = None
+
+    @staticmethod
+    def _duplicates(path):
         import ast
         from collections import Counter
         from pathlib import Path
 
-        tree = ast.parse(Path(script).read_text(encoding="utf-8"))
-        names = [
-            n.name for n in tree.body if isinstance(n, (ast.FunctionDef, ast.ClassDef))
+        tree = ast.parse(Path(path).read_text(encoding="utf-8"))
+        problems = []
+        for scope in [tree] + [
+            n for n in ast.walk(tree) if isinstance(n, ast.ClassDef)
+        ]:
+            names = []
+            for n in scope.body:
+                if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+                    names.append(n.name)
+                elif isinstance(n, ast.Assign):
+                    names += [t.id for t in n.targets if isinstance(t, ast.Name)]
+                elif isinstance(n, ast.AnnAssign) and isinstance(n.target, ast.Name):
+                    names.append(n.target.id)
+            problems += [
+                f"{getattr(scope, 'name', '<module>')}.{name}"
+                for name, c in Counter(names).items()
+                if c > 1 and name != "_"
+            ]
+        return problems
+
+    @pytest.mark.parametrize(
+        "relpath",
+        [
+            "scripts/apply_submission_formulas.py",
+            "scripts/check_rollout_status.py",
+            "tests/unit/test_apply_submission_formulas.py",
+            "tests/unit/test_check_rollout_status.py",
+        ],
+    )
+    def test_no_duplicate_definitions(self, relpath):
+        from pathlib import Path
+
+        root = Path(__file__).resolve().parents[2]
+        assert self._duplicates(root / relpath) == []
+
+    def test_detector_catches_duplicates(self, tmp_path):
+        f = tmp_path / "x.py"
+        f.write_text(
+            "A = 1\nA = 2\ndef f(): pass\ndef f(): pass\nclass T:\n    def t(self): pass\n    def t(self): pass\n"
+        )
+        found = self._duplicates(f)
+        assert {"<module>.A", "<module>.f", "T.t"} <= set(found)
+
+
+class TestExtractAttendanceNumbers:
+    def test_roster_members_and_number_like_values_are_kept(self):
+        col = [
+            ["A001"],
+            [],
+            [" A003 "],
+            ["ａ００２"],
+            ["B12"],
+            ["受講者番号"],
+            ["Z999"],
         ]
-        dups = [n for n, c in Counter(names).items() if c > 1]
-        assert dups == []
+        # 名簿にあるもの(A001,A003)と、受講者番号の形式の余分な値(Z999)。
+        # 全角・形式外・見出し・空行は除外される。
+        assert extract_attendance_numbers(col, {"A001", "A003"}) == [
+            "A001",
+            "A003",
+            "Z999",
+        ]
+
+    def test_empty(self):
+        assert extract_attendance_numbers([], {"A001"}) == []
+
+
+class TestStatusesForRows:
+    def test_short_and_empty_columns_yield_empty_string(self):
+        # APIは末尾の空セルを省略し、途中の空は[]で返す
+        col = [["提出"], [], ["未提出"]]
+        assert statuses_for_rows(col, [5, 6, 7, 8]) == ["提出", "", "未提出", ""]
+
+    def test_empty_status_is_flagged_by_verify_results(self):
+        issues = verify_results(["提出", ""], 2, 1)
+        assert issues
+
+    def test_row_offset_uses_first_row(self):
+        assert statuses_for_rows([["a"], ["b"]], [2, 3], first_row=2) == ["a", "b"]
+
+
+class TestValidateRosterKeys:
+    def test_ok(self):
+        assert validate_roster_keys(["N1", "N2"], ["A001", "A002"]) == []
+
+    def test_blank_student_number(self):
+        assert any("受講者番号が空" in i for i in validate_roster_keys(["N1"], [""]))
+
+    def test_blank_nichikai(self):
+        assert any("日介番号が空" in i for i in validate_roster_keys([" "], ["A001"]))
+
+    def test_duplicate_nichikai(self):
+        # 重複すると2人目の提出が「未提出」のままになりうる
+        assert any(
+            "重複" in i for i in validate_roster_keys(["N1", "N1"], ["A001", "A002"])
+        )
+
+
+class TestEdgeCases:
+    @pytest.mark.parametrize(
+        "idx,expected", [(51, "AZ"), (52, "BA"), (701, "ZZ"), (702, "AAA")]
+    )
+    def test_col_letter_carry(self, idx, expected):
+        assert col_letter(idx) == expected
+
+    def test_find_task_column_rejects_partial_labels(self):
+        for cell in ("課題①②", "課題1", "課題①（再提出）"):
+            with pytest.raises(ValidationError):
+                find_task_column(["", cell])
+
+    def test_find_task_column_empty_header(self):
+        with pytest.raises(ValidationError):
+            find_task_column([])
+
+    def test_find_task_column_tolerates_non_string_cells(self):
+        assert find_task_column([None, 0, "課題①"]) == 2
+
+    def test_planned_formula_is_for_its_own_row(self):
+        plan = plan_attendance_writes({}, [5, 9])
+        assert plan["writes"] == [
+            (5, build_status_formula(5)),
+            (9, build_status_formula(9)),
+        ]
+
+    def test_trailing_space_difference_is_a_conflict(self):
+        plan = plan_attendance_writes({5: build_status_formula(5) + " "}, [5])
+        assert plan["conflicts"] == [5]
+
+    def test_verify_results_flags_value_with_padding(self):
+        assert verify_results(["提出 "], 1, 1)
+
+    def test_verify_results_reports_error_and_count_together(self):
+        issues = verify_results(["#REF!", "未提出"], 3, 0)
+        assert len(issues) >= 2
+
+    @pytest.mark.parametrize("v", ["#DIV/0!", "#NAME?"])
+    def test_import_error_variants(self, v):
+        assert import_cell_has_error(v) is True
+
+    @pytest.mark.parametrize("n", [7, 9])
+    def test_header_with_wrong_column_count_is_rejected(self, n):
+        assert validate_submission_header([SUBMISSION_HEADER[:7] + ["x"] * (n - 7)])
+
+    def test_header_with_short_row(self):
+        assert validate_submission_header([["課題ID"]])
+
+    def test_provision_requests_fields_and_origin(self):
+        reqs = build_provision_requests(1, SUBMISSION_HEADER)
+        upd = reqs[1]["updateCells"]
+        assert upd["fields"] == "userEnteredValue"
+        assert upd["start"] == {"sheetId": 1, "rowIndex": 0, "columnIndex": 0}
+
+
+class _Env:
+    """process_class のAPI層を差し替える偽環境。書込み系の呼び出しを順に記録する。"""
+
+    def __init__(self, m, monkeypatch, tmp_path, **kw):
+        self.m = m
+        self.log = []
+        self.sleeps = 0
+        self.roster = kw.get(
+            "roster",
+            [
+                ["N1", "", "", "", "", "", "", "A001"],
+                ["N2", "", "", "", "", "", "", "A002"],
+                ["N3", "", "", "", "", "", "", "A003"],
+            ],
+        )
+        self.number_col = kw.get("number_col", [["A001"], ["A002"], [], ["A003"]])
+        self.existing_col = kw.get("existing_col", [])
+        self.sub_titles = kw.get("sub_titles", ["シート1", "課題①"])
+        self.att_titles = kw.get("att_titles", ["受講者リスト", "課題①"])
+        self.a1 = kw.get("a1", m.build_import_formula("SUB"))
+        self.c1 = kw.get("c1", m.XLOOKUP_FORMULA)
+        self.import_cells = kw.get("import_cells", [["氏名", "日介番号", "受講者番号"]])
+        # 事後検証の読取り(FORMATTED)が返す表示値を、呼び出し順に使う
+        self.after = list(kw.get("after", [[["未提出"], ["提出"], [], ["未提出"]]]))
+        self.sub_d = kw.get("sub_d", [["N2"]])
+        monkeypatch.setattr(
+            m, "EXPECTED_STUDENT_COUNT_BY_CLASS", {"03": kw.get("expected", 3)}
+        )
+        monkeypatch.setattr(m, "TASK1_SUBMISSION_SPREADSHEET_IDS", {"03": "SUB"})
+        monkeypatch.setattr(m, "resolve_attendance_spreadsheet_id", lambda c: "ATT")
+        monkeypatch.setattr(m, "_scratch_dir", lambda: tmp_path)
+        monkeypatch.setattr(m.time, "sleep", self._sleep)
+        monkeypatch.setattr(m, "_get_values", self._get)
+        monkeypatch.setattr(m, "_list_titles", self._titles)
+        monkeypatch.setattr(m, "_batch_update", self._batch)
+        monkeypatch.setattr(m, "_update_values", self._update)
+        monkeypatch.setattr(m, "_write_status_formulas", self._write)
+        monkeypatch.setattr(m, "provision_submission_tab", self._provision)
+
+    def _sleep(self, _s):
+        self.sleeps += 1
+
+    def _titles(self, build_fn, sid):
+        return self.sub_titles if sid == "SUB" else self.att_titles
+
+    def _get(self, build_fn, sid, rng, render="FORMATTED_VALUE"):
+        if sid == "SUB":
+            if rng.endswith("A1:H1"):
+                return [self.m.SUBMISSION_HEADER]
+            return self.sub_d
+        if "受講者リスト" in rng:
+            return self.roster
+        if rng.endswith("A4:AZ4"):
+            return [[""] * 8 + ["課題①"]]
+        if rng.endswith("C5:C500"):
+            return self.number_col
+        if rng == "'課題①'!A1":
+            return [[self.a1]] if self.a1 else []
+        if rng == "'課題①'!C1":
+            return [[self.c1]] if self.c1 else []
+        if rng.endswith("A1:C1"):
+            return self.import_cells
+        if rng.endswith("I5:I500"):
+            if render == "FORMULA":
+                return self.existing_col
+            return self.after.pop(0) if len(self.after) > 1 else self.after[0]
+        raise AssertionError(f"想定外の読取り: {rng}")
+
+    def _batch(self, build_fn, sid, reqs):
+        self.log.append(("addSheet", sid))
+
+    def _update(self, build_fn, sid, rng, values, raw=False):
+        self.log.append(("update", rng))
+
+    def _write(self, att_id, att_tab, task_col, writes):
+        self.log.append(("write_formulas", task_col, len(writes)))
+
+    def _provision(self, sid):
+        self.log.append(("provision", sid))
+        return "created"
+
+    def writes(self):
+        return [e for e in self.log if e[0] != "provision"] if False else self.log
+
+
+def _env(monkeypatch, tmp_path, **kw):
+    import apply_submission_formulas as m
+
+    return _Env(m, monkeypatch, tmp_path, **kw)
+
+
+def _formulas_for_rows(rows):
+    import apply_submission_formulas as m
+
+    return [[m.build_status_formula(r)] for r in rows]
+
+
+class TestProcessClass:
+    def test_unregistered_expected_count_holds_without_any_call(
+        self, monkeypatch, tmp_path
+    ):
+        env = _env(monkeypatch, tmp_path)
+        env.m.EXPECTED_STUDENT_COUNT_BY_CLASS.clear()
+        assert env.m.process_class("03", True, True) == 2
+        assert env.log == []
+
+    def test_missing_submission_tab_without_flag_holds_and_writes_nothing(
+        self, monkeypatch, tmp_path
+    ):
+        env = _env(monkeypatch, tmp_path, sub_titles=["シート1"])
+        assert env.m.process_class("03", True, False) == 2
+        assert env.log == []
+
+    def test_dry_run_with_provision_plans_but_writes_nothing(
+        self, monkeypatch, tmp_path
+    ):
+        env = _env(
+            monkeypatch, tmp_path, sub_titles=["シート1"], att_titles=["受講者リスト"]
+        )
+        assert env.m.process_class("03", False, True) == 0
+        assert env.log == []  # provision・addSheet・書込みのいずれも呼ばれない
+
+    def test_dry_run_never_writes_even_when_changes_are_planned(
+        self, monkeypatch, tmp_path
+    ):
+        env = _env(monkeypatch, tmp_path, att_titles=["受講者リスト"], a1="", c1="")
+        assert env.m.process_class("03", False, False) == 0
+        assert env.log == []
+
+    def test_conflict_in_column_aborts_before_any_write(self, monkeypatch, tmp_path):
+        env = _env(monkeypatch, tmp_path, existing_col=[["提出"]])
+        with pytest.raises(ValidationError):
+            env.m.process_class("03", True, False)
+        assert env.log == []
+
+    def test_conflict_in_a1_aborts_before_any_write(self, monkeypatch, tmp_path):
+        env = _env(monkeypatch, tmp_path, a1="=別の式")
+        with pytest.raises(ValidationError):
+            env.m.process_class("03", True, False)
+        assert env.log == []
+
+    def test_provision_happens_only_after_admin_side_validation(
+        self, monkeypatch, tmp_path
+    ):
+        # 管理側に衝突があるなら、提出記録側のタブは作らない(本番側の書込みを残さない)
+        env = _env(
+            monkeypatch, tmp_path, sub_titles=["シート1"], existing_col=[["提出"]]
+        )
+        with pytest.raises(ValidationError):
+            env.m.process_class("03", True, True)
+        assert ("provision", "SUB") not in env.log
+
+    def test_number_mismatch_aborts_before_any_write(self, monkeypatch, tmp_path):
+        env = _env(monkeypatch, tmp_path, number_col=[["A001"], ["A002"]])
+        with pytest.raises(ValidationError):
+            env.m.process_class("03", True, False)
+        assert env.log == []
+
+    def test_roster_count_mismatch_aborts(self, monkeypatch, tmp_path):
+        env = _env(monkeypatch, tmp_path, expected=4)
+        with pytest.raises(ValidationError):
+            env.m.process_class("03", True, False)
+        assert env.log == []
+
+    def test_blank_student_number_in_roster_aborts(self, monkeypatch, tmp_path):
+        env = _env(
+            monkeypatch,
+            tmp_path,
+            roster=[
+                ["N1", "", "", "", "", "", "", ""],
+                ["N2", "", "", "", "", "", "", "A002"],
+                ["N3", "", "", "", "", "", "", "A003"],
+            ],
+        )
+        with pytest.raises(ValidationError):
+            env.m.process_class("03", True, False)
+        assert env.log == []
+
+    def test_commit_writes_in_order_and_backs_up(self, monkeypatch, tmp_path):
+        env = _env(
+            monkeypatch,
+            tmp_path,
+            sub_titles=["シート1"],
+            att_titles=["受講者リスト"],
+            a1="",
+            c1="",
+        )
+        assert env.m.process_class("03", True, True) == 0
+        kinds = [e[0] for e in env.log]
+        assert kinds == ["provision", "addSheet", "update", "update", "write_formulas"]
+        assert env.log[-1] == ("write_formulas", "I", 3)
+        backups = list(tmp_path.rglob("class03_before.json"))
+        assert len(backups) == 1
+        assert oct(backups[0].stat().st_mode & 0o777) == "0o600"
+
+    def test_rerun_with_everything_in_place_writes_nothing(self, monkeypatch, tmp_path):
+        env = _env(monkeypatch, tmp_path, existing_col=_formulas_for_rows([5, 6, 7, 8]))
+        # 受講者行は5,6,8。7行目(空)は既存の空のまま
+        env.existing_col = [
+            [env.m.build_status_formula(5)],
+            [env.m.build_status_formula(6)],
+            [],
+            [env.m.build_status_formula(8)],
+        ]
+        assert env.m.process_class("03", True, False) == 0
+        assert [e for e in env.log if e[0] == "write_formulas"] == []
+
+    def test_verification_retries_until_recalculated(self, monkeypatch, tmp_path):
+        env = _env(
+            monkeypatch,
+            tmp_path,
+            after=[
+                [["#REF!"], ["#REF!"], [], ["#REF!"]],
+                [["未提出"], ["提出"], [], ["未提出"]],
+            ],
+        )
+        assert env.m.process_class("03", True, False) == 0
+        assert env.sleeps == 2
+
+    def test_verification_fails_after_three_attempts(self, monkeypatch, tmp_path):
+        env = _env(monkeypatch, tmp_path, after=[[["#REF!"], ["#REF!"], [], ["#REF!"]]])
+        assert env.m.process_class("03", True, False) == 1
+        assert env.sleeps == 3
+
+    def test_c1_error_is_detected(self, monkeypatch, tmp_path):
+        env = _env(monkeypatch, tmp_path, import_cells=[["氏名", "日介番号", "#REF!"]])
+        assert env.m.process_class("03", True, False) == 1
+
+    def test_tally_mismatch_fails(self, monkeypatch, tmp_path):
+        # 表示は2人提出だが、提出記録の独立集計は1人
+        env = _env(monkeypatch, tmp_path, after=[[["提出"], ["提出"], [], ["未提出"]]])
+        assert env.m.process_class("03", True, False) == 1
+
+
+class TestProvisionUsesTheWritingServiceAccount:
+    """提出記録シートへの書込みは github-actions-sa、管理側は carewell-automation-sa。
+    取り違えは本番で403になるだけで、単体テストが緑のまま見逃される。"""
+
+    def test_provision_builds_with_task1_service(self, monkeypatch):
+        import apply_submission_formulas as m
+
+        seen = []
+        monkeypatch.setattr(m, "_batch_update", lambda b, sid, reqs: seen.append(b))
+        monkeypatch.setattr(
+            m,
+            "_get_values",
+            lambda b, sid, rng, render="FORMATTED_VALUE": (
+                seen.append(b),
+                [m.SUBMISSION_HEADER],
+            )[1],
+        )
+        m.provision_submission_tab("SUB")
+        assert seen and all(b is m._build_task1_sheets_service for b in seen)
+
+    def test_bulk_write_uses_attendance_service(self, monkeypatch):
+        import apply_submission_formulas as m
+
+        captured = {}
+
+        def fake_reauth(build_fn, call):
+            captured["build_fn"] = build_fn
+
+        monkeypatch.setattr(m, "call_with_reauth", fake_reauth)
+        m._write_status_formulas("ATT", "tab", "I", [(5, "=x")])
+        assert captured["build_fn"] is m._build_sheets_service

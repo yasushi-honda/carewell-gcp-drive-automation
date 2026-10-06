@@ -173,6 +173,58 @@ def select_student_rows(
     return rows
 
 
+def extract_attendance_numbers(
+    number_col_values: list[list], roster_numbers: set[str]
+) -> list[str]:
+    """出欠確認シートの受講者番号列から、名簿の番号または受講者番号の形式の値を抜き出す。
+
+    名簿に無い余分な番号の検出用(見出しや空行は除く)。
+    """
+    found = []
+    for cell in number_col_values:
+        value = str(cell[0]).strip() if cell else ""
+        if value and (value in roster_numbers or _STUDENT_NUMBER_LIKE.fullmatch(value)):
+            found.append(value)
+    return found
+
+
+def statuses_for_rows(
+    col_values: list[list], student_rows: list[int], first_row: int = FIRST_STUDENT_ROW
+) -> list[str]:
+    """課題①列の読取り結果から、受講者行の表示値を取り出す。
+
+    APIは末尾の空セルを省略し、途中の空は[]で返すため、範囲外・空は""にする。
+    """
+    out = []
+    for row in student_rows:
+        i = row - first_row
+        out.append(
+            str(col_values[i][0]) if 0 <= i < len(col_values) and col_values[i] else ""
+        )
+    return out
+
+
+def validate_roster_keys(nichikai: list[str], numbers: list[str]) -> list[str]:
+    """名簿の日介番号・受講者番号の空欄と日介番号の重複を検出する。
+
+    日介番号が重複するとXLOOKUPの最初の一致しか引けず、2人目が提出しても
+    「未提出」のままになりうる(独立集計はユニークで数えるため検証をすり抜ける)。
+    """
+    issues = []
+    blank_numbers = sum(1 for n in numbers if not str(n).strip())
+    if blank_numbers:
+        issues.append(f"受講者リストに受講者番号が空の行が{blank_numbers}件あります")
+    cleaned = [str(n).strip() for n in nichikai]
+    blank_nichikai = sum(1 for n in cleaned if not n)
+    if blank_nichikai:
+        issues.append(f"受講者リストに日介番号が空の行が{blank_nichikai}件あります")
+    non_blank = [n for n in cleaned if n]
+    dups = len(non_blank) - len(set(non_blank))
+    if dups:
+        issues.append(f"受講者リストの日介番号に重複が{dups}件あります")
+    return issues
+
+
 def plan_attendance_writes(existing: dict[int, str], student_rows: list[int]) -> dict:
     """課題①列への書込み計画を作る。既存の異なる入力は上書きせず衝突として返す。"""
     writes, conflicts, same = [], [], 0
@@ -328,6 +380,26 @@ def _update_values(build_fn, spreadsheet_id: str, range_: str, values, raw=False
     )
 
 
+def _write_status_formulas(att_id: str, att_tab: str, task_col: str, writes: list):
+    """課題①列の判定式を一括で書き込む(書込みを他の呼び出しと区別して扱うための関数)"""
+    return call_with_reauth(
+        _build_sheets_service,
+        lambda svc: svc.spreadsheets()
+        .values()
+        .batchUpdate(
+            spreadsheetId=att_id,
+            body={
+                "valueInputOption": "USER_ENTERED",
+                "data": [
+                    {"range": f"'{att_tab}'!{task_col}{row}", "values": [[formula]]}
+                    for row, formula in writes
+                ],
+            },
+        )
+        .execute(),
+    )
+
+
 def provision_submission_tab(submission_id: str) -> str:
     """提出記録側に非表示の「課題①」タブを見出しつきで作る。
 
@@ -387,7 +459,11 @@ def process_class(class_num: str, commit: bool, provision: bool) -> int:
     )
     roster = [r + [""] * (8 - len(r)) for r in roster if any(str(c).strip() for c in r)]
     roster_numbers = [r[ROSTER_NUMBER_IDX].strip() for r in roster]
-    roster_nichikai = {r[ROSTER_NICHIKAI_IDX].strip() for r in roster}
+    roster_nichikai_list = [r[ROSTER_NICHIKAI_IDX].strip() for r in roster]
+    roster_nichikai = set(roster_nichikai_list)
+    key_issues = validate_roster_keys(roster_nichikai_list, roster_numbers)
+    if key_issues:
+        raise ValidationError("事前ゲート失敗: " + "; ".join(key_issues))
     if len(roster_numbers) != expected:
         raise ValidationError(
             f"受講者リストの件数({len(roster_numbers)})が期待人数({expected})と一致しません"
@@ -405,15 +481,7 @@ def process_class(class_num: str, commit: bool, provision: bool) -> int:
         f"'{att_tab}'!{ATTENDANCE_NUMBER_COL}{FIRST_STUDENT_ROW}:{ATTENDANCE_NUMBER_COL}{MAX_ROW}",
     )
     roster_set = set(roster_numbers)
-    att_numbers = [
-        str(c[0]).strip()
-        for c in number_col
-        if c
-        and (
-            str(c[0]).strip() in roster_set
-            or _STUDENT_NUMBER_LIKE.fullmatch(str(c[0]).strip())
-        )
-    ]
+    att_numbers = extract_attendance_numbers(number_col, roster_set)
     issues = validate_number_mapping(att_numbers, roster_numbers)
     if issues:
         raise ValidationError("事前ゲート失敗: " + "; ".join(issues))
@@ -525,29 +593,14 @@ def process_class(class_num: str, commit: bool, provision: bool) -> int:
             _build_sheets_service, att_id, f"'{TASK_LABEL}'!C1", [[XLOOKUP_FORMULA]]
         )
     if plan["writes"]:
-        call_with_reauth(
-            _build_sheets_service,
-            lambda svc: svc.spreadsheets()
-            .values()
-            .batchUpdate(
-                spreadsheetId=att_id,
-                body={
-                    "valueInputOption": "USER_ENTERED",
-                    "data": [
-                        {"range": f"'{att_tab}'!{task_col}{row}", "values": [[formula]]}
-                        for row, formula in plan["writes"]
-                    ],
-                },
-            )
-            .execute(),
-        )
+        _write_status_formulas(att_id, att_tab, task_col, plan["writes"])
 
     # 5. 事後検証(IMPORTRANGEの再計算を待つため、最大3回まで間隔を空けて再確認する)
     for attempt in range(3):
         time.sleep(5)
         problems = []
         import_cells = _get_values(
-            _build_sheets_service, att_id, f"'{TASK_LABEL}'!A1:B1"
+            _build_sheets_service, att_id, f"'{TASK_LABEL}'!A1:C1"
         )
         if any(import_cell_has_error(v) for row in import_cells for v in row):
             problems.append(
@@ -559,15 +612,7 @@ def process_class(class_num: str, commit: bool, provision: bool) -> int:
             att_id,
             f"'{att_tab}'!{task_col}{FIRST_STUDENT_ROW}:{task_col}{MAX_ROW}",
         )
-        statuses = [
-            (
-                col_after[r - FIRST_STUDENT_ROW][0]
-                if r - FIRST_STUDENT_ROW < len(col_after)
-                and col_after[r - FIRST_STUDENT_ROW]
-                else ""
-            )
-            for r in student_rows
-        ]
+        statuses = statuses_for_rows(col_after, student_rows)
         sub_after = _get_values(
             _build_sheets_service,
             sub_id,
@@ -594,6 +639,11 @@ def process_class(class_num: str, commit: bool, provision: bool) -> int:
             print(f"[検証失敗] {p}")
         return 1
     print("[成功] 事後検証をすべて通過しました。")
+    if submitted == 0:
+        print(
+            "[注意] 提出が0件のため、提出記録→表示の連鎖(IMPORTRANGE→XLOOKUP→判定)は"
+            "実データでは未実証です。最初の実提出後に確認してください。"
+        )
     print(
         "[注意] 独立集計は提出記録シート由来のため、収集漏れ(Firestoreの"
         "sheets_sync_status=failed等)は検出できません。"
@@ -622,6 +672,13 @@ def main() -> int:
         return process_class(args.class_num, args.commit, args.provision_submission_tab)
     except ValidationError as e:
         print(f"[中断] {e}")
+        return 1
+    except Exception as e:  # 書込み途中の失敗: 状態と再実行方法を示す(再実行は冪等)
+        print(
+            f"[エラー] {type(e).__name__}: 処理が途中で止まりました。書込み済みの可能性が"
+            "あります。同じコマンドの再実行(冪等)または check_rollout_status.py で状態を"
+            "確認してください。"
+        )
         return 1
 
 
