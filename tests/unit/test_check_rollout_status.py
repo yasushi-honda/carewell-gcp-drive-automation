@@ -16,6 +16,7 @@ from check_rollout_status import (  # noqa: E402
     STATE_TODO,
     classify_class,
     compare_source_to_roster,
+    count_company_office_filled,
     describe_error,
     exit_code,
 )
@@ -40,6 +41,7 @@ def _facts(**over):
         "tally_issues": [],
         "expected_count": 254,
         "link_issues": [],
+        "company_office_filled": 0,
     }
     base.update(over)
     return base
@@ -137,6 +139,57 @@ class TestClassifyClass:
     def test_regression_takes_priority_over_todo(self):
         state, _ = classify_class(_facts(mapping_issues=["x"], admin_protected=False))
         assert state == STATE_REGRESSION
+
+
+class TestCompanyOfficeColumns:
+    """受講者リストの会社・事業所欄(D・E列)は個人情報保護のため常に空欄でなければならない。
+    2026-09-18: 取込みスクリプトの仕様で実データが復活していたのに「対応完了」と報告していた。"""
+
+    def test_filled_columns_are_regression(self):
+        state, action = classify_class(_facts(company_office_filled=3))
+        assert state == STATE_REGRESSION
+        assert "会社・事業所" in action
+        assert "3" in action
+
+    def test_pii_regression_wins_over_everything_else(self):
+        state, action = classify_class(
+            _facts(
+                company_office_filled=1,
+                mapping_issues=["番号不一致"],
+                roster_count=250,
+                expected_count=254,
+            )
+        )
+        assert "会社・事業所" in action
+
+    def test_empty_columns_do_not_affect_a_done_class(self):
+        assert classify_class(_facts(company_office_filled=0))[0] == STATE_DONE
+
+    def test_missing_key_defaults_to_clean(self):
+        facts = _facts()
+        facts.pop("company_office_filled")
+        assert classify_class(facts)[0] == STATE_DONE
+
+    def test_action_does_not_contain_values(self):
+        _, action = classify_class(_facts(company_office_filled=2))
+        assert "社会福祉法人" not in action
+
+
+class TestCountCompanyOfficeFilled:
+    def test_counts_rows_with_any_value_in_d_or_e(self):
+        rows = [
+            ["山田", "やまだ", "N1", "社会福祉法人", "", "施設"],
+            ["佐藤", "さとう", "N2", "", "A事業所", "施設"],
+            ["鈴木", "すずき", "N3", "", "", "施設"],
+            ["高橋", "たかはし", "N4", "  ", " ", "施設"],
+        ]
+        assert count_company_office_filled(rows) == 2
+
+    def test_short_rows_are_clean(self):
+        assert count_company_office_filled([["山田", "やまだ", "N1"]]) == 0
+
+    def test_empty(self):
+        assert count_company_office_filled([]) == 0
 
 
 class TestClassifyPriorityAndGaps:
