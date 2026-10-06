@@ -381,3 +381,24 @@ class TestCheckRowCap:
 
     def test_empty_ok(self):
         check_row_cap([], cap=100)
+
+
+class TestNoDuplicateTopLevelDefinitions:
+    """切り貼りの編集ミスで関数が二重定義されると、後ろの定義が前を上書きし、
+    構文エラーにも通常のテスト失敗にもならずに古い実装が実行され続ける。"""
+
+    @pytest.mark.parametrize(
+        "script",
+        ["scripts/apply_submission_formulas.py", "scripts/check_rollout_status.py"],
+    )
+    def test_each_function_is_defined_once(self, script):
+        import ast
+        from collections import Counter
+        from pathlib import Path
+
+        tree = ast.parse(Path(script).read_text(encoding="utf-8"))
+        names = [
+            n.name for n in tree.body if isinstance(n, (ast.FunctionDef, ast.ClassDef))
+        ]
+        dups = [n for n, c in Counter(names).items() if c > 1]
+        assert dups == []
