@@ -109,6 +109,7 @@ decision-maker の指摘「グループ一覧でパンくずの『課題①』�
 |---|------|---------|--------------|------------|
 | 1 | 残り7クラスの Issue #18 Step 2（数式書込み。名簿が入った後、各クラスの Dashboard で受講者番号が表示されることも確認） | 先方（jaccw）から各クラスの名簿・グループ分けデータが届く | GOAL.md 中断点の手順（`scripts/merge_student_roster.py --class 0N` → 検証 → 数式書込み） | 各クラスの「受講者リスト」タブにデータが入ったか直接確認、または `carewell-attendance-roster-sync` のログ |
 | 2 | グループ一覧のカード・グループ内受講生一覧（PR #56）の合否内訳を提出元の画面と照合する | №01 課題①に最初の採点結果が入る（提出元の画面で合格・不合格が付く） | 本番のカードの「合格・不合格・採点待ち」の人数、および受講生一覧の「提出状況」列・チップを提出元の画面と突き合わせ、複数回提出の扱い（最新の提出の状態）が実態に合うか確認 | Dashboard のグループ一覧（`/class/<クラス>/task/課題①/groups`）・グループ内受講生一覧（`.../group/<G>/students`）と提出元の画面の比較。Firestore の `metadata.pass_status` に「合格」「不合格」が入ったかを REST で件数確認 |
+| 3 | №02 名簿読み取りの Sheets API タイムアウト再発の監視（2026-09-28 に2件: 02:16・06:31 UTC、どちらも `class=No2` で `TimeoutError: The read operation timed out`、名簿同期が `status=aborted`。直近3日は成功286回・中断2回で次の15分後の同期で自動回復、実害なし。decision-maker は「様子見・対応なし」を選択） | №02 で短期間に繰り返し発生する（目安: 1日に複数回、または連続する同期の中断） | 対応を検討: ①クラス単位でタイムアウトをスキップして残りの同期を続ける ②Sheets 読み取りにリトライを追加（障害事例 #15 の方針）。実装は2〜4ファイルの軽量プラン | `gcloud logging read 'resource.type="cloud_run_revision" AND resource.labels.service_name="carewell-file-collector" AND severity>=ERROR' --freshness=3d` で `class=No2` の TimeoutError と `status=aborted` を数える |
 
 - 9/14版ハンドオフの条件待ち（`student-sync-daily` 削除要否、クライアントへの続報の実送信）は、本セッションでは状態を再確認していない（変更なし）。必要なら次セッションの catchup で GOAL.md と照合する
 
