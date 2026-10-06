@@ -76,6 +76,7 @@ python scripts/check_rollout_status.py --class 04
    - ふりがなの拗音表記ゆれで名寄せ失敗 → `MATCH_EXCEPTIONS_BY_CLASS` に人間確認のうえ登録。
    - 受講者数の検証 → `EXPECTED_STUDENT_COUNT_BY_CLASS` に正しい総数を登録（人間確認した値のみ）。
 3. `--commit` で書き込み（読み戻し検証つき。「受講者リスト」の非表示・保護も同時に適用される）。
+4. **会社・事業所欄（D・E列）は常に空欄**（個人情報保護のクライアント要望）。取込みスクリプトは空欄で書き込み、`check_rollout_status.py` が実データの混入を「退行」として検出する。2026-09-18に、スクリプトの仕様で実データが復活していたのに「対応完了」と報告していた事故の再発防止。
 
 ### 手順2: 共有「グループ分け」との照合（個人単位）
 正本(R08フォルダの `№0N_グループ分け のコピー`)は `system@jaccw.or.jp` にのみ共有されており、SAからは見えない。
@@ -112,6 +113,14 @@ python scripts/hide_sensitive_sheets.py --class 0N --commit
 python scripts/check_rollout_status.py --class 0N     # 「完了」になること
 ```
 - 「完了」は**設定の完了**を意味する。提出が0件の間は、収集から表示までの動作は未確認のまま。初回の実提出が入ったら、**収集から表示までの確認を別途行う**: 実提出者数が「提出」と一致すること（№01では往復テスト＝テスト提出→「提出」→削除→「未提出」で確認済み）。
+- **収集から表示までの4段突合**（№01で2026-09-20に実施した方法。収集漏れを検出できる唯一の手段）:
+  1. 提出元画面の件数（課題①の「未添削＋添削済」の合計）。decision-makerから画面のスクリーンショットを受け取る（AIはzenkoukaiにログインしない）
+  2. Cloud Runログの確認件数。`gcloud logging read 'resource.type="cloud_run_revision" AND resource.labels.service_name="carewell-file-collector" AND textPayload:"№0N-課題①" AND textPayload:"Count verification"' --freshness=1d --limit=3 --format='value(timestamp,textPayload)'` の `Count verification passed: N/N` のNが、1と一致すること
+  3. 提出記録シート「課題①」のデータ行数（見出しを除く）が、1と一致すること
+  4. 出欠確認の「提出」件数（`check_rollout_status.py` の提出/未提出）が、提出記録のユニーク日介番号数と一致すること
+  - **同じ受講者が複数回提出すると、行数は増えるが提出者は1名として数える**（№01: 13行・12名）。1〜3は行数、4はユニーク数で比べる。
+  - 食い違いの読み方: 1≠2 → 収集漏れ（Cloud Runの収集ログを調査）。2≠3 → Sheets追記の失敗（Firestoreの`sheets_sync_status=failed`）。3とユニーク数は合うが4が合わない → 数式・名簿の問題。
+- **Dashboardの確認**: 名簿の取込み後、最大15分で`carewell-attendance-roster-sync`がFirestoreへ同期し、Dashboard（https://carewell-dashboard-2026.web.app/）の「受講生一覧」にクラスの受講者が表示される。管理者アカウントでログインし、件数とグループ別人数が名簿と一致することを確認する（氏名をスクリーンショットに残さない）。
 - クライアントへの報告は、検証済みの事実だけを書く（2026-09-14の「完了」報告が実際には崩れていた前例あり）。
 
 ## 4. 運用上の約束
@@ -127,6 +136,7 @@ python scripts/check_rollout_status.py --class 0N     # 「完了」になるこ
 ## 5. 既知の限界
 
 - 独立集計は提出記録シート由来のため、**収集漏れは検出できない**。Cloud Runは、Firestoreに記録（`sheets_sync_status=pending`）した後でSheetsへ追記する。追記が失敗すると `failed` になり、後続の収集では既存ファイルとしてスキップされうる（`src/main.py`, `src/firestore_service.py`）。提出者から「出ていない」と言われた場合は、Firestoreの `sheets_sync_status` とCloud Runログを確認する。
+- **既存の収集漏れ検出スクリプトは、令和8年度では無効化されている**: `scripts/check_firestore_sheet_consistency.py`、`scripts/check_all_spreadsheets_consistency.py`、補修用の`scripts/fix_missing_sheet_records.py`は、クラス設定（`CLASS_CONFIG`）が空（`docs/SERVICE_SHUTDOWN_AND_RESUME.md`「令和8年度再開ステータス」）。使うには、クラスごとにスプレッドシートIDとFirestoreのクラス名を確認して有効化する別作業が要る。それまでは手順5の4段突合で代替する（過去の事故: `docs/common-mistakes.md` #15 Sheets同期のサイレント失敗）。
 - `check_rollout_status.py` は Firestore の件数を取得しない（ローカルからFirestoreに繋がらない場合がある、`CLAUDE.md` Incident Response参照）。必要になったら別PRで追加する。
 - バックアップ（`var/scratch/apply_submission_formulas/`）は書込み前の課題①列とA1/C1の値のみで、復元スクリプトは無い。読取りから書込みまでの間の他者による同時編集も検知しない（衝突は書込み前の読取り時点でのみ判定）。復元はGoogleスプレッドシートの版の履歴から行う。
 - 提出記録側の「課題①」タブの保護は、現行の `hide_sensitive_sheets.py` では行わない（非表示のみ）。
@@ -140,5 +150,7 @@ python scripts/check_rollout_status.py --class 0N     # 「完了」になるこ
 | `apply_submission_formulas.py` が「期待人数が未登録」 | 手順1の `EXPECTED_STUDENT_COUNT_BY_CLASS` を登録（人間確認）。先に名簿取込みが必要 |
 | 「課題①列に期待と異なる既存入力」で中断 | 自動修正しない。式の生値・参照先・計算結果を比較して原因を分類。№01は見出し行以外の既存ラベルがあるが、受講者行の式は同一 |
 | `403 The caller does not have permission`（提出記録側） | `carewell-automation-sa` で書こうとしている。`github-actions-sa` 経由か確認 |
+| `check_rollout_status.py` が「取得失敗: Sheets API HTTP 400」（`Unable to parse range`） | 出欠確認タブの名前が`№{N}_出欠確認`でない。テンプレートのコピー由来の誤ラベル（実例: 2026-09-04、№02が「№01_出欠確認」のまま）。タブ名を確認し、クライアントに修正を依頼する |
+| `hide_sensitive_sheets.py` が自己ロックアウト防止ガード（`check_sa_not_locked_out`）で中断 | 保護の編集者リストに`carewell-automation-sa`が含まれない設定。**保護を適用せず中断するのが正しい動作**（2026-09-18、共有ドライブのorganizer系ロールの扱いで発覚）。編集者の取得結果を確認し、勝手に保護を外さない |
 | `gcloud` の再認証エラー | `! gcloud auth login`（`system@jaccw.or.jp`） |
 | 共有フォルダ（R08）がSAから404 | ユーザーアカウントにのみ共有されている。SAのアクセス権の問題であり、フォルダが存在しないとは限らない。手順2のブラウザ経路を使う |

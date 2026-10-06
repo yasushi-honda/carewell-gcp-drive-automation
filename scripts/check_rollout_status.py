@@ -75,6 +75,7 @@ STATE_REGRESSION = "退行・検証失敗"
 STATE_REVIEW = "要確認(名簿差分)"
 
 _NUMBER_ROW_PATTERN_COLS = 7  # 正本リストのA〜G列
+COMPANY_OFFICE_COLS = (3, 5)  # 受講者リストのD・E列(0-indexed、[start, end))
 RATE_LIMIT_WAIT_SEC = 60  # Sheets APIの読取りクォータ(1分あたり)の復帰待ち
 
 
@@ -152,9 +153,35 @@ def compare_source_to_roster(
     return issues
 
 
+def count_company_office_filled(roster_rows: list[list]) -> int:
+    """受講者リストの会社・事業所欄(D・E列)に値が入っている行数。
+
+    個人情報保護のため常に空欄でなければならない(2026-09-18、実データが復活していた
+    のに「対応完了」と報告していた事故の再発検知)。値は返さず件数のみ。
+    """
+    return sum(
+        1
+        for r in roster_rows
+        if any(
+            str(c).strip()
+            for c in list(r)[COMPANY_OFFICE_COLS[0] : COMPANY_OFFICE_COLS[1]]
+        )
+    )
+
+
 def classify_class(f: dict) -> tuple[str, str]:
     """クラスの状態と次のアクションを返す。退行 > 要対応 > 保留 > 完了 の優先順。"""
     cn = f["class"]
+    # 個人情報の混入は名簿の取込み状況に関係なく最優先で判定する(未取込みクラスで
+    # クライアントが会社名を直接入力した場合も検出する)
+    filled = f.get("company_office_filled", 0)
+    if filled:
+        return (
+            STATE_REGRESSION,
+            f"受講者リストの会社・事業所欄(D・E列)に値が入っている行が{filled}件"
+            " (個人情報保護のため空欄が必須) → 内容を確認し、空欄に戻す"
+            f"(merge_student_roster.py --class {cn} は空欄で書き込む)",
+        )
     if f["roster_count"] > 0:
         if f["mapping_issues"]:
             return (
@@ -298,6 +325,7 @@ def gather_facts(class_num: str) -> dict:
         "class": class_num,
         "expected_registered": class_num in EXPECTED_STUDENT_COUNT_BY_CLASS,
         "expected_count": EXPECTED_STUDENT_COUNT_BY_CLASS.get(class_num),
+        "company_office_filled": count_company_office_filled(roster),
         "link_issues": [],
         "source_count": source_count,
         "roster_count": len(roster_numbers),
