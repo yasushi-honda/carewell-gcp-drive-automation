@@ -537,7 +537,7 @@ class TestTransferredStudents:
         )
         firestore_service = self._firestore()
 
-        with patch.dict(main.ATTENDANCE_ROSTER_TRANSFERRED_STUDENTS, {"N001": "No2"}):
+        with patch.dict(main.ATTENDANCE_ROSTER_TRANSFERRED_STUDENTS, {"N001": {"from": "No1", "to": "No2"}}):
             result = main._sync_students_from_attendance_rosters(
                 sheets_service, firestore_service
             )
@@ -576,7 +576,7 @@ class TestTransferredStudents:
         )
         firestore_service = self._firestore()
 
-        with patch.dict(main.ATTENDANCE_ROSTER_TRANSFERRED_STUDENTS, {"N001": "No2"}):
+        with patch.dict(main.ATTENDANCE_ROSTER_TRANSFERRED_STUDENTS, {"N001": {"from": "No1", "to": "No2"}}):
             result = main._sync_students_from_attendance_rosters(
                 sheets_service, firestore_service
             )
@@ -594,7 +594,7 @@ class TestTransferredStudents:
         )
         firestore_service = self._firestore()
 
-        with patch.dict(main.ATTENDANCE_ROSTER_TRANSFERRED_STUDENTS, {"N001": "No2"}):
+        with patch.dict(main.ATTENDANCE_ROSTER_TRANSFERRED_STUDENTS, {"N001": {"from": "No1", "to": "No2"}}):
             main._sync_students_from_attendance_rosters(
                 sheets_service, firestore_service
             )
@@ -612,7 +612,7 @@ class TestTransferredStudents:
         )
         firestore_service = self._firestore()
 
-        with patch.dict(main.ATTENDANCE_ROSTER_TRANSFERRED_STUDENTS, {"N001": "No2"}):
+        with patch.dict(main.ATTENDANCE_ROSTER_TRANSFERRED_STUDENTS, {"N001": {"from": "No1", "to": "No2"}}):
             result = main._sync_students_from_attendance_rosters(
                 sheets_service, firestore_service, dry_run=True
             )
@@ -622,3 +622,69 @@ class TestTransferredStudents:
             {"student_id": "N001", "from": "No1", "to": "No2"}
         ]
         firestore_service.create_student.assert_not_called()
+
+    def test_row_in_an_unconfirmed_class_is_not_dropped_and_still_aborts(
+        self, patched_config
+    ):
+        """確認済みの異動元(No1)以外(No3)に載った重複は、読み飛ばさず中断する。"""
+        with patch.dict(main.ATTENDANCE_ROSTER_FILE_IDS, {"03": "sheet-id-03"}), patch(
+            "main.KNOWN_CLASSES", ["dummy"] * 3
+        ):
+            sheets_service = Mock()
+            sheets_service.get_attendance_roster_data.side_effect = [
+                RosterReadResult(
+                    class_name="No1", status="ok", students=[_student("N001")]
+                ),
+                RosterReadResult(
+                    class_name="No2",
+                    status="ok",
+                    students=[_student("N001", class_name="No2")],
+                ),
+                RosterReadResult(
+                    class_name="No3",
+                    status="ok",
+                    students=[_student("N001", class_name="No3")],
+                ),
+            ]
+            firestore_service = self._firestore()
+
+            with patch.dict(
+                main.ATTENDANCE_ROSTER_TRANSFERRED_STUDENTS,
+                {"N001": {"from": "No1", "to": "No2"}},
+            ):
+                result = main._sync_students_from_attendance_rosters(
+                    sheets_service, firestore_service
+                )
+
+        assert result["status"] == "aborted"
+        assert result["duplicate_student_ids"] == [
+            {"student_id": "N001", "classes": ["No2", "No3"]}
+        ]
+        firestore_service.create_student.assert_not_called()
+
+    def test_old_class_emptied_by_transfer_still_reconciles_other_withdrawals(
+        self, patched_config
+    ):
+        """異動行の読み飛ばしで名簿が空になっても、退会者の照合は続ける。"""
+        sheets_service = Mock()
+        sheets_service.get_attendance_roster_data.side_effect = self._rosters(
+            ["N001"], ["N001"]
+        )
+        firestore_service = self._firestore()
+        firestore_service.get_student_ids_by_class_and_source.side_effect = (
+            lambda class_name, sync_source: (
+                {"N001": "active", "N009": "active"} if class_name == "No1" else {}
+            )
+        )
+        firestore_service.mark_student_withdrawn.return_value = True
+
+        with patch.dict(
+            main.ATTENDANCE_ROSTER_TRANSFERRED_STUDENTS,
+            {"N001": {"from": "No1", "to": "No2"}},
+        ):
+            result = main._sync_students_from_attendance_rosters(
+                sheets_service, firestore_service
+            )
+
+        assert result["status"] == "success"
+        firestore_service.mark_student_withdrawn.assert_called_once_with("N009")

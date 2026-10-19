@@ -806,14 +806,18 @@ def _sync_students_from_attendance_rosters(
     for r in class_results.values():
         kept = []
         for s in r.students:
-            dest = ATTENDANCE_ROSTER_TRANSFERRED_STUDENTS.get(s["student_id"])
+            transfer = ATTENDANCE_ROSTER_TRANSFERRED_STUDENTS.get(s["student_id"])
             if (
-                dest
-                and dest != r.class_name
-                and s["student_id"] in ids_by_class.get(dest, set())
+                transfer
+                and transfer["from"] == r.class_name
+                and s["student_id"] in ids_by_class.get(transfer["to"], set())
             ):
                 transferred_students.append(
-                    {"student_id": s["student_id"], "from": r.class_name, "to": dest}
+                    {
+                        "student_id": s["student_id"],
+                        "from": r.class_name,
+                        "to": transfer["to"],
+                    }
                 )
                 continue
             kept.append(s)
@@ -938,7 +942,9 @@ def _sync_students_from_attendance_rosters(
         # 「0件を無条件に信頼する」事故。pr-review-toolkit code-reviewer
         # 指摘対応、2026-09-14)。トレードオフとして、あるクラスの最後の
         # 1名が正当に退会したケースは自動検出されず、手動対応が必要になる。
-        if not write_error_ids and r.students:
+        # 読み取り時点で0件だった名簿だけを対象外にする（異動行の読み飛ばしで空に
+        # なった名簿は、ほかの受講者の退会照合を続ける）
+        if not write_error_ids and r.status != "empty":
             try:
                 existing_ids = firestore_service.get_student_ids_by_class_and_source(
                     r.class_name, "attendance_roster"
