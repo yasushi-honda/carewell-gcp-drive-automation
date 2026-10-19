@@ -12,6 +12,7 @@ from flask import Request
 import auth
 from config.classes import (
     ATTENDANCE_ROSTER_FILE_IDS,
+    ATTENDANCE_ROSTER_TRANSFERRED_STUDENTS,
     KNOWN_CLASSES,
     KNOWN_TASK_IDS,
     get_current_academic_year_prefix,
@@ -795,6 +796,57 @@ def _sync_students_from_attendance_rosters(
             spreadsheet_id, class_name
         )
 
+    # 異動済みと確認した受講者は、異動先の名簿に載っている場合に限り、旧クラスの行を
+    # 読み飛ばす（異動先に居ないのに旧クラスからも外すと、在籍者が名簿から消える）
+    ids_by_class = {
+        r.class_name: {s["student_id"] for s in r.students}
+        for r in class_results.values()
+    }
+    transferred_students = []
+    for r in class_results.values():
+        # 異動元に同じ日介番号が複数行ある場合は読み飛ばさず、クラス内重複として
+        # 従来どおり検出させる
+        row_counts: dict = {}
+        for s in r.students:
+            row_counts[s["student_id"]] = row_counts.get(s["student_id"], 0) + 1
+        kept = []
+        for s in r.students:
+            transfer = ATTENDANCE_ROSTER_TRANSFERRED_STUDENTS.get(s["student_id"])
+            if (
+                transfer
+                and row_counts[s["student_id"]] == 1
+                and transfer["from"] == r.class_name
+                and s["student_id"] in ids_by_class.get(transfer["to"], set())
+            ):
+                transferred_students.append(
+                    {
+                        "student_id": s["student_id"],
+                        "from": r.class_name,
+                        "to": transfer["to"],
+                    }
+                )
+                continue
+            kept.append(s)
+        r.students = kept
+    if transferred_students:
+        logger.info(
+            f"Attendance roster sync: skipped {len(transferred_students)} "
+            f"transferred student rows in old classes: {transferred_students}"
+        )
+    # 登録しているのに適用されなかった異動（異動先の名簿に居ない、クラス名の誤記、
+    # 異動元に重複行がある等）を運用者が気づけるよう、診断に出す
+    applied_ids = {t["student_id"] for t in transferred_students}
+    unapplied_transfers = [
+        {"student_id": sid, "from": t["from"], "to": t["to"]}
+        for sid, t in ATTENDANCE_ROSTER_TRANSFERRED_STUDENTS.items()
+        if sid not in applied_ids
+    ]
+    if unapplied_transfers:
+        logger.warning(
+            f"Attendance roster sync: {len(unapplied_transfers)} registered "
+            f"transfers were not applied: {unapplied_transfers}"
+        )
+
     all_class_nums = [f"{i:02d}" for i in range(1, len(KNOWN_CLASSES) + 1)]
     not_configured_classes = [
         f"No{int(n)}" for n in all_class_nums if n not in ATTENDANCE_ROSTER_FILE_IDS
@@ -829,6 +881,8 @@ def _sync_students_from_attendance_rosters(
         "error_classes": error_classes,
         "malformed_rows": malformed_summary,
         "duplicate_student_ids": duplicate_student_ids,
+        "transferred_students": transferred_students,
+        "unapplied_transfers": unapplied_transfers,
     }
 
     can_write = (
@@ -908,6 +962,15 @@ def _sync_students_from_attendance_rosters(
         # 「0件を無条件に信頼する」事故。pr-review-toolkit code-reviewer
         # 指摘対応、2026-09-14)。トレードオフとして、あるクラスの最後の
         # 1名が正当に退会したケースは自動検出されず、手動対応が必要になる。
+        # 異動行の読み飛ばし後に空になった名簿も対象外にする（在籍者の行が誤って
+        # 全削除され、グレーの異動行だけが残ったケースで、旧クラスの在籍者全員を
+        # withdrawn化しないため。fail-closed）
+        if not r.students and transferred_students:
+            logger.warning(
+                f"Reconcile skipped for class={r.class_name}: roster is empty "
+                f"(transferred rows skipped: "
+                f"{sum(1 for t in transferred_students if t['from'] == r.class_name)})"
+            )
         if not write_error_ids and r.students:
             try:
                 existing_ids = firestore_service.get_student_ids_by_class_and_source(
