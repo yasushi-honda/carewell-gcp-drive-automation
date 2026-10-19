@@ -750,3 +750,32 @@ class TestTransferredStudents:
             )
 
         assert result["unapplied_transfers"] == []
+
+    def test_reconcile_in_old_class_does_not_withdraw_the_transferred_student(
+        self, patched_config
+    ):
+        """旧クラスに他の受講者が残り退会照合が走るとき、旧クラスのドキュメントとして
+        返る異動者(読み飛ばし済み)を withdrawn 化しない。"""
+        sheets_service = Mock()
+        sheets_service.get_attendance_roster_data.side_effect = self._rosters(
+            ["N001", "N002"], ["N001"]
+        )
+        firestore_service = self._firestore()
+        firestore_service.get_student_ids_by_class_and_source.side_effect = (
+            lambda class_name, sync_source: (
+                {"N001": "active", "N002": "active"} if class_name == "No1" else {}
+            )
+        )
+
+        with patch.dict(
+            main.ATTENDANCE_ROSTER_TRANSFERRED_STUDENTS,
+            {"N001": {"from": "No1", "to": "No2"}},
+        ):
+            result = main._sync_students_from_attendance_rosters(
+                sheets_service, firestore_service
+            )
+
+        assert result["status"] == "success"
+        firestore_service.mark_student_withdrawn.assert_not_called()
+        no1 = next(c for c in result["classes"] if c["class_name"] == "No1")
+        assert no1["withdrawn"] == 0
