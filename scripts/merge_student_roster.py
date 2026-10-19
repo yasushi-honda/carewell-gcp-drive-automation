@@ -767,7 +767,7 @@ def read_other_class_nichikai(class_num: str) -> dict:
             continue
         name = f"No{int(other_num)}"
         try:
-            rows = _get_values(spreadsheet_id, f"'{ROSTER_TARGET_TAB}'!C2:C1000")
+            rows = _get_values(spreadsheet_id, f"'{ROSTER_TARGET_TAB}'!C2:C")
             result[name] = {r[0].strip() for r in rows if r and r[0].strip()}
         except Exception as e:  # 読取り失敗は握りつぶさず、ゲートで失敗として扱う
             print(f"[警告] {name}の名簿を読み取れませんでした: {type(e).__name__}")

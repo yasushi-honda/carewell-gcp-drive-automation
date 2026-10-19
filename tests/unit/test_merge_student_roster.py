@@ -849,3 +849,16 @@ class TestReadOtherClassNichikai:
         monkeypatch.setattr(m, "KNOWN_ATTENDANCE_FILE_IDS", {"01": "s1", "04": "s4"})
         monkeypatch.setattr(m, "_get_values", boom)
         assert read_other_class_nichikai("04") == {"No1": None}
+
+    def test_reads_the_same_open_ended_range_as_the_dashboard_sync(self, monkeypatch):
+        """名簿同期（src/sheets_service.py）はC列を末尾まで読む。検証側も同じ範囲を読み、
+        1001行目以降の重複を見逃さない。"""
+        import merge_student_roster as m
+
+        seen = []
+        monkeypatch.setattr(m, "KNOWN_ATTENDANCE_FILE_IDS", {"01": "s1", "04": "s4"})
+        monkeypatch.setattr(
+            m, "_get_values", lambda sid, rng: seen.append(rng) or [["N1"]]
+        )
+        read_other_class_nichikai("04")
+        assert seen and all(r.endswith("!C2:C") for r in seen), seen
