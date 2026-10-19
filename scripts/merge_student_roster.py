@@ -127,6 +127,43 @@ GROUP_CATEGORY_MAP_BY_CLASS = {
         "Q": "通所系訪問系",
         "R": "居宅介護支援",
     },
+    # 2026-10-19、クラス01〜03と同じ推定ルールをクラス04・05に適用(decision-maker承認済み)。
+    # グループ構成はA〜J・K〜Q・Rで01〜03と同一。サービス種別内訳: 04のRは居宅介護支援11/17件、
+    # 05のRは15/16件(無回答1)。04のM群と05のQ群は種別が混在するが、02と同程度の少数混在の範囲内。
+    "04": {
+        "A": "入所系居住系",
+        "B": "入所系居住系",
+        "C": "入所系居住系",
+        "D": "入所系居住系",
+        "E": "入所系居住系",
+        "F": "入所系居住系",
+        "G": "入所系居住系",
+        "H": "入所系居住系",
+        "J": "入所系居住系",
+        "K": "通所系訪問系",
+        "M": "通所系訪問系",
+        "N": "通所系訪問系",
+        "P": "通所系訪問系",
+        "Q": "通所系訪問系",
+        "R": "居宅介護支援",
+    },
+    "05": {
+        "A": "入所系居住系",
+        "B": "入所系居住系",
+        "C": "入所系居住系",
+        "D": "入所系居住系",
+        "E": "入所系居住系",
+        "F": "入所系居住系",
+        "G": "入所系居住系",
+        "H": "入所系居住系",
+        "J": "入所系居住系",
+        "K": "通所系訪問系",
+        "M": "通所系訪問系",
+        "N": "通所系訪問系",
+        "P": "通所系訪問系",
+        "Q": "通所系訪問系",
+        "R": "居宅介護支援",
+    },
 }
 
 # 自動正規化(NFKC/カタカナ→ひらがな変換)では解決できない名寄せ例外のみ登録する。
@@ -142,6 +179,14 @@ MATCH_EXCEPTIONS_BY_CLASS = {
         # 亀澤龍一: クライアント側ふりがな「かめざわりゆういち」/ 申込データ側「カメザワリュウイチ」(拗音表記ゆれ)
         "M171": "N9906725",
     },
+    # 2026-10-19、共有「№04_グループ分け」(受講者リスト作業用タブ)の日介番号で人間確認済み。
+    "04": {
+        # J143: 申込データに同姓同名(日介番号N9904554とN9906729)がいて氏名では
+        # 決められない。グループ分けではJ143=N9904554、N9906729は№04のグループ分けに存在しない
+        "J143": "N9904554",
+        # C037: 申込データに氏名+ふりがなで一致する行が無い(表記ゆれ)。グループ分けでC037=N9907040
+        "C037": "N9907040",
+    },
 }
 
 # クラスごとの正しい受講者総数(人間が別途確認した値のみ登録する)。
@@ -153,6 +198,8 @@ EXPECTED_STUDENT_COUNT_BY_CLASS = {
     "01": 254,
     "02": 249,
     "03": 254,
+    "04": 252,
+    "05": 237,
 }
 
 
@@ -294,12 +341,21 @@ def validate_student_number_sequence(client_rows: list[dict]) -> list[str]:
     return issues
 
 
-def _find_key_duplicates(rows: list[dict], label: str) -> list[str]:
+def _find_key_duplicates(
+    rows: list[dict], label: str, exempt_keys: set[tuple] | None = None
+) -> list[str]:
+    """氏名+ふりがなキーの重複を報告する。
+
+    exempt_keysは、人間確認済みの例外テーブル(受講者番号→日介番号)で日介番号を
+    確定できるキー。同姓同名の別人が申込データに複数いても、IDで一意に決まるため
+    重複として扱わない(該当キー以外の重複は検出し続ける)。
+    """
+    exempt = exempt_keys or set()
     keys: dict[tuple, list[str]] = {}
     for r in rows:
         k = normalize_key(r["name"], r["kana"])
         keys.setdefault(k, []).append(r.get("student_number") or r.get("nichikai", ""))
-    dups = {k: v for k, v in keys.items() if len(v) > 1}
+    dups = {k: v for k, v in keys.items() if len(v) > 1 and k not in exempt}
     if not dups:
         return []
     return [f"{label}で氏名+ふりがなキーが重複しています: {dups}"]
@@ -338,7 +394,9 @@ def match_students(
             app = candidates[0]
             normally_matched_nichikai.add(app["nichikai"])
             direct_match[i] = app
-        elif len(candidates) == 0:
+        elif len(candidates) == 0 or c["student_number"] in match_exceptions:
+            # 候補0件、または候補が複数(同姓同名)でも人間確認済みの例外があれば、
+            # 例外テーブルの日介番号で確定させる(例外が無い曖昧一致は未突合のまま)
             pending_exception.append((i, c))
         else:
             unmatched_indices.add(i)
@@ -350,6 +408,16 @@ def match_students(
     for i, c in pending_exception:
         expected_nichikai = match_exceptions.get(c["student_number"])
         if expected_nichikai is None:
+            unmatched_indices.add(i)
+            continue
+        key_candidates = app_by_key.get(normalize_key(c["name"], c["kana"]), [])
+        if len(key_candidates) > 1 and expected_nichikai not in {
+            r["nichikai"] for r in key_candidates
+        }:
+            exception_issues.append(
+                f"例外テーブル対象 {c['student_number']} の日介番号 {expected_nichikai} は"
+                f"同一氏名+ふりがなの申込データ候補に含まれません"
+            )
             unmatched_indices.add(i)
             continue
         nichikai_candidates = [
@@ -459,9 +527,18 @@ def run_validation_gates(
 
     results["0_受講者総数"] = validate_expected_count(client_rows, expected_count)
     results["1_受講者番号連番"] = validate_student_number_sequence(client_rows)
+    # 申込データ側の同姓同名は、該当キーの正本行すべてに例外テーブルがある場合だけ免除する
+    client_by_key: dict[tuple, list[dict]] = {}
+    for r in client_rows:
+        client_by_key.setdefault(normalize_key(r["name"], r["kana"]), []).append(r)
+    resolved_keys = {
+        k
+        for k, rows in client_by_key.items()
+        if all(r["student_number"] in match_exceptions for r in rows)
+    }
     results["2_氏名ふりがなキー重複"] = _find_key_duplicates(
         client_rows, "クライアント正本"
-    ) + _find_key_duplicates(app_rows, "申込データ")
+    ) + _find_key_duplicates(app_rows, "申込データ", exempt_keys=resolved_keys)
 
     merged, unmatched, exception_issues, exception_used_for = match_students(
         client_rows, app_rows, match_exceptions

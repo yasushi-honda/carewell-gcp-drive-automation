@@ -25,6 +25,7 @@ from merge_student_roster import (  # noqa: E402
     normalize_key,
     parse_application_data,
     parse_client_source,
+    run_validation_gates,
     validate_expected_count,
     validate_group_mapping,
     validate_nichikai_uniqueness,
@@ -657,3 +658,79 @@ class TestApplyRosterProtection:
         self._patch_hide_sensitive_sheets(monkeypatch, tmp_path, _capture)
         _apply_roster_protection("02")
         assert captured["commit"] is True
+
+
+class TestExceptionResolvesAmbiguousApplicationKey:
+    """申込データに同一キー(同姓同名)が複数ある場合、人間確認済みの例外で日介番号を確定する。"""
+
+    def _ambiguous_pair(self):
+        return [
+            app_row(name="溝口 豪", kana="みぞぐち たけし", nichikai="N9904554"),
+            app_row(name="溝口 豪", kana="みぞぐち たけし", nichikai="N9906729"),
+        ]
+
+    def test_exception_picks_the_listed_nichikai_among_ambiguous_candidates(self):
+        c = client_row(student_number="J143", name="溝口 豪", kana="みぞぐち たけし")
+        merged, unmatched, exc_issues, exc_used = match_students(
+            [c], self._ambiguous_pair(), {"J143": "N9904554"}
+        )
+        assert [r["nichikai"] for r in merged] == ["N9904554"]
+        assert unmatched == []
+        assert exc_issues == []
+        assert exc_used == ["J143"]
+
+    def test_ambiguous_without_exception_is_still_unmatched(self):
+        c = client_row(student_number="J143", name="溝口 豪", kana="みぞぐち たけし")
+        merged, unmatched, _, _ = match_students([c], self._ambiguous_pair(), {})
+        assert merged == []
+        assert unmatched == ["J143"]
+
+    def test_exception_nichikai_outside_ambiguous_candidates_is_rejected(self):
+        c = client_row(student_number="J143", name="溝口 豪", kana="みぞぐち たけし")
+        other = app_row(name="別人 一郎", kana="べつじん いちろう", nichikai="N0000099")
+        merged, unmatched, exc_issues, _ = match_students(
+            [c], self._ambiguous_pair() + [other], {"J143": "N0000099"}
+        )
+        assert merged == []
+        assert unmatched == ["J143"]
+        assert any("候補に含まれません" in i for i in exc_issues)
+
+    def test_exception_does_not_override_a_unique_direct_match(self):
+        c = client_row(student_number="A001")
+        merged, _, _, exc_used = match_students(
+            [c], [app_row(nichikai="N0000001")], {"A001": "N0000001"}
+        )
+        assert [r["nichikai"] for r in merged] == ["N0000001"]
+        assert exc_used == []
+
+    def test_application_key_duplicate_is_exempt_only_when_every_client_row_has_exception(
+        self,
+    ):
+        c = client_row(student_number="J143", name="溝口 豪", kana="みぞぐち たけし")
+        key = normalize_key(c["name"], c["kana"])
+        assert _find_key_duplicates(self._ambiguous_pair(), "申込データ") != []
+        assert (
+            _find_key_duplicates(
+                self._ambiguous_pair(), "申込データ", exempt_keys={key}
+            )
+            == []
+        )
+        # 免除は指定キーに限る(他のキーの重複は検出し続ける)
+        other = [app_row(nichikai="N1"), app_row(nichikai="N2")]
+        assert _find_key_duplicates(other, "申込データ", exempt_keys={key}) != []
+
+    def test_gates_pass_end_to_end_with_exception_for_ambiguous_pair(self):
+        c = client_row(student_number="A001", name="溝口 豪", kana="みぞぐち たけし")
+        merged, results = run_validation_gates(
+            [c], self._ambiguous_pair(), {"A": "入所系居住系"}, {"A001": "N9904554"}, 1
+        )
+        assert all(v == [] for v in results.values()), results
+        assert [r["nichikai"] for r in merged] == ["N9904554"]
+
+    def test_gate_still_fails_for_ambiguous_pair_without_exception(self):
+        c = client_row(student_number="A001", name="溝口 豪", kana="みぞぐち たけし")
+        _, results = run_validation_gates(
+            [c], self._ambiguous_pair(), {"A": "入所系居住系"}, {}, 1
+        )
+        assert results["2_氏名ふりがなキー重複"] != []
+        assert results["3_氏名ふりがなキー突合率"] != []
