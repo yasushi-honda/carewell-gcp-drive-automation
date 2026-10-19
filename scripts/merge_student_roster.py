@@ -31,6 +31,7 @@ from src.config.classes import (  # noqa: E402
     ATTENDANCE_ROSTER_FILE_IDS as KNOWN_ATTENDANCE_FILE_IDS,
 )
 from src.config.classes import ATTENDANCE_ROSTER_HEADER as ROSTER_HEADER  # noqa: E402
+from src.config.classes import ATTENDANCE_ROSTER_TRANSFERRED_STUDENTS
 from src.gcp_sa_auth import call_with_reauth, get_impersonated_service  # noqa: E402
 
 SA_EMAIL = "carewell-automation-sa@carewell-automation.iam.gserviceaccount.com"
@@ -512,12 +513,56 @@ def validate_nichikai_uniqueness(merged: list[dict]) -> list[str]:
     return [f"日介番号が複数の受講者にマッピングされています: {dup}"]
 
 
+def find_cross_class_nichikai_duplicates(
+    merged: list[dict],
+    other_class_ids: dict,
+    class_name: str,
+    transfers: dict,
+) -> list[str]:
+    """取込み対象の日介番号が、他クラスの「受講者リスト」と重複していないか検査する。
+
+    重複するとDashboardの名簿同期が、書込み前に全クラスで中断する
+    (2026-10-19、№04で3件を見逃した)。人間確認済みの異動者
+    (ATTENDANCE_ROSTER_TRANSFERRED_STUDENTS)は、異動元と異動先の組だけを許容する
+    (第三のクラスとの重複は許容しない)。
+
+    Args:
+        other_class_ids: クラス名(例: "No1") -> そのクラスの日介番号の集合。
+            読み取れなかったクラスはNone(fail-closed: 検証できないため失敗にする)
+    """
+    issues = []
+    unreadable = sorted(c for c, ids in other_class_ids.items() if ids is None)
+    if unreadable:
+        issues.append(f"他クラスの名簿を読み取れず、重複を検証できません: {unreadable}")
+    dups: dict[str, list[str]] = {}
+    for row in merged:
+        nichikai = row["nichikai"].strip()
+        if not nichikai:
+            continue
+        for other, ids in other_class_ids.items():
+            if not ids or nichikai not in ids:
+                continue
+            t = transfers.get(nichikai)
+            if t and {t["from"], t["to"]} == {class_name, other}:
+                continue
+            dups.setdefault(nichikai, []).append(other)
+    for nichikai, classes in sorted(dups.items()):
+        issues.append(
+            f"日介番号{nichikai}が他クラス{sorted(classes)}の名簿にも載っています"
+            f"（異動なら人間確認のうえATTENDANCE_ROSTER_TRANSFERRED_STUDENTSへ登録）"
+        )
+    return issues
+
+
 def run_validation_gates(
     client_rows: list[dict],
     app_rows: list[dict],
     category_map: dict[str, str],
     match_exceptions: dict[str, str],
     expected_count: int,
+    other_class_ids: dict | None = None,
+    class_name: str | None = None,
+    transfers: dict | None = None,
 ) -> tuple[list[dict], dict[str, list[str]]]:
     """全検証ゲートを実行し、(マージ結果, ゲート名->issuesのdict) を返す。
 
@@ -557,6 +602,10 @@ def run_validation_gates(
     )
     results["6_受講者番号重複"] = validate_student_number_uniqueness(merged)
     results["8_日介番号重複"] = validate_nichikai_uniqueness(merged)
+    if other_class_ids is not None:
+        results["9_他クラス日介番号重複"] = find_cross_class_nichikai_duplicates(
+            merged, other_class_ids, class_name or "", transfers or {}
+        )
 
     return merged, results
 
@@ -707,6 +756,25 @@ def _get_values(spreadsheet_id: str, range_: str) -> list[list[str]]:
     return [[str(c) for c in row] for row in result.get("values", [])]
 
 
+def read_other_class_nichikai(class_num: str) -> dict:
+    """他クラスの「受講者リスト」の日介番号(C列)を読む。クラス名(No{N}) -> 集合。
+
+    読み取りに失敗したクラスはNone（検証できないため、ゲート側でfail-closedにする）。
+    """
+    result: dict = {}
+    for other_num, spreadsheet_id in KNOWN_ATTENDANCE_FILE_IDS.items():
+        if other_num == class_num:
+            continue
+        name = f"No{int(other_num)}"
+        try:
+            rows = _get_values(spreadsheet_id, f"'{ROSTER_TARGET_TAB}'!C2:C")
+            result[name] = {r[0].strip() for r in rows if r and r[0].strip()}
+        except Exception as e:  # 読取り失敗は握りつぶさず、ゲートで失敗として扱う
+            print(f"[警告] {name}の名簿を読み取れませんでした: {type(e).__name__}")
+            result[name] = None
+    return result
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
@@ -756,7 +824,14 @@ def main() -> int:
     app_rows = parse_application_data(app_raw, app_tab)
 
     merged, gate_results = run_validation_gates(
-        client_rows, app_rows, category_map, match_exceptions, expected_count
+        client_rows,
+        app_rows,
+        category_map,
+        match_exceptions,
+        expected_count,
+        other_class_ids=read_other_class_nichikai(class_num),
+        class_name=f"No{int(class_num)}",
+        transfers=ATTENDANCE_ROSTER_TRANSFERRED_STUDENTS,
     )
 
     print(f"=== クラス{class_num} 検証ゲート結果 ===")
