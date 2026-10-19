@@ -710,3 +710,43 @@ class TestTransferredStudents:
         assert result["status"] == "aborted"
         assert result["transferred_students"] == []
         firestore_service.create_student.assert_not_called()
+
+    def test_unapplied_registered_transfer_is_reported(self, patched_config):
+        """異動先の名簿に居ないため適用されなかった登録は、診断に出る（黙って残さない）。"""
+        sheets_service = Mock()
+        sheets_service.get_attendance_roster_data.side_effect = self._rosters(
+            ["N001", "N002"], ["N003"]
+        )
+        firestore_service = self._firestore()
+
+        with patch.dict(
+            main.ATTENDANCE_ROSTER_TRANSFERRED_STUDENTS,
+            {"N001": {"from": "No1", "to": "No2"}},
+            clear=True,
+        ):
+            result = main._sync_students_from_attendance_rosters(
+                sheets_service, firestore_service, dry_run=True
+            )
+
+        assert result["transferred_students"] == []
+        assert result["unapplied_transfers"] == [
+            {"student_id": "N001", "from": "No1", "to": "No2"}
+        ]
+
+    def test_applied_transfer_is_not_listed_as_unapplied(self, patched_config):
+        sheets_service = Mock()
+        sheets_service.get_attendance_roster_data.side_effect = self._rosters(
+            ["N001"], ["N001"]
+        )
+        firestore_service = self._firestore()
+
+        with patch.dict(
+            main.ATTENDANCE_ROSTER_TRANSFERRED_STUDENTS,
+            {"N001": {"from": "No1", "to": "No2"}},
+            clear=True,
+        ):
+            result = main._sync_students_from_attendance_rosters(
+                sheets_service, firestore_service, dry_run=True
+            )
+
+        assert result["unapplied_transfers"] == []

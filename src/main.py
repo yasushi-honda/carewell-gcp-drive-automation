@@ -831,7 +831,20 @@ def _sync_students_from_attendance_rosters(
     if transferred_students:
         logger.info(
             f"Attendance roster sync: skipped {len(transferred_students)} "
-            f"transferred student rows in old classes"
+            f"transferred student rows in old classes: {transferred_students}"
+        )
+    # 登録しているのに適用されなかった異動（異動先の名簿に居ない、クラス名の誤記、
+    # 異動元に重複行がある等）を運用者が気づけるよう、診断に出す
+    applied_ids = {t["student_id"] for t in transferred_students}
+    unapplied_transfers = [
+        {"student_id": sid, "from": t["from"], "to": t["to"]}
+        for sid, t in ATTENDANCE_ROSTER_TRANSFERRED_STUDENTS.items()
+        if sid not in applied_ids
+    ]
+    if unapplied_transfers:
+        logger.warning(
+            f"Attendance roster sync: {len(unapplied_transfers)} registered "
+            f"transfers were not applied: {unapplied_transfers}"
         )
 
     all_class_nums = [f"{i:02d}" for i in range(1, len(KNOWN_CLASSES) + 1)]
@@ -869,6 +882,7 @@ def _sync_students_from_attendance_rosters(
         "malformed_rows": malformed_summary,
         "duplicate_student_ids": duplicate_student_ids,
         "transferred_students": transferred_students,
+        "unapplied_transfers": unapplied_transfers,
     }
 
     can_write = (
@@ -951,6 +965,12 @@ def _sync_students_from_attendance_rosters(
         # 異動行の読み飛ばし後に空になった名簿も対象外にする（在籍者の行が誤って
         # 全削除され、グレーの異動行だけが残ったケースで、旧クラスの在籍者全員を
         # withdrawn化しないため。fail-closed）
+        if not r.students and transferred_students:
+            logger.warning(
+                f"Reconcile skipped for class={r.class_name}: roster is empty "
+                f"(transferred rows skipped: "
+                f"{sum(1 for t in transferred_students if t['from'] == r.class_name)})"
+            )
         if not write_error_ids and r.students:
             try:
                 existing_ids = firestore_service.get_student_ids_by_class_and_source(
