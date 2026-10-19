@@ -965,11 +965,13 @@ def _sync_students_from_attendance_rosters(
         # 異動行の読み飛ばし後に空になった名簿も対象外にする（在籍者の行が誤って
         # 全削除され、グレーの異動行だけが残ったケースで、旧クラスの在籍者全員を
         # withdrawn化しないため。fail-closed）
-        if not r.students and transferred_students:
+        skipped_from_class = sum(
+            1 for t in transferred_students if t["from"] == r.class_name
+        )
+        if not r.students and skipped_from_class:
             logger.warning(
                 f"Reconcile skipped for class={r.class_name}: roster is empty "
-                f"(transferred rows skipped: "
-                f"{sum(1 for t in transferred_students if t['from'] == r.class_name)})"
+                f"after skipping {skipped_from_class} transferred rows"
             )
         if not write_error_ids and r.students:
             try:
