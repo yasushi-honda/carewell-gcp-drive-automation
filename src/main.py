@@ -12,6 +12,7 @@ from flask import Request
 import auth
 from config.classes import (
     ATTENDANCE_ROSTER_FILE_IDS,
+    ATTENDANCE_ROSTER_TRANSFERRED_STUDENTS,
     KNOWN_CLASSES,
     KNOWN_TASK_IDS,
     get_current_academic_year_prefix,
@@ -795,6 +796,34 @@ def _sync_students_from_attendance_rosters(
             spreadsheet_id, class_name
         )
 
+    # 異動済みと確認した受講者は、異動先の名簿に載っている場合に限り、旧クラスの行を
+    # 読み飛ばす（異動先に居ないのに旧クラスからも外すと、在籍者が名簿から消える）
+    ids_by_class = {
+        r.class_name: {s["student_id"] for s in r.students}
+        for r in class_results.values()
+    }
+    transferred_students = []
+    for r in class_results.values():
+        kept = []
+        for s in r.students:
+            dest = ATTENDANCE_ROSTER_TRANSFERRED_STUDENTS.get(s["student_id"])
+            if (
+                dest
+                and dest != r.class_name
+                and s["student_id"] in ids_by_class.get(dest, set())
+            ):
+                transferred_students.append(
+                    {"student_id": s["student_id"], "from": r.class_name, "to": dest}
+                )
+                continue
+            kept.append(s)
+        r.students = kept
+    if transferred_students:
+        logger.info(
+            f"Attendance roster sync: skipped {len(transferred_students)} "
+            f"transferred student rows in old classes"
+        )
+
     all_class_nums = [f"{i:02d}" for i in range(1, len(KNOWN_CLASSES) + 1)]
     not_configured_classes = [
         f"No{int(n)}" for n in all_class_nums if n not in ATTENDANCE_ROSTER_FILE_IDS
@@ -829,6 +858,7 @@ def _sync_students_from_attendance_rosters(
         "error_classes": error_classes,
         "malformed_rows": malformed_summary,
         "duplicate_student_ids": duplicate_student_ids,
+        "transferred_students": transferred_students,
     }
 
     can_write = (

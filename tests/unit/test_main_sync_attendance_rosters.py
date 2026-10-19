@@ -498,3 +498,127 @@ class TestPhaseBWrite:
         firestore_service.mark_student_withdrawn.assert_not_called()
         no1_summary = next(c for c in result["classes"] if c["class_name"] == "No1")
         assert no1_summary["withdrawn"] == 0
+
+
+class TestTransferredStudents:
+    """異動(例: No1→No2)済みと人間が確認した受講者は、旧クラスの名簿から読み飛ばす。
+
+    クライアントは異動した人の行を旧クラスに残す(グレー表示にするだけ)ため、
+    そのままではクラス横断の日介番号重複で全クラスの同期が中断する。
+    """
+
+    def _rosters(self, no1_ids, no2_ids):
+        return [
+            RosterReadResult(
+                class_name="No1",
+                status="ok",
+                students=[_student(i, class_name="No1") for i in no1_ids],
+            ),
+            RosterReadResult(
+                class_name="No2",
+                status="ok",
+                students=[_student(i, class_name="No2") for i in no2_ids],
+            ),
+        ]
+
+    def _firestore(self):
+        firestore_service = Mock()
+        firestore_service.student_exists.return_value = True
+        firestore_service.create_student.return_value = True
+        firestore_service.get_student_ids_by_class_and_source.return_value = {}
+        return firestore_service
+
+    def test_registered_transfer_is_dropped_from_old_class_and_sync_proceeds(
+        self, patched_config
+    ):
+        sheets_service = Mock()
+        sheets_service.get_attendance_roster_data.side_effect = self._rosters(
+            ["N001", "N002"], ["N001"]
+        )
+        firestore_service = self._firestore()
+
+        with patch.dict(main.ATTENDANCE_ROSTER_TRANSFERRED_STUDENTS, {"N001": "No2"}):
+            result = main._sync_students_from_attendance_rosters(
+                sheets_service, firestore_service
+            )
+
+        assert result["status"] == "success"
+        written = [
+            (c.args[0]["student_id"], c.args[0]["class_name"])
+            for c in firestore_service.create_student.call_args_list
+        ]
+        assert sorted(written) == [("N001", "No2"), ("N002", "No1")]
+        no1 = next(c for c in result["classes"] if c["class_name"] == "No1")
+        assert no1["synced"] == 1
+
+    def test_unregistered_duplicate_still_aborts(self, patched_config):
+        sheets_service = Mock()
+        sheets_service.get_attendance_roster_data.side_effect = self._rosters(
+            ["N001", "N002"], ["N001"]
+        )
+        firestore_service = self._firestore()
+
+        with patch.dict(main.ATTENDANCE_ROSTER_TRANSFERRED_STUDENTS, {}, clear=True):
+            result = main._sync_students_from_attendance_rosters(
+                sheets_service, firestore_service
+            )
+
+        assert result["status"] == "aborted"
+        firestore_service.create_student.assert_not_called()
+
+    def test_transfer_is_not_applied_when_destination_roster_lacks_the_student(
+        self, patched_config
+    ):
+        """移動先の名簿に居ない人を旧クラスからも消すと、在籍者が名簿から消えてしまう。"""
+        sheets_service = Mock()
+        sheets_service.get_attendance_roster_data.side_effect = self._rosters(
+            ["N001", "N002"], ["N003"]
+        )
+        firestore_service = self._firestore()
+
+        with patch.dict(main.ATTENDANCE_ROSTER_TRANSFERRED_STUDENTS, {"N001": "No2"}):
+            result = main._sync_students_from_attendance_rosters(
+                sheets_service, firestore_service
+            )
+
+        written = sorted(
+            c.args[0]["student_id"] for c in firestore_service.create_student.call_args_list
+        )
+        assert result["status"] == "success"
+        assert written == ["N001", "N002", "N003"]
+
+    def test_destination_class_row_is_never_dropped(self, patched_config):
+        sheets_service = Mock()
+        sheets_service.get_attendance_roster_data.side_effect = self._rosters(
+            ["N002"], ["N001"]
+        )
+        firestore_service = self._firestore()
+
+        with patch.dict(main.ATTENDANCE_ROSTER_TRANSFERRED_STUDENTS, {"N001": "No2"}):
+            main._sync_students_from_attendance_rosters(
+                sheets_service, firestore_service
+            )
+
+        written = [
+            (c.args[0]["student_id"], c.args[0]["class_name"])
+            for c in firestore_service.create_student.call_args_list
+        ]
+        assert ("N001", "No2") in written
+
+    def test_dry_run_reports_transfers_without_writing(self, patched_config):
+        sheets_service = Mock()
+        sheets_service.get_attendance_roster_data.side_effect = self._rosters(
+            ["N001", "N002"], ["N001"]
+        )
+        firestore_service = self._firestore()
+
+        with patch.dict(main.ATTENDANCE_ROSTER_TRANSFERRED_STUDENTS, {"N001": "No2"}):
+            result = main._sync_students_from_attendance_rosters(
+                sheets_service, firestore_service, dry_run=True
+            )
+
+        assert result["status"] == "success"
+        assert result["transferred_students"] == [
+            {"student_id": "N001", "from": "No1", "to": "No2"}
+        ]
+        firestore_service.create_student.assert_not_called()
