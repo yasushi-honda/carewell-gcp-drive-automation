@@ -792,3 +792,57 @@ class TestTransferredStudents:
         firestore_service.mark_student_withdrawn.assert_not_called()
         no1 = next(c for c in result["classes"] if c["class_name"] == "No1")
         assert no1["withdrawn"] == 0
+
+    def test_reconcile_skip_warning_only_for_classes_with_skipped_transfers(
+        self, patched_config, caplog
+    ):
+        """異動が適用された同期でも、異動と無関係の空クラスには警告を出さない（ログの雑音）。"""
+        with patch.dict(main.ATTENDANCE_ROSTER_FILE_IDS, {"03": "sheet-id-03"}), patch(
+            "main.KNOWN_CLASSES", ["dummy"] * 3
+        ):
+            sheets_service = Mock()
+            sheets_service.get_attendance_roster_data.side_effect = [
+                RosterReadResult(
+                    class_name="No1",
+                    status="ok",
+                    students=[_student("N001"), _student("N002")],
+                ),
+                RosterReadResult(
+                    class_name="No2",
+                    status="ok",
+                    students=[_student("N001", class_name="No2")],
+                ),
+                RosterReadResult(class_name="No3", status="empty", students=[]),
+            ]
+            firestore_service = self._firestore()
+
+            with patch.dict(
+                main.ATTENDANCE_ROSTER_TRANSFERRED_STUDENTS,
+                {"N001": {"from": "No1", "to": "No2"}},
+                clear=True,
+            ), caplog.at_level("WARNING"):
+                main._sync_students_from_attendance_rosters(
+                    sheets_service, firestore_service
+                )
+
+        assert not any("Reconcile skipped" in m for m in caplog.messages)
+
+    def test_reconcile_skip_warning_when_transfer_rows_empty_the_old_class(
+        self, patched_config, caplog
+    ):
+        sheets_service = Mock()
+        sheets_service.get_attendance_roster_data.side_effect = self._rosters(
+            ["N001"], ["N001"]
+        )
+        firestore_service = self._firestore()
+
+        with patch.dict(
+            main.ATTENDANCE_ROSTER_TRANSFERRED_STUDENTS,
+            {"N001": {"from": "No1", "to": "No2"}},
+            clear=True,
+        ), caplog.at_level("WARNING"):
+            main._sync_students_from_attendance_rosters(
+                sheets_service, firestore_service
+            )
+
+        assert any("Reconcile skipped for class=No1" in m for m in caplog.messages)
