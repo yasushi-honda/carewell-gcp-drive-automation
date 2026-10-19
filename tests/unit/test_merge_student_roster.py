@@ -21,10 +21,12 @@ from merge_student_roster import (  # noqa: E402
     _rstrip_blank_rows,
     _scratch_dir,
     build_target_matrix,
+    find_cross_class_nichikai_duplicates,
     match_students,
     normalize_key,
     parse_application_data,
     parse_client_source,
+    read_other_class_nichikai,
     run_validation_gates,
     validate_expected_count,
     validate_group_mapping,
@@ -734,3 +736,116 @@ class TestExceptionResolvesAmbiguousApplicationKey:
         )
         assert results["2_氏名ふりがなキー重複"] != []
         assert results["3_氏名ふりがなキー突合率"] != []
+
+
+class TestCrossClassNichikaiGate:
+    """他クラスの「受講者リスト」と日介番号が重複する場合は、書込み前に止める。
+
+    重複するとDashboardの名簿同期が全クラスで中断する（2026-10-19、№04で3件）。
+    人間確認済みの異動者（ATTENDANCE_ROSTER_TRANSFERRED_STUDENTS）だけは許容する。
+    """
+
+    def merged(self, *nichikai):
+        return [
+            {"student_number": f"A{i:03d}", "nichikai": n}
+            for i, n in enumerate(nichikai, start=1)
+        ]
+
+    def test_no_overlap_passes(self):
+        assert (
+            find_cross_class_nichikai_duplicates(
+                self.merged("N1", "N2"), {"No1": {"N9"}}, "No4", {}
+            )
+            == []
+        )
+
+    def test_overlap_with_other_class_fails_and_names_the_classes(self):
+        issues = find_cross_class_nichikai_duplicates(
+            self.merged("N1", "N2"), {"No1": {"N2"}, "No2": {"N8"}}, "No4", {}
+        )
+        assert len(issues) == 1
+        assert "N2" in issues[0] and "No1" in issues[0]
+
+    def test_registered_transfer_into_this_class_is_allowed(self):
+        transfers = {"N2": {"from": "No1", "to": "No4"}}
+        assert (
+            find_cross_class_nichikai_duplicates(
+                self.merged("N1", "N2"), {"No1": {"N2"}}, "No4", transfers
+            )
+            == []
+        )
+
+    def test_registered_transfer_out_of_this_class_is_allowed(self):
+        """異動元(No1)を再取込みするときも、登録済みの異動者は許容する。"""
+        transfers = {"N2": {"from": "No1", "to": "No4"}}
+        assert (
+            find_cross_class_nichikai_duplicates(
+                self.merged("N1", "N2"), {"No4": {"N2"}}, "No1", transfers
+            )
+            == []
+        )
+
+    def test_registered_transfer_does_not_excuse_a_third_class(self):
+        transfers = {"N2": {"from": "No1", "to": "No4"}}
+        issues = find_cross_class_nichikai_duplicates(
+            self.merged("N2"), {"No1": {"N2"}, "No3": {"N2"}}, "No4", transfers
+        )
+        assert len(issues) == 1
+        assert "No3" in issues[0]
+
+    def test_unreadable_other_class_fails_closed(self):
+        issues = find_cross_class_nichikai_duplicates(
+            self.merged("N1"), {"No1": None}, "No4", {}
+        )
+        assert len(issues) == 1
+        assert "No1" in issues[0]
+
+    def test_blank_nichikai_is_ignored(self):
+        assert (
+            find_cross_class_nichikai_duplicates(
+                self.merged("", "N2"), {"No1": {""}}, "No4", {}
+            )
+            == []
+        )
+
+    def test_gate_is_added_to_validation_results_when_other_class_ids_given(self):
+        c = client_row(student_number="A001", name="山田 太郎", kana="やまだ たろう")
+        _, results = run_validation_gates(
+            [c],
+            [app_row(nichikai="N1")],
+            {"A": "入所系居住系"},
+            {},
+            1,
+            other_class_ids={"No1": {"N1"}},
+            class_name="No4",
+            transfers={},
+        )
+        assert results["9_他クラス日介番号重複"] != []
+
+    def test_gate_is_skipped_when_other_class_ids_not_given(self):
+        c = client_row(student_number="A001", name="山田 太郎", kana="やまだ たろう")
+        _, results = run_validation_gates(
+            [c], [app_row(nichikai="N1")], {"A": "入所系居住系"}, {}, 1
+        )
+        assert "9_他クラス日介番号重複" not in results
+
+
+class TestReadOtherClassNichikai:
+    def test_excludes_own_class_and_collects_ids(self, monkeypatch):
+        import merge_student_roster as m
+
+        monkeypatch.setattr(m, "KNOWN_ATTENDANCE_FILE_IDS", {"01": "s1", "04": "s4"})
+        monkeypatch.setattr(
+            m, "_get_values", lambda sid, rng: [["N1"], [" N2 "], [""], []]
+        )
+        assert read_other_class_nichikai("04") == {"No1": {"N1", "N2"}}
+
+    def test_read_failure_becomes_none_not_an_empty_set(self, monkeypatch, capsys):
+        import merge_student_roster as m
+
+        def boom(sid, rng):
+            raise RuntimeError("api down")
+
+        monkeypatch.setattr(m, "KNOWN_ATTENDANCE_FILE_IDS", {"01": "s1", "04": "s4"})
+        monkeypatch.setattr(m, "_get_values", boom)
+        assert read_other_class_nichikai("04") == {"No1": None}
