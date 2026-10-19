@@ -537,7 +537,10 @@ class TestTransferredStudents:
         )
         firestore_service = self._firestore()
 
-        with patch.dict(main.ATTENDANCE_ROSTER_TRANSFERRED_STUDENTS, {"N001": {"from": "No1", "to": "No2"}}):
+        with patch.dict(
+            main.ATTENDANCE_ROSTER_TRANSFERRED_STUDENTS,
+            {"N001": {"from": "No1", "to": "No2"}},
+        ):
             result = main._sync_students_from_attendance_rosters(
                 sheets_service, firestore_service
             )
@@ -576,13 +579,17 @@ class TestTransferredStudents:
         )
         firestore_service = self._firestore()
 
-        with patch.dict(main.ATTENDANCE_ROSTER_TRANSFERRED_STUDENTS, {"N001": {"from": "No1", "to": "No2"}}):
+        with patch.dict(
+            main.ATTENDANCE_ROSTER_TRANSFERRED_STUDENTS,
+            {"N001": {"from": "No1", "to": "No2"}},
+        ):
             result = main._sync_students_from_attendance_rosters(
                 sheets_service, firestore_service
             )
 
         written = sorted(
-            c.args[0]["student_id"] for c in firestore_service.create_student.call_args_list
+            c.args[0]["student_id"]
+            for c in firestore_service.create_student.call_args_list
         )
         assert result["status"] == "success"
         assert written == ["N001", "N002", "N003"]
@@ -594,7 +601,10 @@ class TestTransferredStudents:
         )
         firestore_service = self._firestore()
 
-        with patch.dict(main.ATTENDANCE_ROSTER_TRANSFERRED_STUDENTS, {"N001": {"from": "No1", "to": "No2"}}):
+        with patch.dict(
+            main.ATTENDANCE_ROSTER_TRANSFERRED_STUDENTS,
+            {"N001": {"from": "No1", "to": "No2"}},
+        ):
             main._sync_students_from_attendance_rosters(
                 sheets_service, firestore_service
             )
@@ -612,7 +622,10 @@ class TestTransferredStudents:
         )
         firestore_service = self._firestore()
 
-        with patch.dict(main.ATTENDANCE_ROSTER_TRANSFERRED_STUDENTS, {"N001": {"from": "No1", "to": "No2"}}):
+        with patch.dict(
+            main.ATTENDANCE_ROSTER_TRANSFERRED_STUDENTS,
+            {"N001": {"from": "No1", "to": "No2"}},
+        ):
             result = main._sync_students_from_attendance_rosters(
                 sheets_service, firestore_service, dry_run=True
             )
