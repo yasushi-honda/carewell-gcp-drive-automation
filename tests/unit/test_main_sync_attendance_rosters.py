@@ -662,10 +662,11 @@ class TestTransferredStudents:
         ]
         firestore_service.create_student.assert_not_called()
 
-    def test_old_class_emptied_by_transfer_still_reconciles_other_withdrawals(
+    def test_old_class_emptied_by_transfer_skips_reconcile_fail_closed(
         self, patched_config
     ):
-        """異動行の読み飛ばしで名簿が空になっても、退会者の照合は続ける。"""
+        """在籍者の行が誤って全削除され、異動行だけが残った名簿で、旧クラスの在籍者を
+        全員withdrawn化しない。"""
         sheets_service = Mock()
         sheets_service.get_attendance_roster_data.side_effect = self._rosters(
             ["N001"], ["N001"]
@@ -676,7 +677,6 @@ class TestTransferredStudents:
                 {"N001": "active", "N009": "active"} if class_name == "No1" else {}
             )
         )
-        firestore_service.mark_student_withdrawn.return_value = True
 
         with patch.dict(
             main.ATTENDANCE_ROSTER_TRANSFERRED_STUDENTS,
@@ -687,4 +687,26 @@ class TestTransferredStudents:
             )
 
         assert result["status"] == "success"
-        firestore_service.mark_student_withdrawn.assert_called_once_with("N009")
+        firestore_service.mark_student_withdrawn.assert_not_called()
+
+    def test_duplicate_rows_for_a_transferred_id_in_the_old_class_still_abort(
+        self, patched_config
+    ):
+        """異動元に同じ日介番号が2行ある場合、読み飛ばさずクラス内重複として中断する。"""
+        sheets_service = Mock()
+        sheets_service.get_attendance_roster_data.side_effect = self._rosters(
+            ["N001", "N001"], ["N001"]
+        )
+        firestore_service = self._firestore()
+
+        with patch.dict(
+            main.ATTENDANCE_ROSTER_TRANSFERRED_STUDENTS,
+            {"N001": {"from": "No1", "to": "No2"}},
+        ):
+            result = main._sync_students_from_attendance_rosters(
+                sheets_service, firestore_service
+            )
+
+        assert result["status"] == "aborted"
+        assert result["transferred_students"] == []
+        firestore_service.create_student.assert_not_called()

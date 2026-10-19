@@ -804,11 +804,17 @@ def _sync_students_from_attendance_rosters(
     }
     transferred_students = []
     for r in class_results.values():
+        # 異動元に同じ日介番号が複数行ある場合は読み飛ばさず、クラス内重複として
+        # 従来どおり検出させる
+        row_counts: dict = {}
+        for s in r.students:
+            row_counts[s["student_id"]] = row_counts.get(s["student_id"], 0) + 1
         kept = []
         for s in r.students:
             transfer = ATTENDANCE_ROSTER_TRANSFERRED_STUDENTS.get(s["student_id"])
             if (
                 transfer
+                and row_counts[s["student_id"]] == 1
                 and transfer["from"] == r.class_name
                 and s["student_id"] in ids_by_class.get(transfer["to"], set())
             ):
@@ -942,9 +948,10 @@ def _sync_students_from_attendance_rosters(
         # 「0件を無条件に信頼する」事故。pr-review-toolkit code-reviewer
         # 指摘対応、2026-09-14)。トレードオフとして、あるクラスの最後の
         # 1名が正当に退会したケースは自動検出されず、手動対応が必要になる。
-        # 読み取り時点で0件だった名簿だけを対象外にする（異動行の読み飛ばしで空に
-        # なった名簿は、ほかの受講者の退会照合を続ける）
-        if not write_error_ids and r.status != "empty":
+        # 異動行の読み飛ばし後に空になった名簿も対象外にする（在籍者の行が誤って
+        # 全削除され、グレーの異動行だけが残ったケースで、旧クラスの在籍者全員を
+        # withdrawn化しないため。fail-closed）
+        if not write_error_ids and r.students:
             try:
                 existing_ids = firestore_service.get_student_ids_by_class_and_source(
                     r.class_name, "attendance_roster"
