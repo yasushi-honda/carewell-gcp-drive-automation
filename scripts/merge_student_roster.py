@@ -29,9 +29,9 @@ sys.path.insert(0, str(PROJECT_ROOT))
 
 from src.config.classes import (  # noqa: E402
     ATTENDANCE_ROSTER_FILE_IDS as KNOWN_ATTENDANCE_FILE_IDS,
-    ATTENDANCE_ROSTER_TRANSFERRED_STUDENTS,
 )
 from src.config.classes import ATTENDANCE_ROSTER_HEADER as ROSTER_HEADER  # noqa: E402
+from src.config.classes import ATTENDANCE_ROSTER_TRANSFERRED_STUDENTS
 from src.gcp_sa_auth import call_with_reauth, get_impersonated_service  # noqa: E402
 
 SA_EMAIL = "carewell-automation-sa@carewell-automation.iam.gserviceaccount.com"
