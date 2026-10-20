@@ -846,3 +846,105 @@ class TestTransferredStudents:
             )
 
         assert any("Reconcile skipped for class=No1" in m for m in caplog.messages)
+
+
+class TestAbortIsVisibleInLogs:
+    """中断（aborted）は、ERROR監視に近い重さで記録する。
+
+    以前は INFO だけで、重複・不正行による中断を運用者が気づけず、約4時間止まった。
+    ログには日介番号や氏名などの個人情報は入れず、原因の種別と件数だけを出す。
+    """
+
+    def _aborted_result(self, rosters, caplog):
+        sheets_service = Mock()
+        sheets_service.get_attendance_roster_data.side_effect = rosters
+        firestore_service = Mock()
+        with caplog.at_level("INFO"):
+            result = main._sync_students_from_attendance_rosters(
+                sheets_service, firestore_service
+            )
+        return result, firestore_service
+
+    def test_duplicate_abort_is_logged_as_warning_with_counts_only(
+        self, patched_config, caplog
+    ):
+        result, firestore_service = self._aborted_result(
+            [
+                RosterReadResult(
+                    class_name="No1",
+                    status="ok",
+                    students=[_student("N001", name="秘密 太郎")],
+                ),
+                RosterReadResult(
+                    class_name="No2",
+                    status="ok",
+                    students=[_student("N001", name="秘密 太郎", class_name="No2")],
+                ),
+            ],
+            caplog,
+        )
+
+        assert result["status"] == "aborted"
+        warnings = [
+            r
+            for r in caplog.records
+            if r.levelname == "WARNING" and "aborted" in r.getMessage()
+        ]
+        assert len(warnings) == 1
+        msg = warnings[0].getMessage()
+        assert "duplicate_student_ids=1" in msg
+        assert "N001" not in msg and "秘密" not in msg
+        firestore_service.create_student.assert_not_called()
+
+    def test_malformed_and_error_classes_are_counted_in_the_warning(
+        self, patched_config, caplog
+    ):
+        self._aborted_result(
+            [
+                RosterReadResult(
+                    class_name="No1",
+                    status="ok",
+                    students=[_student("N001")],
+                    malformed_rows=[{"row": 3, "name": "秘密 花子", "student_id": ""}],
+                ),
+                RosterReadResult(
+                    class_name="No2", status="read_error", error_detail="HTTP 500"
+                ),
+            ],
+            caplog,
+        )
+
+        msgs = [
+            r.getMessage()
+            for r in caplog.records
+            if r.levelname == "WARNING" and "aborted" in r.getMessage()
+        ]
+        assert len(msgs) == 1
+        assert "error_classes=['No2']" in msgs[0]
+        assert "malformed_rows=1" in msgs[0]
+        assert "秘密" not in msgs[0]
+
+    def test_successful_sync_does_not_log_an_abort_warning(
+        self, patched_config, caplog
+    ):
+        sheets_service = Mock()
+        sheets_service.get_attendance_roster_data.side_effect = [
+            RosterReadResult(
+                class_name="No1", status="ok", students=[_student("N001")]
+            ),
+            RosterReadResult(
+                class_name="No2",
+                status="ok",
+                students=[_student("N002", class_name="No2")],
+            ),
+        ]
+        firestore_service = Mock()
+        firestore_service.student_exists.return_value = True
+        firestore_service.create_student.return_value = True
+        firestore_service.get_student_ids_by_class_and_source.return_value = {}
+        with caplog.at_level("INFO"):
+            main._sync_students_from_attendance_rosters(
+                sheets_service, firestore_service
+            )
+
+        assert not any("aborted" in r.getMessage() for r in caplog.records)

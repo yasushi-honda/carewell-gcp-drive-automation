@@ -82,6 +82,10 @@ python scripts/check_rollout_status.py --class 04
 
 5. **クラス横断の日介番号重複は、ゲート`9_他クラス日介番号重複`が書込み前に止める**（PR #75で追加）。他クラスの「受講者リスト」と日介番号が重複すると、Dashboardの名簿同期が全クラスで中断するため（2026-10-19、№04で3件を見逃した）。ゲートが失敗したら、書込みせずdecision-makerへ確認する。登録済みの異動者は、異動元と異動先の組だけ許容される。クライアントは異動した人の行を旧クラスに残し、**行をグレーにして示す**ことがある（正本リスト・出欠確認とも）。システムは色を読まないため、旧クラスの名簿にも残る。
 6. 異動と確認できた受講者は、`src/config/classes.py`の`ATTENDANCE_ROSTER_TRANSFERRED_STUDENTS`に`{"日介番号": {"from": "異動元No", "to": "異動先No"}}`で登録する（decision-makerの確認が前提、PRで反映）。名簿同期は、異動先の名簿に載っている場合に限り、確認済みの異動元の行を読み飛ばす。適用されなかった登録は、同期の応答の`unapplied_transfers`と警告ログに出る。登録は静的で期限がないため、再異動があれば見直す。
+   - 異動の登録の運用上の注意（2026-10-20、独立レビューの指摘）:
+     - 登録に期限はない。異動元のグレー行をクライアントが削除した、異動先の行が消えた、クラス名を誤記した、などの場合は、登録が適用されず、同期の応答の`unapplied_transfers`と警告ログ（`registered transfers were not applied`）に15分ごとに出続ける。定期的に見直し、不要な登録は外す
+     - 異動先の行が後で消えた場合（例: 異動先で辞退して行を削除）は、登録が未適用になり、異動元のグレー行が在籍として同期される（警告ログのみ、同期は`success`のまま）。全クラスを止めないための意図的な設計
+     - 再異動（異動先から元のクラスへ戻る等）では、登録が古いまま、異動先の側が正本として扱われる。重複は検出されない。再異動を知ったら、登録を書き換える
    - クライアントとの取り決め（2026-10-20）: 異動があったときは、クライアントが異動した方の日介IDと、異動元・異動先のクラスを連絡する。名簿の入力は従来どおり（異動元の行をグレーにする運用のまま）。こちらは内容を確認し、上記の登録を行って、Dashboardの受講生一覧に反映する。
 
 ### 手順2: 共有「グループ分け」との照合（個人単位）
@@ -151,6 +155,17 @@ python scripts/check_rollout_status.py --class 0N     # 「完了」になるこ
 
 - **正本リストの行の色（グレー）は読まれない**: クライアントが異動・辞退などを示すためにグレーにした行も、名簿・出欠確認・Dashboardには通常の受講者として入る。グレーの意味は未確認（2026-10-19時点）。
 - **Dashboardの「辞退」の位置づけ**: 状態切替は受講生ごとに1件のデータ（日介番号がキー）を直接更新する。異動には使わない（異動先でも辞退表示になる）。出欠確認表には反映されない。
+
+## 5.5 名簿同期の監視（Dashboardへの15分ごとの同期）
+
+同期の中断（`status=aborted`）は、フェーズAの検証失敗（重複・不正行・読取りエラー）で、書込み前に全クラスを止める。2026-10-19は、中断に約4時間気づけなかった。中断は`WARNING`（`Attendance roster sync aborted: …`、原因の種別と件数のみ）で記録される。
+
+```
+gcloud logging read 'resource.type="cloud_run_revision" AND resource.labels.service_name="carewell-file-collector" AND (textPayload:"roster sync aborted" OR textPayload:"transfers were not applied" OR severity>=ERROR)' --freshness=1d --limit=20 --format='value(timestamp,severity,textPayload)'
+```
+- `roster sync aborted`: 重複なら`duplicate_student_ids`、不正行なら`malformed_rows`、Sheets APIの読取り失敗なら`error_classes`に件数・クラスが出る。読取り失敗（例: Sheets APIのHTTP 500）は次の回で自動回復することが多い
+- `transfers were not applied`: 異動の登録が適用されていない（上記の見直し対象）
+- 通知（アラート）の仕組みは未導入。必要になったら、decision-makerの判断で追加する
 
 ## 6. トラブルシュート
 

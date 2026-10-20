@@ -898,6 +898,16 @@ def _sync_students_from_attendance_rosters(
         for r in class_results.values()
     ]
 
+    if not can_write:
+        # 中断は運用者が気づける重さで記録する（INFOだけだと、重複・不正行による
+        # 中断がERROR監視に引っかからず、約4時間気づけなかった）。個人情報
+        # （氏名・日介番号）は出さず、原因の種別と件数だけを出す。
+        logger.warning(
+            "Attendance roster sync aborted: "
+            f"error_classes={[e['class_name'] for e in error_classes]} "
+            f"malformed_rows={sum(len(m['rows']) for m in malformed_summary)} "
+            f"duplicate_student_ids={len(duplicate_student_ids)}"
+        )
     if dry_run or not can_write:
         logger.info(
             f"Attendance roster sync phase A only: can_write={can_write} "
