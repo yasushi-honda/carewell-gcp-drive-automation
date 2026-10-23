@@ -143,3 +143,33 @@ class TestResolveFirestoreDatabaseId:
             == "carewell-2026"
         )
         assert classes_config.resolve_firestore_database_id() == "carewell-2026"
+
+
+class TestAttendanceRosterTransferredStudents:
+    """異動登録の整合性と、№05への異動5名の登録を検証する。"""
+
+    def test_each_entry_has_distinct_known_classes(self):
+        registry = classes_config.ATTENDANCE_ROSTER_TRANSFERRED_STUDENTS
+        for sid, t in registry.items():
+            assert set(t) == {"from", "to"}, sid
+            assert t["from"] != t["to"], sid
+
+    @pytest.mark.parametrize(
+        "sid,origin",
+        [
+            ("N9906062", "No1"),
+            ("N9905956", "No1"),
+            ("N9905760", "No2"),
+            ("N9905997", "No3"),
+            ("N9906948", "No4"),
+        ],
+    )
+    def test_class05_transfers_registered(self, sid, origin):
+        assert classes_config.ATTENDANCE_ROSTER_TRANSFERRED_STUDENTS[sid] == {
+            "from": origin,
+            "to": "No5",
+        }
+
+    def test_unconfirmed_duplicate_is_not_registered(self):
+        # N9907036(№04と№05に重複)は未確認のため登録しない
+        assert "N9907036" not in classes_config.ATTENDANCE_ROSTER_TRANSFERRED_STUDENTS
