@@ -170,6 +170,9 @@ class TestAttendanceRosterTransferredStudents:
             "to": "No5",
         }
 
-    def test_unconfirmed_duplicate_is_not_registered(self):
-        # N9907036(№04と№05に重複)は未確認のため登録しない
-        assert "N9907036" not in classes_config.ATTENDANCE_ROSTER_TRANSFERRED_STUDENTS
+    def test_n9907036_registered_as_class04_to_class05(self):
+        # №04→№05→№06(№06は予定)。登録は1組のみのため、現在の№04→№05を登録する
+        assert classes_config.ATTENDANCE_ROSTER_TRANSFERRED_STUDENTS["N9907036"] == {
+            "from": "No4",
+            "to": "No5",
+        }
