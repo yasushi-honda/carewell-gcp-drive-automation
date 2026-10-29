@@ -19,6 +19,9 @@
 終了コード: 0=ENABLEDのジョブに問題なし / 1=ENABLEDのジョブに「中断・不一致・確認不能・
 ERROR」がある / 2=ログやジョブ一覧を取得できなかった
 
+ERRORは、重大度(収集コードのテキストログでは空になる)ではなく、整形済みの本文の
+「 - ERROR - 」で判定する。2つの実行(手動と定期)が重なった可能性があるときは、その旨を付記する。
+
 出力はログの原文を一切含まない(固定のパターンから取り出した件数・時刻・分類のみ)。
 ダウンロード行など氏名を含みうるログは、そもそも取得しない。
 """
@@ -40,7 +43,10 @@ PROJECT = "carewell-automation"
 REGION = "asia-northeast1"
 SERVICE = "carewell-file-collector"
 LOG_LIMIT = 2000
-RUNNING_WINDOW_SEC = 600  # 最後のログがこれより新しく、結果が未確定なら「実行中」
+# 結果が未確定でも、最後のログがこの秒数より新しければ「実行中」とみなす(中断とは断定しない)。
+# Cloud Runのリクエストのタイムアウト(3000秒)に余裕を足した値。大きな課題はリンク取得だけで
+# 10分を超えうるが、その途中の進捗ログは氏名を含むため取得していない。
+RUNNING_WINDOW_SEC = 3100
 
 OUTCOME_OK = "OK"
 OUTCOME_ZERO = "ZERO_CONFIRMED"
@@ -69,7 +75,7 @@ _MESSAGES = {
     OUTCOME_UNVERIFIED: "件数を確認できない",
     OUTCOME_ERROR: "ERRORあり",
     OUTCOME_NO_RUN: "対象期間に実行なし",
-    OUTCOME_RUNNING: "実行中",
+    OUTCOME_RUNNING: "未完了(実行中。課題ページに到達せず中断した場合も、最大約50分はここに出る)",
 }
 
 _TASK = r"(課題[①②③])"
@@ -80,6 +86,10 @@ _START_RE = re.compile(
 _NOT_CREATED_RE = re.compile(rf"not yet created, skipping: .*?№(\d+)/{_TASK}")
 _VERIFIED_RE = re.compile(r"Count verification passed: (\d+)/(\d+)")
 _MISMATCH_RE = re.compile(r"Extracted (\d+) submissions but UI shows (\d+)")
+_ERROR_SEVERITIES = ("ERROR", "CRITICAL", "ALERT", "EMERGENCY")
+_ERROR_TEXT_MARKERS = (" - ERROR - ", " - CRITICAL - ")
+# 実行の終了を示す種別(これが出る前に次の実行が始まると、2つの実行が重なっている)
+_TERMINAL_KINDS = ("verified", "mismatch", "zero", "not_found", "unverified")
 
 
 def _parse_ts(value: str) -> datetime:
@@ -112,7 +122,9 @@ def parse_event(entry: dict) -> dict | None:
     if not m:
         return None
     base = {"ts": ts, "class": m.group(1), "task": m.group(2)}
-    if severity in ("ERROR", "CRITICAL", "ALERT", "EMERGENCY"):
+    # 収集コードはテキスト形式のログで、logger.error()の重大度はDEFAULT(空)になる。
+    # 重大度だけでは拾えないため、整形済みの本文の「 - ERROR - 」も見る。
+    if severity in _ERROR_SEVERITIES or any(m in text for m in _ERROR_TEXT_MARKERS):
         return {**base, "kind": "error"}
     v = _VERIFIED_RE.search(text)
     if v:
@@ -147,18 +159,37 @@ def summarize(
     """指定クラス×課題の「直近の1回の実行」の結果を分類する。"""
     mine = [e for e in events if e and e["class"] == class_no and e["task"] == task]
     if not mine:
-        return {"outcome": OUTCOME_NO_RUN, "started": None, "errors": 0}
+        return {
+            "outcome": OUTCOME_NO_RUN,
+            "started": None,
+            "errors": 0,
+            "overlap_suspected": False,
+        }
     mine.sort(key=lambda e: _parse_ts(e["ts"]))
     starts = [i for i, e in enumerate(mine) if e["kind"] == "start"]
     segment = mine[starts[-1] :] if starts else mine
     started = mine[starts[-1]]["ts"] if starts else None
+    overlap = False
+    if len(starts) >= 2:
+        prev_i, last_i = starts[-2], starts[-1]
+        gap = (
+            _parse_ts(mine[last_i]["ts"]) - _parse_ts(mine[prev_i]["ts"])
+        ).total_seconds()
+        finished = any(e["kind"] in _TERMINAL_KINDS for e in mine[prev_i:last_i])
+        overlap = gap < RUNNING_WINDOW_SEC and not finished
     kinds = {e["kind"] for e in segment}
     errors = sum(1 for e in segment if e["kind"] == "error")
 
     def last(kind):
         return next((e for e in reversed(segment) if e["kind"] == kind), None)
 
-    result = {"started": started, "errors": errors, "extracted": None, "total": None}
+    result = {
+        "started": started,
+        "errors": errors,
+        "extracted": None,
+        "total": None,
+        "overlap_suspected": overlap,
+    }
     terminal = last("verified") or last("mismatch")
     if terminal:
         result["extracted"], result["total"] = terminal["extracted"], terminal["total"]
@@ -198,6 +229,9 @@ def render_row(class_no: str, task: str, job_state: str, summary: dict) -> str:
         note = f"ERRORあり({summary.get('errors', 0)}件)"
     if job_state == "PAUSED" and outcome == OUTCOME_NO_RUN:
         note = "ジョブ停止中"
+    if summary.get("overlap_suspected"):
+        # 手動実行と定期実行が重なると、片方の結果が他方に混ざりうる(結果は参考)
+        note += "(直前の実行と重なった可能性があり、結果は参考)"
     return f"№{class_no} | {task} | {job_state} | {when} | {count} | {note}"
 
 
@@ -254,7 +288,8 @@ def fetch_events(hours: int) -> list[dict | None]:
     flt = (
         'resource.type="cloud_run_revision" '
         f'AND resource.labels.service_name="{SERVICE}" '
-        f'AND ({patterns} OR (severity>=ERROR AND textPayload:"[carewell-"))'
+        f'AND ({patterns} OR ((severity>=ERROR OR textPayload:" - ERROR - " '
+        'OR textPayload:" - CRITICAL - ") AND textPayload:"[carewell-"))'
     )
     entries = _gcloud_json(
         ["logging", "read", flt, f"--freshness={hours}h", f"--limit={LOG_LIMIT}"]

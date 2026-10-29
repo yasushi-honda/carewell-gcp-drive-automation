@@ -5,6 +5,7 @@ gcloud 呼び出しは対象外。ログの原文(氏名を含みうる)を出�
 """
 
 import sys
+from datetime import datetime, timezone
 
 sys.path.insert(0, "scripts")
 
@@ -15,6 +16,7 @@ from check_collection_status import (  # noqa: E402
     OUTCOME_NO_RUN,
     OUTCOME_NOT_FOUND,
     OUTCOME_OK,
+    OUTCOME_RUNNING,
     OUTCOME_UNVERIFIED,
     OUTCOME_ZERO,
     exit_code,
@@ -203,3 +205,122 @@ class TestRenderAndExit:
     def test_each_problem_outcome_fails_an_enabled_job(self):
         for o in (OUTCOME_ABORTED, OUTCOME_MISMATCH, OUTCOME_UNVERIFIED, OUTCOME_ERROR):
             assert exit_code([("ENABLED", {"outcome": o})]) == 1
+
+
+# --- codex review の指摘への対応 -----------------------------------------------
+
+
+class TestErrorDetectionFromTextLevel:
+    """収集コードはテキスト形式のログで、logger.error()の重大度はDEFAULT(空)になる。"""
+
+    def test_text_error_line_without_severity_is_an_error(self):
+        entry = {
+            "timestamp": "2026-10-29T01:05:10Z",
+            "textPayload": "2026-10-29 01:05:10,000 - playwright_automation - ERROR - "
+            f"[carewell-№01-{T}] Error downloading x",
+        }
+        assert parse_event(entry)["kind"] == "error"
+
+    def test_critical_text_line_is_an_error(self):
+        entry = {
+            "timestamp": "2026-10-29T01:05:10Z",
+            "textPayload": f"x - CRITICAL - [carewell-№01-{T}] boom",
+        }
+        assert parse_event(entry)["kind"] == "error"
+
+    def test_info_line_mentioning_error_word_is_not_an_error(self):
+        p = parse_event(_ev("05:10", "Handled ERROR page gracefully"))
+        assert p["kind"] != "error"
+
+    def test_run_with_a_text_error_is_reported_as_error(self):
+        err = {
+            "timestamp": "2026-10-29T01:05:25Z",
+            "textPayload": f"x - ERROR - [carewell-№01-{T}] Failed to download x",
+        }
+        r = _run(
+            _start("05:00"),
+            _ev("05:10", "Successfully navigated to task page"),
+            _ev("05:20", "✓ Count verification passed: 7/7"),
+            err,
+        )
+        assert r["outcome"] == OUTCOME_ERROR
+
+
+class TestLongRunningAndOverlap:
+    NOW = datetime(2026, 10, 29, 1, 35, 0, tzinfo=timezone.utc)
+
+    def test_unfinished_run_younger_than_the_request_timeout_is_running(self):
+        # 課題ページに着いたあと、リンク取得に10分以上かかる大きな課題でも中断とは断定しない
+        r = summarize(
+            [
+                parse_event(e)
+                for e in (
+                    _start("05:00"),
+                    _ev("06:00", "Successfully navigated to task page"),
+                )
+            ],
+            "01",
+            T,
+            now=self.NOW,
+        )
+        assert r["outcome"] == OUTCOME_RUNNING
+
+    def test_unfinished_run_older_than_the_request_timeout_is_aborted(self):
+        r = summarize(
+            [
+                parse_event(e)
+                for e in (
+                    _start("05:00"),
+                    _ev("05:10", "Selecting task with pattern: 課題②"),
+                )
+            ],
+            "01",
+            T,
+            now=datetime(2026, 10, 29, 2, 30, 0, tzinfo=timezone.utc),
+        )
+        assert r["outcome"] == OUTCOME_ABORTED
+
+    def test_overlap_is_flagged_but_does_not_change_the_outcome(self):
+        # 手動実行(A)と定期実行(B)が重なり、Aの検証結果がBの区間に入る
+        r = _run(
+            _start("05:00"),
+            _start("10:00"),
+            _ev("10:30", "✓ Count verification passed: 7/7"),
+        )
+        assert r["overlap_suspected"] is True
+        assert r["outcome"] == OUTCOME_OK
+
+    def test_repeated_aborts_are_not_masked_by_the_overlap_flag(self):
+        # 毎回、課題ページに着く前に中断する場合も、結果は中断のまま
+        r = summarize(
+            [
+                parse_event(e)
+                for e in (
+                    _start("05:00"),
+                    _ev("05:10", "Selecting task with pattern: 課題②"),
+                    _start("35:00"),
+                    _ev("35:10", "Selecting task with pattern: 課題②"),
+                )
+            ],
+            "01",
+            T,
+            now=datetime(2026, 10, 29, 3, 0, 0, tzinfo=timezone.utc),
+        )
+        assert r["outcome"] == OUTCOME_ABORTED
+
+    def test_sequential_finished_runs_are_not_flagged(self):
+        r = _run(
+            _start("05:00"),
+            _ev("05:20", "✓ Count verification passed: 7/7"),
+            _start("35:00"),
+            _ev("35:20", "✓ Count verification passed: 7/7"),
+        )
+        assert r["overlap_suspected"] is False
+
+    def test_render_notes_the_overlap(self):
+        r = _run(
+            _start("05:00"),
+            _start("10:00"),
+            _ev("10:30", "✓ Count verification passed: 7/7"),
+        )
+        assert "重なった" in render_row("01", T, "ENABLED", r)
