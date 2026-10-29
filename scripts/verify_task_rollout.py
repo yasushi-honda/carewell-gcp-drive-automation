@@ -48,10 +48,12 @@ from scripts.apply_submission_formulas import (  # noqa: E402
     check_row_cap,
 )
 from scripts.check_collection_status import (  # noqa: E402
+    OUTCOME_ABORTED,
     OUTCOME_ERROR,
     OUTCOME_MISMATCH,
     OUTCOME_OK,
     OUTCOME_ZERO,
+    count_unattributed_errors,
     fetch_events,
     summarize,
 )
@@ -76,7 +78,7 @@ NAME_COLLECT = "最新の収集に異常なし"
 NAME_PORTAL = "ポータルの件数 = Cloud Run の取得件数"
 NAME_ROWS = "Cloud Run の取得件数 = 提出記録の行数"
 NAME_FIRESTORE = "Firestore の file_count = 提出記録の行数"
-NAME_DUPS = "提出記録に複合キーの重複なし"
+NAME_DUPS = "提出記録に複合キーの重複・空欄なし"
 NAME_MEMBERS = "提出記録の提出者は全員名簿内(日介番号の空欄・名簿外なし)"
 NAME_DISPLAY = "出欠確認の「提出」件数 = 提出記録のユニーク提出者(名簿内)"
 
@@ -104,14 +106,42 @@ def _compare(name: str, a, b, fail_hint: str, unknown_hint: str) -> dict:
     }
 
 
-def _collect_stage(outcome: str, overlap: bool) -> dict:
-    """最新の収集に異常がないか。件数が揃っていても、ERRORや件数不一致の実行は一致とは扱わない。"""
+def _collect_stage(
+    outcome: str,
+    overlap: bool,
+    repeated_unfinished: bool = False,
+    unattributed_errors: int = 0,
+) -> dict:
+    """最新の収集に異常がないか。件数が揃っていても、ERROR・件数不一致・重なった実行・
+    クラス/課題を特定できないERRORがあれば、一致(PASS)とは扱わない。"""
     note = "(手動実行と定期実行が重なった可能性あり)" if overlap else ""
+    if outcome == OUTCOME_ABORTED and repeated_unfinished:
+        return {
+            "name": NAME_COLLECT,
+            "status": STATUS_FAIL,
+            "detail": outcome + "(繰り返し)",
+            "hint": "毎回、課題ページに着く前に中断している(曖昧一致・task_patternの誤り・例外)。ログを確認",
+        }
     if outcome in (OUTCOME_OK, OUTCOME_ZERO):
+        if overlap:
+            return {
+                "name": NAME_COLLECT,
+                "status": STATUS_UNKNOWN,
+                "detail": outcome + note,
+                "hint": "実行が重なり、片方の結果が他方に混ざった可能性がある。次の実行の後に再実行",
+            }
+        if unattributed_errors:
+            return {
+                "name": NAME_COLLECT,
+                "status": STATUS_UNKNOWN,
+                "detail": f"{outcome}(この実行以降に帰属不明のERROR {unattributed_errors}件)",
+                "hint": "ダウンロード失敗・保存/同期の失敗など、クラス・課題を特定できないERROR。"
+                "他のクラスのものかもしれない。ログを手で確認",
+            }
         return {
             "name": NAME_COLLECT,
             "status": STATUS_PASS,
-            "detail": outcome + note,
+            "detail": outcome,
             "hint": "",
         }
     if outcome == OUTCOME_ERROR:
@@ -179,7 +209,12 @@ def _members_stage(blank, unique_all, independent) -> dict:
 def compare_stages(s: dict) -> list[dict]:
     """4段突合の各比較を判定する。取得できなかった値は「確定できない」(一致とは扱わない)。"""
     results = [
-        _collect_stage(s["collect_outcome"], s.get("overlap_suspected", False)),
+        _collect_stage(
+            s["collect_outcome"],
+            s.get("overlap_suspected", False),
+            s.get("repeated_unfinished", False),
+            s.get("unattributed_errors", 0),
+        ),
         _compare(
             NAME_PORTAL,
             s["portal_total"],
@@ -204,6 +239,7 @@ def compare_stages(s: dict) -> list[dict]:
         ),
     ]
     dups = s["key_dups"]
+    blank_keys = s.get("blank_keys", 0)
     if dups is None:
         results.append(
             {
@@ -214,12 +250,17 @@ def compare_stages(s: dict) -> list[dict]:
             }
         )
     else:
+        bad = dups > 0 or blank_keys > 0
         results.append(
             {
                 "name": NAME_DUPS,
-                "status": STATUS_PASS if dups == 0 else STATUS_FAIL,
-                "detail": f"重複 {dups}",
-                "hint": "" if dups == 0 else "同じ複合キーの行が複数ある(重複追記)",
+                "status": STATUS_FAIL if bad else STATUS_PASS,
+                "detail": f"重複 {dups}・キー空欄 {blank_keys}",
+                "hint": (
+                    "同じ複合キーの行が複数ある(重複追記)、または複合キーが空欄の行がある"
+                    if bad
+                    else ""
+                ),
             }
         )
     results.append(
@@ -272,6 +313,7 @@ class SheetRows(NamedTuple):
     unique_nichikai: int | None
     blank_nichikai: int | None
     note: str
+    blank_keys: int = 0
 
 
 def fetch_sheet_rows(class_no: str, task: str) -> SheetRows:
@@ -296,6 +338,7 @@ def fetch_sheet_rows(class_no: str, task: str) -> SheetRows:
         len({n for n in nichikai if n}),
         sum(1 for n in nichikai if not n),
         "",
+        len(rows) - len(keys),
     )
 
 
@@ -375,7 +418,10 @@ def main() -> int:
         sheet = fetch_sheet_rows(args.class_num, args.task)
         facts = gather_facts(args.class_num, args.task)
     except Exception as e:  # noqa: BLE001 取得失敗は「一致」にしない
-        print(f"[取得失敗] {type(e).__name__}: {str(e)[:200]}")
+        # 自作の例外(gcloud失敗・ログ上限・読取り上限)だけ文面を出す。それ以外は、URLや
+        # スプレッドシートID等を含みうるため、型名だけにする
+        detail = f": {str(e)[:200]}" if isinstance(e, RuntimeError) else ""
+        print(f"[取得失敗] {type(e).__name__}{detail}")
         return 2
 
     if summary["outcome"] == OUTCOME_ZERO:
@@ -384,14 +430,20 @@ def main() -> int:
         portal_total, extracted = summary.get("total"), summary.get("extracted")
 
     firestore = fetch_firestore_file_count(args.class_num, args.task)
+    # クラス・課題を特定できないERROR(main.pyのダウンロード失敗・保存/同期の失敗など)のうち、
+    # この実行の開始以降のもの。他のクラスのものかもしれないので、確定できない扱いにする
+    unattributed, _latest = count_unattributed_errors(events, summary.get("started"))
     results = compare_stages(
         {
             "collect_outcome": summary["outcome"],
             "overlap_suspected": summary.get("overlap_suspected", False),
+            "repeated_unfinished": summary.get("repeated_unfinished", False),
+            "unattributed_errors": unattributed,
             "portal_total": portal_total,
             "extracted": extracted,
             "sheet_rows": sheet.rows,
             "key_dups": sheet.key_dups,
+            "blank_keys": sheet.blank_keys,
             "unique_all": sheet.unique_nichikai,
             "blank_nichikai": sheet.blank_nichikai,
             "firestore_count": firestore.count,

@@ -127,7 +127,7 @@ python scripts/hide_sensitive_sheets.py --class 0N --commit
 python scripts/check_rollout_status.py --class 0N     # 「完了」になること
 ```
 - 「完了」は**設定の完了**を意味する。提出が0件の間は、収集から表示までの動作は未確認のまま。初回の実提出が入ったら、**収集から表示までの確認を別途行う**: 実提出者数が「提出」と一致すること（№01では往復テスト＝テスト提出→「提出」→削除→「未提出」で確認済み）。
-- **収集から表示までの4段突合**（№01で2026-09-20に実施した方法。収集漏れを検出できる唯一の手段）。**`python scripts/verify_task_rollout.py --class 0N --task 課題X`で、2〜4段目と提出者数の一致を1コマンドで確認できる**（読み取り専用・氏名を出さない。終了コード0=全段一致 / 1=食い違い / 2=確定できない）。1段目の「提出元画面の件数」は、スクリプトでは収集コードが画面から読んだ値（`Count verification`）で代用する。人が画面で数えた値と比べたいときは、下の手順1を使う:
+- **収集から表示までの4段突合**（№01で2026-09-20に実施した方法。収集漏れを検出できる唯一の手段）。**`python scripts/verify_task_rollout.py --class 0N --task 課題X`で、2〜4段目と提出者数の一致を1コマンドで確認できる**（読み取り専用・氏名を出さない。終了コード0=全段一致 / 1=食い違い / 2=確定できない）。1段目の「提出元画面の件数」は、スクリプトでは収集コードが画面から読んだ値（`Count verification`）で代用する（収集コード自身の読み取りなので、「画面の読み誤り」は検出できない）。**各クラスの課題②の初回は、人が画面で数えた件数との比較（下の手順1）を併用する**:
   1. 提出元画面の件数（課題①の「未添削＋添削済」の合計）。decision-makerから画面のスクリーンショットを受け取る（AIはzenkoukaiにログインしない）
   2. Cloud Runログの確認件数。`gcloud logging read 'resource.type="cloud_run_revision" AND resource.labels.service_name="carewell-file-collector" AND textPayload:"№0N-課題①" AND textPayload:"Count verification"' --freshness=1d --limit=3 --format='value(timestamp,textPayload)'` の `Count verification passed: N/N` のNが、1と一致すること
   3. 提出記録シート「課題①」のデータ行数（見出しを除く）が、1と一致すること

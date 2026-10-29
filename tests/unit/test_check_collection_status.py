@@ -587,3 +587,30 @@ class TestLogMessageContract:
         src = self._src()
         assert "%(asctime)s - %(name)s - %(levelname)s - %(message)s" in src
         assert 'return f"[carewell-' in src or "[carewell-" in src
+
+
+class TestCountUnattributedErrorsSince:
+    def _events(self):
+        return [
+            parse_event(
+                {
+                    "timestamp": f"2026-10-29T01:{m}:00Z",
+                    "textPayload": "x - __main__ - ERROR - boom",
+                }
+            )
+            for m in ("04", "10", "20")
+        ]
+
+    def test_since_filters_out_older_errors(self):
+        n, latest = count_unattributed_errors(
+            self._events(), since="2026-10-29T01:10:00Z"
+        )
+        assert n == 2 and latest == "2026-10-29T01:20:00Z"
+
+    def test_since_none_counts_everything(self):
+        assert count_unattributed_errors(self._events())[0] == 3
+
+    def test_since_after_all_errors_is_zero(self):
+        assert count_unattributed_errors(
+            self._events(), since="2026-10-29T02:00:00Z"
+        ) == (0, None)

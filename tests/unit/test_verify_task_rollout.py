@@ -84,6 +84,10 @@ class TestCompareStages:
         assert r["status"] == STATUS_FAIL
         assert "再計算" in r["hint"]  # IMPORTRANGEの再計算待ちも疑う
 
+    def test_blank_composite_keys_fail_too(self):
+        r = _by(compare_stages(_s(blank_keys=1)))[NAME_DUPS]
+        assert r["status"] == STATUS_FAIL and "空欄" in r["hint"]
+
     def test_composite_key_duplicates_fail_with_a_hint(self):
         r = _by(compare_stages(_s(key_dups=2)))[NAME_DUPS]
         assert r["status"] == STATUS_FAIL and "重複追記" in r["hint"]
@@ -187,9 +191,20 @@ class TestCollectOutcomeIsNotIgnored:
         results = compare_stages(_s(collect_outcome=outcome))
         assert _by(results)[NAME_COLLECT]["status"] == STATUS_PASS
 
-    def test_overlap_is_noted_in_the_detail(self):
-        r = _by(compare_stages(_s(overlap_suspected=True)))[NAME_COLLECT]
-        assert r["status"] == STATUS_PASS and "重なった" in r["detail"]
+    def test_overlap_is_unknown_not_a_pass(self):
+        # 手動実行と定期実行が重なると、片方の結果が他方に混ざる。確定しない(再実行を促す)
+        results = compare_stages(_s(overlap_suspected=True))
+        r = _by(results)[NAME_COLLECT]
+        assert r["status"] == STATUS_UNKNOWN and "重なった" in r["detail"]
+        assert "再実行" in r["hint"]
+        assert exit_code(results) == 2
+
+    def test_repeated_unfinished_aborts_are_a_failure(self):
+        results = compare_stages(
+            _s(collect_outcome="ABORTED", repeated_unfinished=True)
+        )
+        assert _by(results)[NAME_COLLECT]["status"] == STATUS_FAIL
+        assert exit_code(results) == 1
 
 
 class TestSubmittersAreAllInTheRoster:
@@ -355,6 +370,72 @@ class TestWiring:
             monkeypatch, capsys, summary=_verified(7), sheet=(None, None, None, None)
         )
         assert code == 2
+
+    @staticmethod
+    def _events(unattributed_at):
+        from check_collection_status import parse_event
+
+        def at(ts, text):
+            return parse_event(
+                {"timestamp": f"2026-10-29T01:{ts}Z", "textPayload": text}
+            )
+
+        pre = f"x - playwright_automation - INFO - [carewell-№01-{T}] "
+        return [
+            at(
+                "05:00",
+                "x - main - INFO - Starting file collection for class=令和8年度 デジタル中核人材養成研修 №01, "
+                f"task_id={T}, task_pattern={T}",
+            ),
+            at("05:10", pre + "Successfully navigated to task page"),
+            at("05:20", pre + "✓ Count verification passed: 7/7"),
+            at(
+                unattributed_at,
+                "x - __main__ - ERROR - Failed to download 山田.xlsx: boom",
+            ),
+        ]
+
+    def test_an_unattributed_error_during_the_run_makes_it_unknown(
+        self, monkeypatch, capsys
+    ):
+        # 件数が変わらない失敗(保存・同期の後処理など)でも、全段PASSで終わらせない
+        code, out = self._run(monkeypatch, capsys, events=self._events("05:30"))
+        assert code == 2 and "帰属不明" in out and "山田" not in out
+
+    def test_an_unattributed_error_before_the_run_is_ignored(self, monkeypatch, capsys):
+        code, _ = self._run(monkeypatch, capsys, events=self._events("04:00"))
+        assert code == 0
+
+    def test_failure_message_does_not_leak_unexpected_exception_text(
+        self, monkeypatch, capsys
+    ):
+        import verify_task_rollout as v
+
+        monkeypatch.setattr(
+            sys, "argv", ["verify_task_rollout.py", "--class", "01", "--task", T]
+        )
+
+        def boom(hours):
+            raise ValueError("山田 https://docs.google.com/spreadsheets/d/SECRET")
+
+        monkeypatch.setattr(v, "fetch_events", boom)
+        assert v.main() == 2
+        out = capsys.readouterr().out
+        assert "ValueError" in out and "山田" not in out and "SECRET" not in out
+
+    def test_our_own_errors_keep_their_message(self, monkeypatch, capsys):
+        import verify_task_rollout as v
+
+        monkeypatch.setattr(
+            sys, "argv", ["verify_task_rollout.py", "--class", "01", "--task", T]
+        )
+
+        def boom(hours):
+            raise RuntimeError("ログが取得上限に達しました")
+
+        monkeypatch.setattr(v, "fetch_events", boom)
+        assert v.main() == 2
+        assert "取得上限" in capsys.readouterr().out
 
     def test_firestore_failure_note_is_printed(self, monkeypatch, capsys):
         import verify_task_rollout as v
@@ -575,6 +656,12 @@ class TestSheetRowsFetch:
     def test_blank_keys_do_not_count_as_duplicates(self, monkeypatch):
         r = self._fetch(monkeypatch, [[T, "", "n", "d1"], [T, " ", "n", "d2"]])
         assert r.rows == 2 and r.key_dups == 0
+
+    def test_blank_composite_keys_are_counted(self, monkeypatch):
+        r = self._fetch(
+            monkeypatch, [[T, "", "n", "d1"], [T, " ", "n", "d2"], [T, "k", "n", "d3"]]
+        )
+        assert r.blank_keys == 2
 
     def test_keys_are_compared_after_stripping(self, monkeypatch):
         r = self._fetch(monkeypatch, [[T, "k1 ", "n", "d1"], [T, "k1", "n", "d2"]])
