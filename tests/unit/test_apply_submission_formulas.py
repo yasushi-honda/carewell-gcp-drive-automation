@@ -570,9 +570,12 @@ class _Env:
         )
         self.number_col = kw.get("number_col", [["A001"], ["A002"], [], ["A003"]])
         self.existing_col = kw.get("existing_col", [])
-        self.sub_titles = kw.get("sub_titles", ["シート1", "課題①"])
-        self.att_titles = kw.get("att_titles", ["受講者リスト", "課題①"])
-        self.a1 = kw.get("a1", m.build_import_formula("SUB"))
+        self.label = kw.get("label", "課題①")
+        self.col = kw.get("col", "I")
+        self.last_writes = []
+        self.sub_titles = kw.get("sub_titles", ["シート1", self.label])
+        self.att_titles = kw.get("att_titles", ["受講者リスト", self.label])
+        self.a1 = kw.get("a1", m.build_import_formula("SUB", self.label))
         self.c1 = kw.get("c1", m.XLOOKUP_FORMULA)
         self.import_cells = kw.get("import_cells", [["氏名", "日介番号", "受講者番号"]])
         # 事後検証の読取り(FORMATTED)が返す表示値を、呼び出し順に使う
@@ -606,16 +609,20 @@ class _Env:
         if "受講者リスト" in rng:
             return self.roster
         if rng.endswith("A4:AZ4"):
-            return [[""] * 8 + ["課題①"]]
+            # 課題①(I列)と課題②(M列)が同じ見出し行に並ぶ実際のシートと同じ形
+            header = [""] * 13
+            header[8], header[12] = "課題①", "課題②"
+            return [header]
         if rng.endswith("C5:C500"):
             return self.number_col
-        if rng == "'課題①'!A1":
+        if rng == f"'{self.label}'!A1":
             return [[self.a1]] if self.a1 else []
-        if rng == "'課題①'!C1":
+        if rng == f"'{self.label}'!C1":
             return [[self.c1]] if self.c1 else []
         if rng.endswith("A1:C1"):
+            assert rng.startswith(f"'{self.label}'"), rng
             return self.import_cells
-        if rng.endswith("I5:I500"):
+        if rng.endswith(f"{self.col}5:{self.col}500"):
             if render == "FORMULA":
                 return self.existing_col
             return self.after.pop(0) if len(self.after) > 1 else self.after[0]
@@ -628,9 +635,10 @@ class _Env:
         self.log.append(("update", rng))
 
     def _write(self, att_id, att_tab, task_col, writes):
+        self.last_writes = writes
         self.log.append(("write_formulas", task_col, len(writes)))
 
-    def _provision(self, sid):
+    def _provision(self, sid, label="課題①"):
         self.log.append(("provision", sid))
         return "created"
 
@@ -818,3 +826,101 @@ class TestProvisionUsesTheWritingServiceAccount:
         monkeypatch.setattr(m, "call_with_reauth", fake_reauth)
         m._write_status_formulas("ATT", "tab", "I", [(5, "=x")])
         assert captured["build_fn"] is m._build_sheets_service
+
+
+class TestTask2Label:
+    """課題②: 同じ仕組みを、課題ラベルだけ差し替えて使う(既定は課題①のまま)。"""
+
+    def test_status_formula_references_the_given_label(self):
+        assert build_status_formula(5, "課題②") == (
+            '=IF(C5="","",IF(COUNTIF(\'課題②\'!C:C,C5)=0,"未提出","提出"))'
+        )
+
+    def test_import_formula_references_the_given_label(self):
+        assert build_import_formula("SID", "課題②") == (
+            '=IMPORTRANGE("SID","課題②!C:D")'
+        )
+
+    def test_default_label_is_unchanged(self):
+        assert build_status_formula(5) == build_status_formula(5, TASK_LABEL)
+        assert build_import_formula("SID") == build_import_formula("SID", TASK_LABEL)
+
+    def test_plan_uses_the_given_label_for_expected_formula(self):
+        existing = {5: build_status_formula(5, "課題②"), 6: ""}
+        plan = plan_attendance_writes(existing, [5, 6], "課題②")
+        assert plan["same"] == 1
+        assert plan["writes"] == [(6, build_status_formula(6, "課題②"))]
+        # 課題①の式が入っている行は、課題②としては「期待と異なる既存入力」になる
+        wrong = plan_attendance_writes({5: build_status_formula(5)}, [5], "課題②")
+        assert wrong["conflicts"] == [5]
+
+    def test_provision_requests_create_the_given_hidden_tab(self):
+        reqs = build_provision_requests(1, SUBMISSION_HEADER, "課題②")
+        assert reqs[0]["addSheet"]["properties"] == {
+            "sheetId": 1,
+            "title": "課題②",
+            "hidden": True,
+        }
+
+    def test_submission_header_messages_name_the_given_label(self):
+        assert "課題②" in validate_submission_header([], "課題②")[0]
+        assert "課題②" in validate_submission_header([["x"]], "課題②")[0]
+
+    def test_verify_results_messages_name_the_given_label(self):
+        error = verify_results(["#REF!"], 1, 0, "課題②")
+        other = verify_results(["謎"], 1, 0, "課題②")
+        assert any("課題②列にエラーセル" in i for i in error)
+        assert any("課題②列に「提出」「未提出」以外" in i for i in other)
+
+
+class TestProcessClassTask2:
+    def test_writes_status_formulas_for_task2_into_the_task2_column(
+        self, monkeypatch, tmp_path
+    ):
+        env = _env(
+            monkeypatch,
+            tmp_path,
+            label="課題②",
+            col="M",
+            att_titles=["受講者リスト"],  # 管理側の「課題②」タブはまだ無い
+            sub_titles=["シート1", "課題②"],
+            after=[[["未提出"], ["提出"], [], ["未提出"]]],
+            a1="",
+            c1="",
+        )
+
+        assert env.m.process_class("03", True, False, "課題②") == 0
+
+        assert ("write_formulas", "M", 3) == env.log[-1]
+        assert [f for _row, f in env.last_writes] == [
+            env.m.build_status_formula(r, "課題②") for r in (5, 6, 8)
+        ]
+        # 管理側の「課題②」タブを新規作成し、A1にIMPORTRANGE(課題②)を入れる
+        assert ("addSheet", "ATT") in env.log
+        assert ("update", "'課題②'!A1") in env.log
+
+    def test_task1_formulas_in_the_task2_column_are_a_conflict(
+        self, monkeypatch, tmp_path
+    ):
+        env = _env(
+            monkeypatch,
+            tmp_path,
+            label="課題②",
+            col="M",
+            existing_col=[[build_status_formula(5)], [], [], []],
+        )
+
+        with pytest.raises(ValidationError, match="課題②列"):
+            env.m.process_class("03", True, False, "課題②")
+
+    def test_missing_task2_tab_on_submission_side_holds(self, monkeypatch, tmp_path):
+        env = _env(
+            monkeypatch,
+            tmp_path,
+            label="課題②",
+            col="M",
+            sub_titles=["シート1"],
+        )
+
+        assert env.m.process_class("03", True, False, "課題②") == 2
+        assert env.log == []

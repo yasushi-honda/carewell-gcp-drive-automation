@@ -9,6 +9,7 @@ docs/class-rollout-runbook.md)。
 使い方:
     python scripts/check_rollout_status.py             # 全対象クラス
     python scripts/check_rollout_status.py --class 03  # 1クラスのみ
+    python scripts/check_rollout_status.py --class 01 --task 課題②  # 課題②(既定は課題①)
 
 終了コード: 0=すべて「完了」または「予定された保留」 / 1=「要対応」「退行・検証失敗」あり
 出力は件数・判定のみ。氏名等のPIIは一切出力しない。
@@ -35,6 +36,7 @@ from scripts.apply_submission_formulas import (  # noqa: E402
     SUBMISSION_NICHIKAI_COL,
     SUBMISSION_READ_CAP,
     TASK_LABEL,
+    TASK_LABELS,
     XLOOKUP_FORMULA,
     _get_values,
     build_import_formula,
@@ -172,6 +174,8 @@ def count_company_office_filled(roster_rows: list[list]) -> int:
 def classify_class(f: dict) -> tuple[str, str]:
     """クラスの状態と次のアクションを返す。退行 > 要対応 > 保留 > 完了 の優先順。"""
     cn = f["class"]
+    label = f.get("task", TASK_LABEL)
+    task_opt = "" if label == TASK_LABEL else f" --task {label}"  # 復旧コマンド用
     # 個人情報の混入は名簿の取込み状況に関係なく最優先で判定する(未取込みクラスで
     # クライアントが会社名を直接入力した場合も検出する)
     filled = f.get("company_office_filled", 0)
@@ -200,7 +204,7 @@ def classify_class(f: dict) -> tuple[str, str]:
                 STATE_REGRESSION,
                 "管理側の連携が壊れている: "
                 + "; ".join(f["link_issues"])
-                + f" → apply_submission_formulas.py --class {cn} (dry-run)で確認",
+                + f" → apply_submission_formulas.py --class {cn}{task_opt} (dry-run)で確認",
             )
         if f["tally_issues"]:
             return STATE_REGRESSION, "検証失敗: " + "; ".join(f["tally_issues"])
@@ -229,27 +233,28 @@ def classify_class(f: dict) -> tuple[str, str]:
     if not f["sub_task_tab"]:
         return (
             STATE_TODO,
-            f"提出記録側に「{TASK_LABEL}」タブなし → apply_submission_formulas.py "
-            f"--class {cn} --commit --provision-submission-tab、または最初の提出を待つ",
+            f"提出記録側に「{label}」タブなし → apply_submission_formulas.py "
+            f"--class {cn}{task_opt} --commit --provision-submission-tab、または最初の提出を待つ",
         )
 
     if f["formulas"] != "all" or not f["admin_task_tab"]:
         return (
             STATE_TODO,
-            f"数式未設定 → apply_submission_formulas.py --class {cn} --commit",
+            f"数式未設定 → apply_submission_formulas.py --class {cn}{task_opt} --commit",
         )
 
     missing = []
     if not f["sub_hidden"]:
-        missing.append("提出記録側の課題①が非表示でない")
+        missing.append(f"提出記録側の{label}が非表示でない")
     if not (f["admin_hidden"] and f["admin_protected"]):
-        missing.append("管理側の課題①が非表示+保護でない")
+        missing.append(f"管理側の{label}が非表示+保護でない")
     if not (f["roster_hidden"] and f["roster_protected"]):
         missing.append("受講者リストが非表示+保護でない")
     if missing:
         return (
             STATE_TODO,
-            "; ".join(missing) + f" → hide_sensitive_sheets.py --class {cn} --commit",
+            "; ".join(missing)
+            + f" → hide_sensitive_sheets.py --class {cn}{task_opt} --commit",
         )
     if f["source_issues"]:
         return (
@@ -302,7 +307,7 @@ def _hidden_and_protected(full_sheets: list[dict], title: str) -> tuple[bool, bo
     )
 
 
-def gather_facts(class_num: str) -> dict:
+def gather_facts(class_num: str, task_label: str = TASK_LABEL) -> dict:
     att_id = resolve_attendance_spreadsheet_id(class_num)
     sub_id = TASK1_SUBMISSION_SPREADSHEET_IDS[class_num]
     att_tab = f"№{class_num}_出欠確認"
@@ -323,6 +328,7 @@ def gather_facts(class_num: str) -> dict:
     ]
     facts = {
         "class": class_num,
+        "task": task_label,
         "expected_registered": class_num in EXPECTED_STUDENT_COUNT_BY_CLASS,
         "expected_count": EXPECTED_STUDENT_COUNT_BY_CLASS.get(class_num),
         "company_office_filled": count_company_office_filled(roster),
@@ -362,16 +368,16 @@ def gather_facts(class_num: str) -> dict:
         att_full, ROSTER_TARGET_TAB
     )
     facts["admin_hidden"], facts["admin_protected"] = _hidden_and_protected(
-        att_full, TASK_LABEL
+        att_full, task_label
     )
-    facts["admin_task_tab"] = _find_sheet_entry(att_full, TASK_LABEL) is not None
-    facts["sub_task_tab"] = _find_sheet_entry(sub_full, TASK_LABEL) is not None
-    facts["sub_hidden"], _ = _hidden_and_protected(sub_full, TASK_LABEL)
+    facts["admin_task_tab"] = _find_sheet_entry(att_full, task_label) is not None
+    facts["sub_task_tab"] = _find_sheet_entry(sub_full, task_label) is not None
+    facts["sub_hidden"], _ = _hidden_and_protected(sub_full, task_label)
 
     header = _get_values(
         _build_sheets_service, att_id, f"'{att_tab}'!A{HEADER_ROW}:AZ{HEADER_ROW}"
     )
-    task_col = col_letter(find_task_column(header[0] if header else []))
+    task_col = col_letter(find_task_column(header[0] if header else [], task_label))
     student_rows = select_student_rows(number_col, roster_set)
     col = _get_values(
         _build_sheets_service,
@@ -384,7 +390,7 @@ def gather_facts(class_num: str) -> dict:
         for r in student_rows
         if r - FIRST_STUDENT_ROW < len(col)
         and col[r - FIRST_STUDENT_ROW]
-        and col[r - FIRST_STUDENT_ROW][0] == build_status_formula(r)
+        and col[r - FIRST_STUDENT_ROW][0] == build_status_formula(r, task_label)
     )
     facts["formulas"] = (
         "all"
@@ -393,14 +399,14 @@ def gather_facts(class_num: str) -> dict:
     )
 
     if facts["admin_task_tab"]:
-        a1 = _get_values(_build_sheets_service, att_id, f"'{TASK_LABEL}'!A1", "FORMULA")
-        c1 = _get_values(_build_sheets_service, att_id, f"'{TASK_LABEL}'!C1", "FORMULA")
+        a1 = _get_values(_build_sheets_service, att_id, f"'{task_label}'!A1", "FORMULA")
+        c1 = _get_values(_build_sheets_service, att_id, f"'{task_label}'!C1", "FORMULA")
         shown_import = _get_values(
-            _build_sheets_service, att_id, f"'{TASK_LABEL}'!A1:C1"
+            _build_sheets_service, att_id, f"'{task_label}'!A1:C1"
         )
         a1_val = a1[0][0] if a1 and a1[0] else ""
         c1_val = c1[0][0] if c1 and c1[0] else ""
-        if classify_cell(a1_val, build_import_formula(sub_id)) != "same":
+        if classify_cell(a1_val, build_import_formula(sub_id, task_label)) != "same":
             facts["link_issues"].append("A1が期待のIMPORTRANGE式でない")
         if classify_cell(c1_val, XLOOKUP_FORMULA) != "same":
             facts["link_issues"].append("C1が期待のXLOOKUP式でない")
@@ -417,14 +423,16 @@ def gather_facts(class_num: str) -> dict:
         sub_rows = _get_values(
             _build_sheets_service,
             sub_id,
-            f"'{TASK_LABEL}'!{SUBMISSION_NICHIKAI_COL}2:{SUBMISSION_NICHIKAI_COL}{SUBMISSION_READ_CAP}",
+            f"'{task_label}'!{SUBMISSION_NICHIKAI_COL}2:{SUBMISSION_NICHIKAI_COL}{SUBMISSION_READ_CAP}",
         )
         check_row_cap(sub_rows)
         nichikai = {str(r[2]).strip() for r in roster if len(r) > 2}
         independent = independent_submitted_count(
             [r[0] for r in sub_rows if r], nichikai
         )
-        facts["tally_issues"] = verify_results(statuses, len(student_rows), independent)
+        facts["tally_issues"] = verify_results(
+            statuses, len(student_rows), independent, task_label
+        )
         facts["_submitted"] = sum(1 for s in statuses if s == "提出")
         facts["_unsubmitted"] = sum(1 for s in statuses if s == "未提出")
     return facts
@@ -434,6 +442,12 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "--class", dest="class_num", default=None, help="対象クラスを1件に限定"
+    )
+    parser.add_argument(
+        "--task",
+        choices=TASK_LABELS,
+        default=TASK_LABEL,
+        help="対象の課題(既定: 課題①)",
     )
     args = parser.parse_args()
     if args.class_num and args.class_num not in TARGET_CLASSES:
@@ -446,14 +460,14 @@ def main() -> int:
     for cn in classes:
         try:
             try:
-                facts = gather_facts(cn)
+                facts = gather_facts(cn, args.task)
             except HttpError as e:
                 if getattr(e.resp, "status", None) != 429:
                     raise
                 time.sleep(
                     RATE_LIMIT_WAIT_SEC
                 )  # 読取りクォータ超過: 待って1回だけ再試行
-                facts = gather_facts(cn)
+                facts = gather_facts(cn, args.task)
             state, action = classify_class(facts)
             counts = (
                 f"{facts['_submitted']}/{facts['_unsubmitted']}"

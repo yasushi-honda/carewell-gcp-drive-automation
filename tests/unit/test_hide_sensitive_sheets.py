@@ -204,3 +204,179 @@ class TestScratchDir:
         assert (
             _scratch_dir() == PROJECT_ROOT / "var" / "scratch" / "hide_sensitive_sheets"
         )
+
+
+# --- 課題②対応: process_class の課題ラベル指定と、失敗判定 ---------------------------
+
+
+class _FakeSheets:
+    """process_class のAPI層を差し替える偽環境。batchUpdateで状態を実際に変える。"""
+
+    def __init__(self, monkeypatch, label):
+        import hide_sensitive_sheets as m
+
+        self.m = m
+        self.label = label
+        self.calls = []
+        self.att_task_hidden = False
+        self.att_task_protected = False
+        self.sub_task_hidden = False
+        sa = m.SA_EMAIL
+        self.editors = [sa, "someone@example.com"]
+        monkeypatch.setattr(m, "resolve_attendance_spreadsheet_id", lambda c: "ATT")
+        monkeypatch.setattr(m, "_get_full_sheets_list", self._full)
+        monkeypatch.setattr(m, "_get_writer_emails", lambda fid: self.editors)
+        monkeypatch.setattr(m, "TASK1_SUBMISSION_SPREADSHEET_IDS", {"01": "SUB"})
+        monkeypatch.setattr(m, "_get_sheet_properties_list", self._props)
+        monkeypatch.setattr(m, "_batch_update", self._batch)
+
+    def _full(self, sid, build_service_fn=None):
+        roster = {
+            "properties": {"sheetId": 1, "title": "受講者リスト", "hidden": True},
+            "protectedRanges": [{"range": {"sheetId": 1}}],
+        }
+        task = {
+            "properties": {
+                "sheetId": 2,
+                "title": self.label,
+                "hidden": self.att_task_hidden,
+            },
+            "protectedRanges": (
+                [{"range": {"sheetId": 2}}] if self.att_task_protected else []
+            ),
+        }
+        return [roster, task]
+
+    def _props(self, sid, build_service_fn=None):
+        return [{"sheetId": 3, "title": self.label, "hidden": self.sub_task_hidden}]
+
+    def task_calls(self):
+        """課題タブ(管理側sheetId=2・提出記録側)に触れた呼び出しだけ(受講者リストの列非表示は除く)。"""
+        out = []
+        for sid, reqs in self.calls:
+            for r in reqs:
+                prop = r.get("updateSheetProperties", {}).get("properties", {})
+                if sid == "SUB" or prop.get("sheetId") == 2 or "addProtectedRange" in r:
+                    out.append((sid, r))
+        return out
+
+    def _batch(self, sid, requests, build_service_fn=None):
+        self.calls.append((sid, requests))
+        for r in requests:
+            if "updateSheetProperties" in r:
+                sheet_id = r["updateSheetProperties"]["properties"]["sheetId"]
+                if sid == "ATT" and sheet_id == 2:
+                    self.att_task_hidden = True
+                if sid == "SUB":
+                    self.sub_task_hidden = True
+            if "addProtectedRange" in r:
+                self.att_task_protected = True
+
+
+def test_task2_hides_and_protects_only_the_task2_tabs(monkeypatch, tmp_path):
+    fake = _FakeSheets(monkeypatch, "課題②")
+
+    result = fake.m.process_class("01", True, tmp_path, "課題②")
+
+    assert result["task"] == "課題②"
+    assert result["dest_task1"]["status"] == "applied"
+    assert result["dest_task1"]["after_hidden"] is True
+    assert result["dest_task1"]["after_protected"] is True
+    # 提出記録シート側は非表示だけ(保護はしない)
+    assert result["task1"]["status"] == "applied"
+    assert result["task1"]["after_hidden"] is True
+    sub_calls = [reqs for sid, reqs in fake.calls if sid == "SUB"]
+    assert sub_calls and not any("addProtectedRange" in r for r in sub_calls[0])
+    assert fake.m.failed_results([result]) == []
+
+
+def test_task2_dry_run_changes_nothing(monkeypatch, tmp_path):
+    fake = _FakeSheets(monkeypatch, "課題②")
+
+    result = fake.m.process_class("01", False, tmp_path, "課題②")
+
+    assert fake.calls == []  # dry-runは受講者リストを含め何も書かない
+    assert result["dest_task1"]["status"] == "dry-run"
+    assert result["task1"]["status"] == "dry-run"
+
+
+def test_task2_rerun_is_idempotent(monkeypatch, tmp_path):
+    fake = _FakeSheets(monkeypatch, "課題②")
+    fake.m.process_class("01", True, tmp_path, "課題②")
+    fake.calls.clear()
+
+    result = fake.m.process_class("01", True, tmp_path, "課題②")
+
+    assert fake.task_calls() == []
+    assert result["dest_task1"]["status"] == "already_applied"
+    assert result["task1"]["status"] == "already_hidden"
+
+
+def test_default_task_is_task1_and_does_not_touch_task2_tab(monkeypatch, tmp_path):
+    fake = _FakeSheets(monkeypatch, "課題②")  # 課題②タブしか無い環境で課題①を処理する
+
+    result = fake.m.process_class("01", True, tmp_path)
+
+    assert result["task"] == "課題①"
+    assert result["dest_task1"]["status"] == "skipped"
+    assert result["task1"]["status"] == "skipped"
+    assert fake.task_calls() == []
+
+
+class TestFailedResults:
+    def test_ok_results_have_no_failures(self):
+        from hide_sensitive_sheets import failed_results
+
+        ok = {
+            "class": "01",
+            "task": "課題②",
+            "roster": {"status": "already_applied"},
+            "task1": {"status": "applied", "after_hidden": True},
+            "dest_task1": {
+                "status": "applied",
+                "after_hidden": True,
+                "after_protected": True,
+            },
+        }
+        assert failed_results([ok]) == []
+
+    @pytest.mark.parametrize(
+        "slot,value",
+        [
+            ("roster", {"status": "error", "detail": "x"}),
+            ("task1", {"status": "error", "detail": "x"}),
+            ("dest_task1", {"status": "applied_verification_failed"}),
+            ("task1", {"status": "applied", "after_hidden": False}),
+            ("task1", {"status": "applied", "after_hidden": None}),
+            (
+                "dest_task1",
+                {"status": "applied", "after_hidden": True, "after_protected": False},
+            ),
+        ],
+    )
+    def test_error_or_unverified_results_are_failures(self, slot, value):
+        from hide_sensitive_sheets import failed_results
+
+        result = {
+            "class": "01",
+            "task": "課題②",
+            "roster": {"status": "already_applied"},
+            "task1": {"status": "already_hidden"},
+            "dest_task1": {"status": "already_applied"},
+        }
+        result[slot] = value
+        failures = failed_results([result])
+        assert len(failures) == 1
+        assert "01" in failures[0] and "課題②" in failures[0]
+
+    def test_skipped_and_dry_run_are_not_failures(self):
+        from hide_sensitive_sheets import failed_results
+
+        result = {
+            "class": "01",
+            "task": "課題②",
+            "roster": {"status": "skipped"},
+            "task1": {"status": "dry-run"},
+            "dest_task1": {"status": "skipped"},
+        }
+        assert failed_results([result]) == []

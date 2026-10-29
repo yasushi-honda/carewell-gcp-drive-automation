@@ -435,3 +435,37 @@ class TestCompareSourceToRoster:
             )
             == []
         )
+
+
+class TestTask2:
+    """課題②: 表示ラベルと、案内する復旧コマンドに --task 課題② が付く(既定の課題①は不変)。"""
+
+    def test_default_task_commands_have_no_task_option(self):
+        _, action = classify_class(_facts(formulas="none"))
+        assert "--task" not in action
+
+    def test_missing_formulas_command_carries_task(self):
+        _, action = classify_class(_facts(task="課題②", formulas="none"))
+        assert "apply_submission_formulas.py --class 03 --task 課題② --commit" in action
+
+    def test_missing_submission_tab_names_task2_and_carries_task(self):
+        _, action = classify_class(_facts(task="課題②", sub_task_tab=False))
+        assert "「課題②」" in action
+        assert "--class 03 --task 課題② --commit --provision-submission-tab" in action
+
+    def test_missing_hide_command_names_task2_and_carries_task(self):
+        _, action = classify_class(_facts(task="課題②", admin_protected=False))
+        assert "管理側の課題②が非表示+保護でない" in action
+        assert "hide_sensitive_sheets.py --class 03 --task 課題② --commit" in action
+
+    def test_submission_tab_visible_names_task2(self):
+        _, action = classify_class(_facts(task="課題②", sub_hidden=False))
+        assert "提出記録側の課題②が非表示でない" in action
+
+    def test_broken_link_command_carries_task(self):
+        _, action = classify_class(_facts(task="課題②", link_issues=["A1が不正"]))
+        assert "apply_submission_formulas.py --class 03 --task 課題②" in action
+
+    def test_done_with_task2(self):
+        state, _ = classify_class(_facts(task="課題②"))
+        assert state == STATE_DONE
