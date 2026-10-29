@@ -575,6 +575,8 @@ class TestGatherFactsTask2:
         facts = env.m.gather_facts("03", "課題②")
 
         assert facts["formulas"] == "none"
+        # 判定できない値は欠落(0と区別され、突合スクリプトでUNKNOWNになる)
+        assert "_independent" not in facts and "_submitted" not in facts
         state, action = env.m.classify_class(facts)
         assert state == STATE_TODO
         assert "--task 課題②" in action

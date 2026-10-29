@@ -3,11 +3,14 @@
 課題の「収集から表示まで」の4段突合を、1コマンドで行う(読み取り専用)。
 
 クラスNN・課題Xについて、次を並べて一致を確かめる(docs/class-rollout-runbook.md 手順5):
+  0. 最新の収集に異常なし(ERROR・件数不一致・未完了・課題が見つからない、は一致とは扱わない)
   1. ポータルの件数 = Cloud Run の取得件数   (最新の収集ログの `Count verification`)
   2. Cloud Run の取得件数 = 提出記録シートの行数
   3. Firestore の file_count = 提出記録シートの行数
   4. 提出記録に複合キーの重複なし
-  5. 出欠確認の「提出」件数 = 提出記録のユニーク提出者(名簿内)
+  5. 提出記録の提出者は全員名簿内(日介番号の空欄・名簿外の行は、両側の集計から外れて
+     一致してしまうため、別に検出する)
+  6. 出欠確認の「提出」件数 = 提出記録のユニーク提出者(名簿内)
 
 使い方:
     .venv/bin/python scripts/verify_task_rollout.py --class 01 --task 課題②
@@ -33,6 +36,7 @@ import urllib.parse
 import urllib.request
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import NamedTuple
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
@@ -44,6 +48,9 @@ from scripts.apply_submission_formulas import (  # noqa: E402
     check_row_cap,
 )
 from scripts.check_collection_status import (  # noqa: E402
+    OUTCOME_ERROR,
+    OUTCOME_MISMATCH,
+    OUTCOME_OK,
     OUTCOME_ZERO,
     fetch_events,
     summarize,
@@ -65,10 +72,12 @@ STATUS_PASS = "PASS"
 STATUS_FAIL = "FAIL"
 STATUS_UNKNOWN = "UNKNOWN"
 
+NAME_COLLECT = "最新の収集に異常なし"
 NAME_PORTAL = "ポータルの件数 = Cloud Run の取得件数"
 NAME_ROWS = "Cloud Run の取得件数 = 提出記録の行数"
 NAME_FIRESTORE = "Firestore の file_count = 提出記録の行数"
 NAME_DUPS = "提出記録に複合キーの重複なし"
+NAME_MEMBERS = "提出記録の提出者は全員名簿内(日介番号の空欄・名簿外なし)"
 NAME_DISPLAY = "出欠確認の「提出」件数 = 提出記録のユニーク提出者(名簿内)"
 
 
@@ -95,9 +104,82 @@ def _compare(name: str, a, b, fail_hint: str, unknown_hint: str) -> dict:
     }
 
 
+def _collect_stage(outcome: str, overlap: bool) -> dict:
+    """最新の収集に異常がないか。件数が揃っていても、ERRORや件数不一致の実行は一致とは扱わない。"""
+    note = "(手動実行と定期実行が重なった可能性あり)" if overlap else ""
+    if outcome in (OUTCOME_OK, OUTCOME_ZERO):
+        return {
+            "name": NAME_COLLECT,
+            "status": STATUS_PASS,
+            "detail": outcome + note,
+            "hint": "",
+        }
+    if outcome == OUTCOME_ERROR:
+        return {
+            "name": NAME_COLLECT,
+            "status": STATUS_FAIL,
+            "detail": outcome + note,
+            "hint": "収集のログにERROR(ダウンロード失敗・保存/同期の失敗など)。"
+            "check_collection_status.pyとログで原因を確認",
+        }
+    if outcome == OUTCOME_MISMATCH:
+        return {
+            "name": NAME_COLLECT,
+            "status": STATUS_FAIL,
+            "detail": outcome + note,
+            "hint": "ポータルの件数と取得行数が違った実行がある(収集漏れの可能性)",
+        }
+    return {
+        "name": NAME_COLLECT,
+        "status": STATUS_UNKNOWN,
+        "detail": outcome + note,
+        "hint": "最新の収集が完了していない、課題が見つからない、件数を確認できない、または期間内に実行がない",
+    }
+
+
+def _members_stage(blank, unique_all, independent) -> dict:
+    """提出者が全員名簿内か。日介番号の空欄・名簿外の行は、独立集計と出欠確認の両方から外れて
+    一致してしまう(その受講者は表示上「未提出」のまま)ため、別に検出する。"""
+    if blank is None or unique_all is None:
+        return {
+            "name": NAME_MEMBERS,
+            "status": STATUS_UNKNOWN,
+            "detail": "取得不可",
+            "hint": "提出記録を読めない",
+        }
+    if blank:
+        return {
+            "name": NAME_MEMBERS,
+            "status": STATUS_FAIL,
+            "detail": f"日介番号が空欄の行 {blank}",
+            "hint": "日介番号が空欄の提出行がある(その受講者は出欠確認で「未提出」のまま)",
+        }
+    if independent is None:
+        return {
+            "name": NAME_MEMBERS,
+            "status": STATUS_UNKNOWN,
+            "detail": f"{unique_all} / ?",
+            "hint": "名簿内の提出者数を取得できない(連携が未設定)",
+        }
+    if unique_all != independent:
+        return {
+            "name": NAME_MEMBERS,
+            "status": STATUS_FAIL,
+            "detail": f"提出者 {unique_all} / 名簿内 {independent}",
+            "hint": "名簿外の日介番号の提出がある(誤入力・別クラス・異動の可能性。その受講者は「未提出」のまま)",
+        }
+    return {
+        "name": NAME_MEMBERS,
+        "status": STATUS_PASS,
+        "detail": f"{unique_all} = {independent}",
+        "hint": "",
+    }
+
+
 def compare_stages(s: dict) -> list[dict]:
     """4段突合の各比較を判定する。取得できなかった値は「確定できない」(一致とは扱わない)。"""
     results = [
+        _collect_stage(s["collect_outcome"], s.get("overlap_suspected", False)),
         _compare(
             NAME_PORTAL,
             s["portal_total"],
@@ -141,6 +223,9 @@ def compare_stages(s: dict) -> list[dict]:
             }
         )
     results.append(
+        _members_stage(s["blank_nichikai"], s["unique_all"], s["independent"])
+    )
+    results.append(
         _compare(
             NAME_DISPLAY,
             s["submitted_display"],
@@ -181,23 +266,59 @@ def find_class_name(class_no: str) -> str:
 # ---------------------------------------------------------------------------
 
 
-def fetch_sheet_rows(class_no: str, task: str) -> tuple[int | None, int | None]:
-    """提出記録シートの課題タブの (データ行数, 複合キー重複数)。タブが読めなければ (None, None)。"""
+class SheetRows(NamedTuple):
+    rows: int | None
+    key_dups: int | None
+    unique_nichikai: int | None
+    blank_nichikai: int | None
+    note: str
+
+
+def fetch_sheet_rows(class_no: str, task: str) -> SheetRows:
+    """提出記録シートの課題タブの、データ行数・複合キーの重複数・ユニーク日介番号数・日介番号が
+    空欄の行数。タブが読めなければ値は None(理由を note に残す)。読取り上限に達したら例外。"""
     sub_id = TASK1_SUBMISSION_SPREADSHEET_IDS[class_no]
     try:
         values = _get_values(
             _build_sheets_service, sub_id, f"'{task}'!A2:H{SUBMISSION_READ_CAP}"
         )
-    except Exception:  # noqa: BLE001 タブ未作成・権限など。一致とは扱わない
-        return None, None
+    except Exception as e:  # noqa: BLE001 タブ未作成・権限など。一致とは扱わない
+        return SheetRows(
+            None, None, None, None, f"提出記録を読めない({type(e).__name__})"
+        )
     check_row_cap(values)
     rows = [r for r in values if any(str(c).strip() for c in r)]
     keys = [str(r[1]).strip() for r in rows if len(r) > 1 and str(r[1]).strip()]
-    return len(rows), len(keys) - len(set(keys))
+    nichikai = [str(r[3]).strip() if len(r) > 3 else "" for r in rows]
+    return SheetRows(
+        len(rows),
+        len(keys) - len(set(keys)),
+        len({n for n in nichikai if n}),
+        sum(1 for n in nichikai if not n),
+        "",
+    )
 
 
-def fetch_firestore_file_count(class_no: str, task: str) -> int | None:
-    """Firestoreの課題の親ドキュメントの file_count。取得できなければ None。"""
+class FirestoreCount(NamedTuple):
+    count: int | None
+    note: str
+
+
+def _http_error_message(e: urllib.error.HTTPError) -> str:
+    try:
+        return str(
+            json.loads(e.read().decode() or "{}").get("error", {}).get("message", "")
+        )
+    except Exception:  # noqa: BLE001
+        return ""
+
+
+def fetch_firestore_file_count(class_no: str, task: str) -> FirestoreCount:
+    """Firestoreの課題の親ドキュメントの file_count。取得できなければ count=None(理由を note に)。
+
+    404は「ドキュメント不在」(=まだ記録なし、0件)と確認できたときだけ0とする。データベースや
+    パスの誤りも404になるため、それ以外の404は「確定できない」(誤ったDBで0=0が一致しないように)。
+    """
     try:
         token = subprocess.run(
             ["gcloud", "auth", "print-access-token"],
@@ -218,12 +339,22 @@ def fetch_firestore_file_count(class_no: str, task: str) -> int | None:
         req = urllib.request.Request(url, headers={"Authorization": f"Bearer {token}"})
         with urllib.request.urlopen(req, timeout=30) as resp:
             fields = json.load(resp).get("fields", {})
-        return int(next(iter(fields["file_count"].values())))
     except urllib.error.HTTPError as e:
-        # 親ドキュメントが無い(404)=まだ1件も記録されていない
-        return 0 if e.code == 404 else None
-    except Exception:  # noqa: BLE001
-        return None
+        if e.code == 404:
+            msg = _http_error_message(e)
+            if msg.startswith("Document ") and "not found" in msg:
+                return FirestoreCount(0, "")
+            return FirestoreCount(
+                None, "Firestore HTTP 404(データベースまたはパスが違う可能性)"
+            )
+        return FirestoreCount(None, f"Firestore HTTP {e.code}")
+    except Exception as e:  # noqa: BLE001
+        return FirestoreCount(None, f"Firestoreを取得できない({type(e).__name__})")
+    value = fields.get("file_count", {}).get("integerValue")
+    try:
+        return FirestoreCount(int(value), "")
+    except (TypeError, ValueError):
+        return FirestoreCount(None, "file_countを整数として取得できない")
 
 
 def main() -> int:
@@ -241,7 +372,7 @@ def main() -> int:
         summary = summarize(
             events, args.class_num, args.task, datetime.now(timezone.utc)
         )
-        sheet_rows, key_dups = fetch_sheet_rows(args.class_num, args.task)
+        sheet = fetch_sheet_rows(args.class_num, args.task)
         facts = gather_facts(args.class_num, args.task)
     except Exception as e:  # noqa: BLE001 取得失敗は「一致」にしない
         print(f"[取得失敗] {type(e).__name__}: {str(e)[:200]}")
@@ -252,20 +383,27 @@ def main() -> int:
     else:
         portal_total, extracted = summary.get("total"), summary.get("extracted")
 
+    firestore = fetch_firestore_file_count(args.class_num, args.task)
     results = compare_stages(
         {
             "collect_outcome": summary["outcome"],
+            "overlap_suspected": summary.get("overlap_suspected", False),
             "portal_total": portal_total,
             "extracted": extracted,
-            "sheet_rows": sheet_rows,
-            "key_dups": key_dups,
-            "firestore_count": fetch_firestore_file_count(args.class_num, args.task),
+            "sheet_rows": sheet.rows,
+            "key_dups": sheet.key_dups,
+            "unique_all": sheet.unique_nichikai,
+            "blank_nichikai": sheet.blank_nichikai,
+            "firestore_count": firestore.count,
             "submitted_display": facts.get("_submitted"),
             "independent": facts.get("_independent"),
         }
     )
     started = summary.get("started") or "-"
     print(f"[収集] 直近の実行: {summary['outcome']}(開始 {started})")
+    for note in (sheet.note, firestore.note):
+        if note:
+            print(f"[取得] {note}")
     print(render(args.class_num, args.task, results))
     return exit_code(results)
 
