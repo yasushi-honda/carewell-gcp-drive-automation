@@ -14,6 +14,9 @@ from config.classes import ATTENDANCE_ROSTER_HEADER
 
 logger = logging.getLogger(__name__)
 
+# 作成時に非表示にする提出記録タブ(scripts/hide_sensitive_sheets.py と同じ対象)
+HIDDEN_TASK_SHEETS = ("課題①", "課題②")
+
 RosterStatus = Literal["ok", "empty", "read_error", "schema_error"]
 
 
@@ -109,12 +112,12 @@ class SheetsService:
                     return
 
             # Sheet doesn't exist, create it
-            # hidden=True: サブ講師の誤操作防止のため「課題①」タブのみ既定で
-            # 非表示にする(クライアント要望、2026-09-12)。他の課題タブ(課題②等)は
-            # 対象外のため、通常通り表示状態で作成する。
+            # hidden=True: サブ講師の誤操作防止のため「課題①」「課題②」タブを既定で
+            # 非表示にする(課題①はクライアント要望、2026-09-12。課題②は2026-10-29に
+            # decision-makerが同じ扱いに決定)。それ以外のタブは通常通り表示状態で作成する。
             logger.info(f"Creating new sheet: {sheet_name}")
             sheet_properties = {"title": sheet_name}
-            if sheet_name == "課題①":
+            if sheet_name in HIDDEN_TASK_SHEETS:
                 sheet_properties["hidden"] = True
             request_body = {
                 "requests": [{"addSheet": {"properties": sheet_properties}}]
