@@ -6,6 +6,7 @@
 使い方:
     python scripts/check_collection_status.py                    # 全対象クラス×課題①②、直近3時間
     python scripts/check_collection_status.py --class 01 --task 課題②
+    python scripts/check_collection_status.py --class 01 --task 課題② --strict-not-found  # 公開済みの課題
     python scripts/check_collection_status.py --hours 6
 
 見るもの(クラス×課題ごとに、直近の1回の実行だけ):
@@ -16,8 +17,12 @@
 課題が見つからない場合も、収集の応答はHTTP 200「未作成」になり、Cloud Schedulerは緑のまま
 0件が続く(課題①から続く仕様)。公開済みの課題でこの行が出たら、task_patternを確認する。
 
-終了コード: 0=ENABLEDのジョブに問題なし / 1=ENABLEDのジョブに「中断・不一致・確認不能・
-ERROR」がある / 2=ログやジョブ一覧を取得できなかった
+実行は `.venv/bin/python`（Google認証ライブラリ等に依存するため、システムのpythonでは動かない）。
+
+終了コード: 0=問題なし / 1=ENABLEDのジョブに「中断・不一致・確認不能・ERROR」がある、または
+ENABLEDなのに期間内に実行が無い・ジョブが無い、または帰属不明のERRORがある（--strict-not-found
+指定時は「課題が見つからない」も） / 2=ログやジョブ一覧を取得できなかった、またはログが取得上限に達した
+PAUSEDのジョブの結果は終了コードに影響しない。ジョブを再開した直後は、次の実行まで「実行なし」で1になる
 
 ERRORは、重大度(収集コードのテキストログでは空になる)ではなく、整形済みの本文の
 「 - ERROR - 」で判定する。2つの実行(手動と定期)が重なった可能性があるときは、その旨を付記する。
@@ -127,12 +132,19 @@ def parse_event(entry: dict) -> dict | None:
     if m:
         return {"ts": ts, "class": m.group(1), "task": m.group(2), "kind": "not_found"}
     m = _PREFIX_RE.search(text)
+    is_error = severity in _ERROR_SEVERITIES or any(
+        marker in text for marker in _ERROR_TEXT_MARKERS
+    )
     if not m:
+        # main.pyのロガーのERROR(ダウンロード失敗・500など)には接頭辞が付かず、クラス・課題を
+        # 特定できない。原文(氏名を含みうる)は保持せず、「ERRORがあった」事実だけ残す。
+        if is_error:
+            return {"ts": ts, "class": None, "task": None, "kind": "error_unattributed"}
         return None
     base = {"ts": ts, "class": m.group(1), "task": m.group(2)}
     # 収集コードはテキスト形式のログで、logger.error()の重大度はDEFAULT(空)になる。
     # 重大度だけでは拾えないため、整形済みの本文の「 - ERROR - 」も見る。
-    if severity in _ERROR_SEVERITIES or any(m in text for m in _ERROR_TEXT_MARKERS):
+    if is_error:
         return {**base, "kind": "error"}
     v = _VERIFIED_RE.search(text)
     if v:
@@ -180,12 +192,13 @@ def summarize(
     started = mine[starts[-1]]["ts"] if starts else None
     overlap = False
     repeated_unfinished = False
-    for a, b in zip(starts, starts[1:]):
+    if len(starts) >= 2:
+        # 直前の実行だけを見る(さらに古い未完了が、いま正常な実行を中断に見せてはいけない)
+        a, b = starts[-2], starts[-1]
         gap = (_parse_ts(mine[b]["ts"]) - _parse_ts(mine[a]["ts"])).total_seconds()
-        if gap >= ATTEMPT_DEADLINE_SEC and not any(
+        repeated_unfinished = gap >= ATTEMPT_DEADLINE_SEC and not any(
             e["kind"] in _TERMINAL_KINDS for e in mine[a:b]
-        ):
-            repeated_unfinished = True
+        )
     if len(starts) >= 2:
         prev_i, last_i = starts[-2], starts[-1]
         gap = (
@@ -255,14 +268,38 @@ def render_row(class_no: str, task: str, job_state: str, summary: dict) -> str:
     return f"№{class_no} | {task} | {job_state} | {when} | {count} | {note}"
 
 
-def exit_code(rows: list[tuple[str, dict]]) -> int:
-    """ENABLEDのジョブに問題のある結果があれば1。PAUSEDのジョブは見ない。"""
-    return int(
-        any(
-            state == "ENABLED" and summary["outcome"] in PROBLEM_OUTCOMES
-            for state, summary in rows
-        )
-    )
+def count_unattributed_errors(events: list[dict | None]) -> tuple[int, str | None]:
+    """クラス・課題を特定できないERRORの件数と、最新の時刻(原文は扱わない)。"""
+    ts = [e["ts"] for e in events if e and e["kind"] == "error_unattributed"]
+    if not ts:
+        return 0, None
+    return len(ts), max(ts, key=_parse_ts)
+
+
+def exit_code(
+    rows: list[tuple[str, dict]],
+    strict_not_found: bool = False,
+    unattributed_errors: int = 0,
+) -> int:
+    """要対応があれば1。PAUSEDのジョブの結果は見ない。
+
+    ENABLEDなのに期間内に実行が無い(Schedulerの停止・認証切れなど)、ジョブが存在しない、
+    クラス・課題を特定できないERRORがある場合も1。公開済みの課題で「見つからない」を
+    問題にしたいときは strict_not_found=True。
+    """
+    if unattributed_errors:
+        return 1
+    problems = set(PROBLEM_OUTCOMES) | {OUTCOME_NO_RUN}
+    if strict_not_found:
+        problems.add(OUTCOME_NOT_FOUND)
+    for state, summary in rows:
+        if state == "PAUSED":
+            continue
+        if state != "ENABLED":  # ジョブが存在しない・想定外の状態
+            return 1
+        if summary["outcome"] in problems:
+            return 1
+    return 0
 
 
 # ---------------------------------------------------------------------------
@@ -308,12 +345,17 @@ def fetch_events(hours: int) -> list[dict | None]:
     flt = (
         'resource.type="cloud_run_revision" '
         f'AND resource.labels.service_name="{SERVICE}" '
-        f'AND ({patterns} OR ((severity>=ERROR OR textPayload:" - ERROR - " '
-        'OR textPayload:" - CRITICAL - ") AND textPayload:"[carewell-"))'
+        f'AND ({patterns} OR severity>=ERROR OR textPayload:" - ERROR - " '
+        'OR textPayload:" - CRITICAL - ")'
     )
     entries = _gcloud_json(
         ["logging", "read", flt, f"--freshness={hours}h", f"--limit={LOG_LIMIT}"]
     )
+    if len(entries) >= LOG_LIMIT:
+        # 古い側が欠けた不完全な結果を、そのまま分類しない
+        raise RuntimeError(
+            f"ログが取得上限({LOG_LIMIT}件)に達しました。--hours を短くしてください"
+        )
     return [parse_event(e) for e in entries]
 
 
@@ -326,6 +368,12 @@ def main() -> int:
     parser.add_argument("--class", dest="class_num", default=None)
     parser.add_argument("--task", choices=TASK_TAB_NAMES, default=None)
     parser.add_argument("--hours", type=int, default=3, help="ログを見る期間(時間)")
+    parser.add_argument(
+        "--strict-not-found",
+        action="store_true",
+        help="ENABLEDのジョブで「課題が見つからない」を問題(終了コード1)にする。"
+        "公開済みの課題のクラスで使う",
+    )
     args = parser.parse_args()
     if args.class_num and args.class_num not in TARGET_CLASSES:
         print(f"[エラー] クラス{args.class_num}は対象外です(対象: {TARGET_CLASSES})")
@@ -349,11 +397,24 @@ def main() -> int:
             summary = summarize(events, cn, task, now)
             rows.append((state, summary))
             print(render_row(cn, task, state, summary))
+    unattributed, latest = count_unattributed_errors(events)
+    if unattributed:
+        when = _parse_ts(latest).strftime("%m-%d %H:%M UTC")
+        print(
+            f"\n[要確認] 帰属不明のERRORが{unattributed}件あります(最新 {when})。"
+            "ダウンロード失敗・保存/同期の失敗・HTTP 500の最上位例外などで、クラス・課題を"
+            "特定できません。ログを手で確認してください(氏名を含みうるため、原文はここに出しません)。"
+        )
+    running = sum(1 for _, summary in rows if summary["outcome"] == OUTCOME_RUNNING)
+    if running:
+        print(
+            f"\n[注意] 「未完了(実行中)」が{running}件あります。結果は確定していません。"
+        )
     print(
         f"\n[注意] 直近{args.hours}時間のログのみ。ジョブが停止中・期間内に実行がなければ"
-        "「実行なし」と表示します。ERRORはクラス・課題を特定できる行だけ数えます。"
+        "「実行なし」と表示します。クラス・課題を特定できないERRORは「帰属不明」として別に数えます。"
     )
-    return exit_code(rows)
+    return exit_code(rows, args.strict_not_found, unattributed)
 
 
 if __name__ == "__main__":

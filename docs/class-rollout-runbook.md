@@ -35,7 +35,7 @@
 
 **収集側の現状（2026-10-06、`gcloud scheduler jobs list` で確認）**
 - 課題①ジョブ: №01〜07・09は `ENABLED`（30分間隔）。№08・10は `PAUSED`。
-- 課題②ジョブ: 全クラス `PAUSED`。
+- 課題②ジョブ: 全クラス `PAUSED`（この時点の記録。現在の状態は「3.5 課題②の受け入れ」の表が正本）。
 
 このため、№04〜07・09は名簿・グループ分けが届けば本ランブックだけで連携まで完了する。**№08・10と課題②に着手するときは、本ランブックの前に収集側の作業が必要**: ジョブをresumeし、ログ（`Count verification passed`、提出0件なら確定ゼロ件のログ）で動作を確認してから、手順1に進む。
 
@@ -152,7 +152,7 @@ python scripts/check_rollout_status.py --class 0N     # 「完了」になるこ
 1. **デプロイの前に**、ポータル（zenkoukai）で課題の候補数を確認する（`decision-maker`がログインし、AIは表示名と件数だけを読む）。収集コードと同じ条件（`text=<課題名>`の部分一致）で、**課題①と課題②の両方が候補1件だけ**であること。課題②が未公開なら、課題①だけ確認する。
    - 新しい収集コードは、候補が2件以上だと中断する（誤った課題を黙って集めない）。課題①のジョブは稼働中のため、課題①の候補が2件以上だと**デプロイ後に全クラスの課題①収集が止まる**。課題②の公開で「課題①」を含む文言が増えていないかも、ここで確かめる。
 2. 収集コードの修正（課題名の一意選択・ダウンロードの一時ディレクトリ分離・課題②タブの非表示作成）をデプロイし、revision・traffic・ログの3点を確認する（`docs/common-mistakes.md` #8）。デプロイ後の最初の課題①の実行ログで、`Task pattern matched multiple elements`（HTTP 500）が出ていないことを確認する。
-3. 課題②がポータルに公開されていることを確認してから、`gcloud scheduler jobs resume carewell-classNN-task02 --location=asia-northeast1 --project=carewell-automation`（1クラスずつ。次の実行は:05/:35前後）。再開後は、`python scripts/check_collection_status.py --class 0N --task 課題②`（読み取り専用・氏名が出ない）で、直近の実行が「収集OK」（`Count verification passed`、0件なら「提出0件を確認」）であることを確認する。**スクリプトの結果が「課題が見つからない」「課題ページに到達せず中断」のときは「正常に0件」と読まない**（ログの`Task not found` / `Task not yet created`も同じ）: 課題名の表記違い（`task_pattern`の誤り）や画面の読込み遅れでも同じ応答（HTTP 200）になり、Cloud Schedulerは緑のまま0件収集が続く（課題①から続く既存の仕様）。ポータルに課題②が公開済みなのにこのログが出る場合は、`task_pattern`とポータルの表示名を突き合わせる。
+3. 課題②がポータルに公開されていることを確認してから、`gcloud scheduler jobs resume carewell-classNN-task02 --location=asia-northeast1 --project=carewell-automation`（1クラスずつ。次の実行は下の表の実行スロット）。再開後は、`python scripts/check_collection_status.py --class 0N --task 課題②`（読み取り専用・氏名が出ない）で、直近の実行が「収集OK」（`Count verification passed`、0件なら「提出0件を確認」）であることを確認する。**スクリプトの結果が「課題が見つからない」「課題ページに到達せず中断」のときは「正常に0件」と読まない**（ログの`Task not found` / `Task not yet created`も同じ）: 課題名の表記違い（`task_pattern`の誤り）や画面の読込み遅れでも同じ応答（HTTP 200）になり、Cloud Schedulerは緑のまま0件収集が続く（課題①から続く既存の仕様）。ポータルに課題②が公開済みなのにこのログが出る場合は、`task_pattern`とポータルの表示名を突き合わせる。
 4. 反映（クラスごと）。コマンドは1つずつ実行する。
 ```
 python scripts/apply_submission_formulas.py --class 0N --task 課題②             # dry-run
@@ -191,7 +191,7 @@ python scripts/check_rollout_status.py --class 0N --task 課題②              
 **クラスNNごとの実行（番号は置き換える。コマンドは1つずつ実行し、状態を変える操作は都度承認を取る）**
 ```
 gcloud scheduler jobs resume carewell-classNN-task02 --location=asia-northeast1 --project=carewell-automation
-python scripts/check_collection_status.py --class NN --task 課題②          # 次の実行（:05/:35等）の後に「収集OK」か
+python scripts/check_collection_status.py --class NN --task 課題② --strict-not-found   # 次の実行の後に「収集OK」か（公開済みの課題のため、見つからなければ異常）
 python scripts/apply_submission_formulas.py --class NN --task 課題②        # dry-run（衝突0・ゲート通過を確認）
 python scripts/apply_submission_formulas.py --class NN --task 課題② --commit
 python scripts/hide_sensitive_sheets.py --class NN --task 課題②            # dry-run
@@ -202,6 +202,7 @@ python scripts/check_rollout_status.py                                      # �
 - 手動で前倒しして実行するなら `gcloud scheduler jobs run carewell-classNN-task02 --location=asia-northeast1`（定期実行と同じ処理）。実行中に新しい提出が入ると、手動実行と定期実行で件数が違うことがある（既存分は重複せず、新しい分だけ取得される）。
 - 出欠確認の「提出」が、新しい提出の直後に独立集計より1件少なく見えて`check_rollout_status.py`が「退行・検証失敗」になることがある。IMPORTRANGEの再計算待ちで、数十秒〜で解消する。1〜2回再実行してから原因を調べる。
 - ログを手で確認するときは、氏名が出ない条件に絞る（`Count verification`・`Starting file collection`等）。`textPayload:"№0N-課題②"`のように広く取ると、ダウンロード行に氏名が出る。上の`check_collection_status.py`を使えば原文は出ない。
+- `check_collection_status.py`の終了コード: ENABLEDのジョブに「中断・不一致・確認不能・ERROR」があるか、期間内に実行が無い・ジョブが無い場合は1（**再開した直後は、次の実行まで「実行なし」で1になる**）。クラス・課題を特定できないERROR（ダウンロード失敗・保存/同期の失敗・HTTP 500など。`main.py`のログには接頭辞が付かない）は「帰属不明」として別に数え、1件でもあれば1。ログが取得上限（2000件）に達したら不完全なので2。実行は`.venv/bin/python`。
 - `check_collection_status.py`の限界: 収集コードに「実行の終了」を示すログ行が無いため、手動実行と定期実行が重なると、片方のERRORがもう片方に付くことがある（誤ってERRORと出る安全側の誤り）。ERRORが出たらログを手で確認する。毎回、課題ページに着く前に中断する場合は「中断（繰り返し）」と出る。
 
 ## 4. 運用上の約束
