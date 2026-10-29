@@ -1,0 +1,421 @@
+#!/usr/bin/env python3
+"""
+課題の収集(Cloud Run + Cloud Scheduler)の直近の実行結果を、クラス×課題ごとに一覧する。
+読み取り専用。ジョブの再開・実行・書込みは一切しない。
+
+使い方:
+    python scripts/check_collection_status.py                    # 全対象クラス×課題①②、直近3時間
+    python scripts/check_collection_status.py --class 01 --task 課題②
+    python scripts/check_collection_status.py --class 01 --task 課題② --strict-not-found  # 公開済みの課題
+    python scripts/check_collection_status.py --hours 6
+
+見るもの(クラス×課題ごとに、直近の1回の実行だけ):
+    OK=Count verification passed / 提出0件を確認 / 課題が見つからない(未作成または
+    task_patternの表記違い) / 課題ページに到達せず中断(曖昧一致・例外の可能性) /
+    件数不一致 / 件数を確認できない / ERRORあり
+
+課題が見つからない場合も、収集の応答はHTTP 200「未作成」になり、Cloud Schedulerは緑のまま
+0件が続く(課題①から続く仕様)。公開済みの課題でこの行が出たら、task_patternを確認する。
+
+実行は `.venv/bin/python`（Google認証ライブラリ等に依存するため、システムのpythonでは動かない）。
+
+終了コード: 0=問題なし / 1=ENABLEDのジョブに「中断・不一致・確認不能・ERROR」がある、または
+ENABLEDなのに期間内に実行が無い・ジョブが無い、または帰属不明のERRORがある（--strict-not-found
+指定時は「課題が見つからない」も） / 2=ログやジョブ一覧を取得できなかった、またはログが取得上限に達した
+PAUSEDのジョブの結果は終了コードに影響しない。ジョブを再開した直後は、次の実行まで「実行なし」で1になる
+
+ERRORは、重大度(収集コードのテキストログでは空になる)ではなく、整形済みの本文の
+「 - ERROR - 」で判定する。2つの実行(手動と定期)が重なった可能性があるときは、その旨を付記する。
+
+【限界】収集コードに「実行の終了」を示すログ行が無いため、実行の重なりは推定。前の実行がダウンロード中に
+次の実行が始まると、前の実行のERRORが新しい実行に付くことがある(誤ってERRORと出る安全側の誤り)。
+ERRORが出たら、ログを手で確認する。毎回、課題ページに着く前に中断する場合は、前の実行も未完了であることから
+「中断」と判定する(30分ごとの新しい開始で、永遠に「実行中」に見えないようにしている)。
+
+出力はログの原文を一切含まない(固定のパターンから取り出した件数・時刻・分類のみ)。
+ダウンロード行など氏名を含みうるログは、そもそも取得しない。
+"""
+
+import argparse
+import json
+import re
+import subprocess
+import sys
+from datetime import datetime, timezone
+from pathlib import Path
+
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(PROJECT_ROOT))
+
+from scripts.hide_sensitive_sheets import TARGET_CLASSES, TASK_TAB_NAMES  # noqa: E402
+
+PROJECT = "carewell-automation"
+REGION = "asia-northeast1"
+SERVICE = "carewell-file-collector"
+LOG_LIMIT = 2000
+# 結果が未確定でも、最後のログがこの秒数より新しければ「実行中」とみなす(中断とは断定しない)。
+# Cloud Runのリクエストのタイムアウト(3000秒)に余裕を足した値。大きな課題はリンク取得だけで
+# 10分を超えうるが、その途中の進捗ログは氏名を含むため取得していない。
+RUNNING_WINDOW_SEC = 3100
+# Cloud Schedulerのattemptdeadline(1500秒)。前の実行の開始からこれより後に次の実行が始まり、
+# 前の実行に終了の印が無ければ、前の実行は完了しないまま終わったとみなす。
+ATTEMPT_DEADLINE_SEC = 1500
+
+OUTCOME_OK = "OK"
+OUTCOME_ZERO = "ZERO_CONFIRMED"
+OUTCOME_NOT_FOUND = "NOT_FOUND"
+OUTCOME_ABORTED = "ABORTED"
+OUTCOME_MISMATCH = "MISMATCH"
+OUTCOME_UNVERIFIED = "UNVERIFIED"
+OUTCOME_ERROR = "ERROR"
+OUTCOME_NO_RUN = "NO_RUN"
+OUTCOME_RUNNING = "RUNNING"
+
+# ENABLEDのジョブでこの結果なら、終了コード1(要対応)
+PROBLEM_OUTCOMES = (
+    OUTCOME_ABORTED,
+    OUTCOME_MISMATCH,
+    OUTCOME_UNVERIFIED,
+    OUTCOME_ERROR,
+)
+
+_MESSAGES = {
+    OUTCOME_OK: "収集OK",
+    OUTCOME_ZERO: "提出0件を確認",
+    OUTCOME_NOT_FOUND: "課題が見つからない(未作成、または公開済みならtask_patternを確認)",
+    OUTCOME_ABORTED: "課題ページに到達せず中断(曖昧一致・例外の可能性。ログを確認)",
+    OUTCOME_MISMATCH: "件数不一致(ポータルと取得行数が違う)",
+    OUTCOME_UNVERIFIED: "件数を確認できない",
+    OUTCOME_ERROR: "ERRORあり",
+    OUTCOME_NO_RUN: "対象期間に実行なし",
+    OUTCOME_RUNNING: "未完了(実行中。課題ページに到達せず中断した場合も、最大約50分はここに出る)",
+}
+
+_TASK = r"(課題[①②③])"
+_PREFIX_RE = re.compile(rf"\[carewell-№(\d+)-{_TASK}\]")
+_START_RE = re.compile(
+    rf"Starting file collection for class=.*?№(\d+), task_id={_TASK}"
+)
+_NOT_CREATED_RE = re.compile(rf"not yet created, skipping: .*?№(\d+)/{_TASK}")
+_VERIFIED_RE = re.compile(r"Count verification passed: (\d+)/(\d+)")
+_MISMATCH_RE = re.compile(r"Extracted (\d+) submissions but UI shows (\d+)")
+_ERROR_SEVERITIES = ("ERROR", "CRITICAL", "ALERT", "EMERGENCY")
+_ERROR_TEXT_MARKERS = (" - ERROR - ", " - CRITICAL - ")
+# 実行の終了を示す種別(これが出る前に次の実行が始まると、2つの実行が重なっている)
+_TERMINAL_KINDS = ("verified", "mismatch", "zero", "not_found", "unverified")
+
+
+def _parse_ts(value: str) -> datetime:
+    """gcloudのタイムスタンプ(ナノ秒まである)をdatetimeにする。"""
+    v = value.rstrip("Z")
+    if "." in v:
+        head, frac = v.split(".", 1)
+        v = f"{head}.{frac[:6]}"
+    return datetime.fromisoformat(v).replace(tzinfo=timezone.utc)
+
+
+# ---------------------------------------------------------------------------
+# 純粋関数(ユニットテスト対象)
+# ---------------------------------------------------------------------------
+
+
+def parse_event(entry: dict) -> dict | None:
+    """ログ1件から、クラス・課題・種別・件数だけを取り出す。原文は返さない。"""
+    text = entry.get("textPayload") or ""
+    ts = entry.get("timestamp", "")
+    severity = (entry.get("severity") or "INFO").upper()
+
+    m = _START_RE.search(text)
+    if m:
+        return {"ts": ts, "class": m.group(1), "task": m.group(2), "kind": "start"}
+    m = _NOT_CREATED_RE.search(text)
+    if m:
+        return {"ts": ts, "class": m.group(1), "task": m.group(2), "kind": "not_found"}
+    m = _PREFIX_RE.search(text)
+    is_error = severity in _ERROR_SEVERITIES or any(
+        marker in text for marker in _ERROR_TEXT_MARKERS
+    )
+    if not m:
+        # main.pyのロガーのERROR(ダウンロード失敗・500など)には接頭辞が付かず、クラス・課題を
+        # 特定できない。原文(氏名を含みうる)は保持せず、「ERRORがあった」事実だけ残す。
+        if is_error:
+            return {"ts": ts, "class": None, "task": None, "kind": "error_unattributed"}
+        return None
+    base = {"ts": ts, "class": m.group(1), "task": m.group(2)}
+    # 収集コードはテキスト形式のログで、logger.error()の重大度はDEFAULT(空)になる。
+    # 重大度だけでは拾えないため、整形済みの本文の「 - ERROR - 」も見る。
+    if is_error:
+        return {**base, "kind": "error"}
+    v = _VERIFIED_RE.search(text)
+    if v:
+        return {**base, "kind": "verified", "extracted": int(v[1]), "total": int(v[2])}
+    mm = _MISMATCH_RE.search(text)
+    if mm:
+        return {
+            **base,
+            "kind": "mismatch",
+            "extracted": int(mm[1]),
+            "total": int(mm[2]),
+        }
+    if "Could not verify count" in text:
+        return {**base, "kind": "unverified"}
+    if "Task not found" in text or "Class not found" in text:
+        return {**base, "kind": "not_found"}
+    if "Selecting task with pattern" in text:
+        return {**base, "kind": "selecting"}
+    if "Successfully navigated to task page" in text:
+        return {**base, "kind": "reached"}
+    if "提出されたレポートはありません" in text:
+        return {**base, "kind": "zero"}
+    return {**base, "kind": "other"}
+
+
+def summarize(
+    events: list[dict | None],
+    class_no: str,
+    task: str,
+    now: datetime | None = None,
+) -> dict:
+    """指定クラス×課題の「直近の1回の実行」の結果を分類する。"""
+    mine = [e for e in events if e and e["class"] == class_no and e["task"] == task]
+    if not mine:
+        return {
+            "outcome": OUTCOME_NO_RUN,
+            "started": None,
+            "errors": 0,
+            "overlap_suspected": False,
+            "repeated_unfinished": False,
+        }
+    mine.sort(key=lambda e: _parse_ts(e["ts"]))
+    starts = [i for i, e in enumerate(mine) if e["kind"] == "start"]
+    segment = mine[starts[-1] :] if starts else mine
+    started = mine[starts[-1]]["ts"] if starts else None
+    overlap = False
+    repeated_unfinished = False
+    if len(starts) >= 2:
+        # 直前の実行だけを見る(さらに古い未完了が、いま正常な実行を中断に見せてはいけない)
+        a, b = starts[-2], starts[-1]
+        gap = (_parse_ts(mine[b]["ts"]) - _parse_ts(mine[a]["ts"])).total_seconds()
+        repeated_unfinished = gap >= ATTEMPT_DEADLINE_SEC and not any(
+            e["kind"] in _TERMINAL_KINDS for e in mine[a:b]
+        )
+    if len(starts) >= 2:
+        prev_i, last_i = starts[-2], starts[-1]
+        gap = (
+            _parse_ts(mine[last_i]["ts"]) - _parse_ts(mine[prev_i]["ts"])
+        ).total_seconds()
+        finished = any(e["kind"] in _TERMINAL_KINDS for e in mine[prev_i:last_i])
+        overlap = gap < RUNNING_WINDOW_SEC and not finished
+    kinds = {e["kind"] for e in segment}
+    errors = sum(1 for e in segment if e["kind"] == "error")
+
+    def last(kind):
+        return next((e for e in reversed(segment) if e["kind"] == kind), None)
+
+    result = {
+        "started": started,
+        "errors": errors,
+        "extracted": None,
+        "total": None,
+        "overlap_suspected": overlap,
+        "repeated_unfinished": repeated_unfinished,
+    }
+    terminal = last("verified") or last("mismatch")
+    if terminal:
+        result["extracted"], result["total"] = terminal["extracted"], terminal["total"]
+
+    if errors:
+        outcome = OUTCOME_ERROR
+    elif "mismatch" in kinds:
+        outcome = OUTCOME_MISMATCH
+    elif "not_found" in kinds and "reached" not in kinds:
+        outcome = OUTCOME_NOT_FOUND
+    elif "verified" in kinds:
+        outcome = OUTCOME_OK
+    elif "zero" in kinds:
+        outcome = OUTCOME_ZERO
+    elif "unverified" in kinds:
+        outcome = OUTCOME_UNVERIFIED
+    else:
+        outcome = OUTCOME_ABORTED
+        # 前の実行も完了していなければ、新しい開始で猶予をリセットして「実行中」と見せない
+        if now is not None and not repeated_unfinished:
+            age = (now - _parse_ts(segment[-1]["ts"])).total_seconds()
+            if age < RUNNING_WINDOW_SEC:
+                outcome = OUTCOME_RUNNING
+    result["outcome"] = outcome
+    return result
+
+
+def render_row(class_no: str, task: str, job_state: str, summary: dict) -> str:
+    outcome = summary["outcome"]
+    when = "-"
+    if summary.get("started"):
+        when = _parse_ts(summary["started"]).strftime("%m-%d %H:%M UTC")
+    count = "-"
+    if summary.get("extracted") is not None:
+        count = f"{summary['extracted']}/{summary['total']}"
+    note = _MESSAGES[outcome]
+    if outcome == OUTCOME_ERROR:
+        note = f"ERRORあり({summary.get('errors', 0)}件)"
+    if job_state == "PAUSED" and outcome == OUTCOME_NO_RUN:
+        note = "ジョブ停止中"
+    if summary.get("repeated_unfinished") and outcome == OUTCOME_ABORTED:
+        note += "(直前の実行も完了しておらず、繰り返し中断している)"
+    if summary.get("overlap_suspected"):
+        # 手動実行と定期実行が重なると、片方の結果が他方に混ざりうる(結果は参考)
+        note += "(直前の実行と重なった可能性があり、結果は参考)"
+    return f"№{class_no} | {task} | {job_state} | {when} | {count} | {note}"
+
+
+def count_unattributed_errors(events: list[dict | None]) -> tuple[int, str | None]:
+    """クラス・課題を特定できないERRORの件数と、最新の時刻(原文は扱わない)。"""
+    ts = [e["ts"] for e in events if e and e["kind"] == "error_unattributed"]
+    if not ts:
+        return 0, None
+    return len(ts), max(ts, key=_parse_ts)
+
+
+def exit_code(
+    rows: list[tuple[str, dict]],
+    strict_not_found: bool = False,
+    unattributed_errors: int = 0,
+) -> int:
+    """要対応があれば1。PAUSEDのジョブの結果は見ない。
+
+    ENABLEDなのに期間内に実行が無い(Schedulerの停止・認証切れなど)、ジョブが存在しない、
+    クラス・課題を特定できないERRORがある場合も1。公開済みの課題で「見つからない」を
+    問題にしたいときは strict_not_found=True。
+    """
+    if unattributed_errors:
+        return 1
+    problems = set(PROBLEM_OUTCOMES) | {OUTCOME_NO_RUN}
+    if strict_not_found:
+        problems.add(OUTCOME_NOT_FOUND)
+    for state, summary in rows:
+        if state == "PAUSED":
+            continue
+        if state != "ENABLED":  # ジョブが存在しない・想定外の状態
+            return 1
+        if summary["outcome"] in problems:
+            return 1
+    return 0
+
+
+# ---------------------------------------------------------------------------
+# gcloud呼び出し層
+# ---------------------------------------------------------------------------
+
+
+def _gcloud_json(args: list[str]) -> list[dict]:
+    proc = subprocess.run(
+        ["gcloud", *args, "--format=json", f"--project={PROJECT}"],
+        capture_output=True,
+        text=True,
+        timeout=180,
+    )
+    if proc.returncode != 0:
+        raise RuntimeError(
+            f"gcloud失敗(終了コード{proc.returncode}): {proc.stderr[:200]}"
+        )
+    return json.loads(proc.stdout or "[]")
+
+
+def fetch_job_states() -> dict[str, str]:
+    jobs = _gcloud_json(["scheduler", "jobs", "list", f"--location={REGION}"])
+    return {j["name"].rsplit("/", 1)[-1]: j.get("state", "?") for j in jobs}
+
+
+def fetch_events(hours: int) -> list[dict | None]:
+    patterns = " OR ".join(
+        f'textPayload:"{p}"'
+        for p in (
+            "Starting file collection",
+            "Selecting task with pattern",
+            "Successfully navigated to task page",
+            "Count verification",
+            "Count mismatch",
+            "Could not verify count",
+            "not yet created",
+            "Task not found",
+            "Class not found",
+            "提出されたレポートはありません",
+        )
+    )
+    flt = (
+        'resource.type="cloud_run_revision" '
+        f'AND resource.labels.service_name="{SERVICE}" '
+        f'AND ({patterns} OR severity>=ERROR OR textPayload:" - ERROR - " '
+        'OR textPayload:" - CRITICAL - ")'
+    )
+    entries = _gcloud_json(
+        ["logging", "read", flt, f"--freshness={hours}h", f"--limit={LOG_LIMIT}"]
+    )
+    if len(entries) >= LOG_LIMIT:
+        # 古い側が欠けた不完全な結果を、そのまま分類しない
+        raise RuntimeError(
+            f"ログが取得上限({LOG_LIMIT}件)に達しました。--hours を短くしてください"
+        )
+    return [parse_event(e) for e in entries]
+
+
+def job_name(class_no: str, task: str) -> str:
+    return f"carewell-class{class_no}-task{'01' if task == '課題①' else '02'}"
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--class", dest="class_num", default=None)
+    parser.add_argument("--task", choices=TASK_TAB_NAMES, default=None)
+    parser.add_argument("--hours", type=int, default=3, help="ログを見る期間(時間)")
+    parser.add_argument(
+        "--strict-not-found",
+        action="store_true",
+        help="ENABLEDのジョブで「課題が見つからない」を問題(終了コード1)にする。"
+        "公開済みの課題のクラスで使う",
+    )
+    args = parser.parse_args()
+    if args.class_num and args.class_num not in TARGET_CLASSES:
+        print(f"[エラー] クラス{args.class_num}は対象外です(対象: {TARGET_CLASSES})")
+        return 2
+    classes = [args.class_num] if args.class_num else TARGET_CLASSES
+    tasks = [args.task] if args.task else list(TASK_TAB_NAMES)
+
+    try:
+        states = fetch_job_states()
+        events = fetch_events(args.hours)
+    except Exception as e:  # noqa: BLE001 取得失敗は「問題なし」にしない
+        print(f"[取得失敗] {type(e).__name__}: {str(e)[:200]}")
+        return 2
+
+    now = datetime.now(timezone.utc)
+    print("クラス | 課題 | ジョブ | 直近の開始 | 件数 | 結果")
+    rows = []
+    for cn in classes:
+        for task in tasks:
+            state = states.get(job_name(cn, task), "(ジョブなし)")
+            summary = summarize(events, cn, task, now)
+            rows.append((state, summary))
+            print(render_row(cn, task, state, summary))
+    unattributed, latest = count_unattributed_errors(events)
+    if unattributed:
+        when = _parse_ts(latest).strftime("%m-%d %H:%M UTC")
+        print(
+            f"\n[要確認] 帰属不明のERRORが{unattributed}件あります(最新 {when})。"
+            "ダウンロード失敗・保存/同期の失敗・HTTP 500の最上位例外などで、クラス・課題を"
+            "特定できません。ログを手で確認してください(氏名を含みうるため、原文はここに出しません)。"
+        )
+    running = sum(1 for _, summary in rows if summary["outcome"] == OUTCOME_RUNNING)
+    if running:
+        print(
+            f"\n[注意] 「未完了(実行中)」が{running}件あります。結果は確定していません。"
+        )
+    print(
+        f"\n[注意] 直近{args.hours}時間のログのみ。ジョブが停止中・期間内に実行がなければ"
+        "「実行なし」と表示します。クラス・課題を特定できないERRORは「帰属不明」として別に数えます。"
+    )
+    return exit_code(rows, args.strict_not_found, unattributed)
+
+
+if __name__ == "__main__":
+    sys.exit(main())
