@@ -380,3 +380,113 @@ class TestFailedResults:
             "dest_task1": {"status": "skipped"},
         }
         assert failed_results([result]) == []
+
+
+class TestMainExitCodeAndNotes:
+    def _run(self, monkeypatch, tmp_path, results, argv):
+        import hide_sensitive_sheets as m
+
+        monkeypatch.setattr(sys, "argv", ["hide_sensitive_sheets.py", *argv])
+        monkeypatch.setattr(m, "_scratch_dir", lambda: tmp_path)
+        seen = []
+
+        def fake_process(class_num, commit, backup_dir, task_label="課題①"):
+            seen.append((class_num, commit, task_label))
+            return results[class_num]
+
+        monkeypatch.setattr(m, "process_class", fake_process)
+        return m, seen
+
+    @staticmethod
+    def _ok(task="課題②"):
+        return {
+            "class": "01",
+            "task": task,
+            "roster": {"status": "already_applied"},
+            "task1": {"status": "already_hidden"},
+            "dest_task1": {"status": "already_applied"},
+        }
+
+    def test_failure_makes_exit_code_1_and_prints_it(
+        self, monkeypatch, tmp_path, capsys
+    ):
+        bad = self._ok()
+        bad["dest_task1"] = {"status": "error", "detail": "x"}
+        m, _ = self._run(
+            monkeypatch,
+            tmp_path,
+            {"01": bad},
+            ["--class", "01", "--task", "課題②", "--commit"],
+        )
+
+        assert m.main() == 1
+        assert "[失敗]" in capsys.readouterr().out
+
+    def test_success_is_exit_code_0(self, monkeypatch, tmp_path):
+        m, seen = self._run(
+            monkeypatch,
+            tmp_path,
+            {"01": self._ok()},
+            ["--class", "01", "--task", "課題②", "--commit"],
+        )
+
+        assert m.main() == 0
+        assert seen == [("01", True, "課題②")]
+
+    def test_default_task_is_task1(self, monkeypatch, tmp_path):
+        m, seen = self._run(
+            monkeypatch, tmp_path, {"01": self._ok("課題①")}, ["--class", "01"]
+        )
+
+        m.main()
+
+        assert seen == [("01", False, "課題①")]
+
+    def test_invalid_task_is_rejected(self, monkeypatch, tmp_path):
+        m, _ = self._run(
+            monkeypatch, tmp_path, {}, ["--class", "01", "--task", "課題③"]
+        )
+        with pytest.raises(SystemExit):
+            m.main()
+
+    def test_commit_with_skipped_task_tabs_says_not_applied(
+        self, monkeypatch, tmp_path, capsys
+    ):
+        pending = self._ok()
+        pending["task1"] = {"status": "skipped", "detail": "タブが未作成"}
+        pending["dest_task1"] = {"status": "skipped", "detail": "タブが未作成"}
+        m, _ = self._run(
+            monkeypatch,
+            tmp_path,
+            {"01": pending},
+            ["--class", "01", "--task", "課題②", "--commit"],
+        )
+
+        assert m.main() == 0  # タブ未作成は正当な保留なので失敗にはしない
+        out = capsys.readouterr().out
+        assert out.count("[未適用]") == 2
+        assert "課題②" in out
+
+    def test_dry_run_does_not_print_not_applied_notes(
+        self, monkeypatch, tmp_path, capsys
+    ):
+        pending = self._ok()
+        pending["task1"] = {"status": "skipped", "detail": "タブが未作成"}
+        m, _ = self._run(monkeypatch, tmp_path, {"01": pending}, ["--class", "01"])
+
+        m.main()
+
+        assert "[未適用]" not in capsys.readouterr().out
+
+
+def test_backup_file_names_keep_task1_and_use_task2(monkeypatch, tmp_path):
+    fake = _FakeSheets(monkeypatch, "課題②")
+    fake.m.process_class("01", False, tmp_path, "課題②")
+    fake.label = "課題①"
+    fake.m.process_class("01", False, tmp_path, "課題①")
+
+    names = sorted(p.name for p in tmp_path.iterdir())
+    assert "class01_dest_task2_before.json" in names
+    assert "class01_task2_before.json" in names
+    assert "class01_dest_task1_before.json" in names  # 課題①の従来の名前は変えない
+    assert "class01_task1_before.json" in names

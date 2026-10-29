@@ -130,10 +130,16 @@ DOWNLOAD_DIR_PREFIX = "carewell_dl_"
 
 
 def remove_download(file_path: str) -> None:
-    """download_file()が返したファイルと、その一時ディレクトリを削除する。"""
+    """download_file()が返したファイルと、その一時ディレクトリを削除する。
+
+    削除できずに残った場合はOSErrorにする(Cloud Runの/tmpはメモリ上のため、
+    残骸が溜まるとメモリを圧迫する。「削除した」と誤ってログしないため)。
+    """
     download_dir = os.path.dirname(file_path)
     if os.path.basename(download_dir).startswith(DOWNLOAD_DIR_PREFIX):
         shutil.rmtree(download_dir, ignore_errors=True)
+        if os.path.exists(download_dir):
+            raise OSError(f"一時ディレクトリが残っています: {download_dir}")
     elif os.path.exists(file_path):
         os.remove(file_path)
 
@@ -361,6 +367,9 @@ class PlaywrightAutomationEngine:
         # 部分一致で候補が複数あると、最初の候補を黙って選び、別の課題を「正常な
         # 収集」として記録してしまう(件数検証は選んだ課題の件数と照合するため通る)。
         # 全フレームの候補を数え、1件に定まらないときは中断する。
+        # 最初に見つかったフレームで返るため、他フレームの描画前に数えると1件と誤認する。
+        # 数える前に画面の安定を待つ。
+        self._wait_for_navigation()
         candidates = sum(f.locator(selector).count() for f in self.page.frames)
         if candidates > 1:
             raise Exception(
@@ -1711,7 +1720,11 @@ class PlaywrightAutomationEngine:
                         f"Download failed: file not found at {download_path}"
                     )
             except Exception:
-                remove_download(download_path)
+                try:
+                    remove_download(download_path)
+                except OSError as cleanup_error:
+                    # 後片付けの失敗で、元のダウンロード失敗の原因を隠さない
+                    self.logger.warning(f"Failed to clean up: {cleanup_error}")
                 raise
 
             file_size = os.path.getsize(download_path)

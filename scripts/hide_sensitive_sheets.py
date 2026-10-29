@@ -640,6 +640,15 @@ def main() -> int:
 
     if not args.commit:
         print("\n[DRY-RUN] --commitが指定されていないため変更は行いませんでした。")
+    if args.commit:
+        # タブ未作成(skipped)は正当な保留だが、--commitが0で終わっても「隠れた」とは限らない
+        for r in all_results:
+            for slot in ("task1", "dest_task1"):
+                if (r.get(slot) or {}).get("status") == "skipped":
+                    print(
+                        f"[未適用] クラス{r['class']}の{r.get('task', args.task)}"
+                        f"({slot}): 対象タブが無いため何も適用していません"
+                    )
     failures = failed_results(all_results)
     for line in failures:
         print(f"[失敗] {line}")

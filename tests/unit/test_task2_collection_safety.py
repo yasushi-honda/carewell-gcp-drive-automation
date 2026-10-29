@@ -197,3 +197,106 @@ def test_remove_download_never_removes_tmp_itself(tmp_path):
 
     assert not outsider.exists()
     assert tmp_path.exists()
+
+
+# --- 失敗時の後始末・画面の安定待ち(レビュー指摘への対応) ----------------------
+
+
+def test_remove_download_raises_when_the_directory_cannot_be_removed(monkeypatch):
+    """削除に失敗したのに「成功」とログされないよう、残っていれば例外にする。"""
+    import playwright_automation as pa
+
+    path, _ = _download_with(pa.PlaywrightAutomationEngine(task_id="課題②"), "x.pdf")
+    monkeypatch.setattr(pa.shutil, "rmtree", lambda *a, **k: None)  # 消せなかった状態
+    try:
+        with pytest.raises(OSError, match="残っています"):
+            pa.remove_download(path)
+    finally:
+        monkeypatch.undo()
+        pa.remove_download(path)
+
+
+def _dirs_created_during(monkeypatch):
+    import playwright_automation as pa
+
+    created = []
+    real = pa.tempfile.mkdtemp
+
+    def spy(*a, **k):
+        d = real(*a, **k)
+        created.append(d)
+        return d
+
+    monkeypatch.setattr(pa.tempfile, "mkdtemp", spy)
+    return created
+
+
+def _failing_download_engine(save_as):
+    from playwright_automation import PlaywrightAutomationEngine
+
+    engine = PlaywrightAutomationEngine(class_name="クラス", task_id="課題②")
+    ctx = MagicMock()
+    ctx.__enter__.return_value.value = Mock(save_as=save_as)
+    frame = MagicMock()
+    frame.name = "dummy"
+    engine.page = MagicMock(frames=[frame])
+    engine.page.expect_download.return_value = ctx
+    engine.page.goto = Mock()
+    engine._wait_for_navigation = Mock()
+    return engine
+
+
+def test_failed_save_removes_the_temp_directory_and_reraises(monkeypatch):
+    created = _dirs_created_during(monkeypatch)
+
+    def boom(path):
+        raise RuntimeError("disk full")
+
+    engine = _failing_download_engine(boom)
+    with pytest.raises(RuntimeError, match="disk full"):
+        engine.download_file("download.aspx?id=1", "report.pdf", "detail.aspx?id=1")
+
+    assert len(created) == 1 and not os.path.exists(created[0])
+
+
+def test_missing_file_after_save_removes_the_temp_directory(monkeypatch):
+    created = _dirs_created_during(monkeypatch)
+    engine = _failing_download_engine(lambda path: None)  # 何も書かない
+
+    with pytest.raises(Exception, match="file not found"):
+        engine.download_file("download.aspx?id=1", "report.pdf", "detail.aspx?id=1")
+
+    assert len(created) == 1 and not os.path.exists(created[0])
+
+
+def test_cleanup_failure_does_not_mask_the_original_download_error(monkeypatch):
+    import playwright_automation as pa
+
+    created = _dirs_created_during(monkeypatch)
+    monkeypatch.setattr(pa.shutil, "rmtree", lambda *a, **k: None)  # 後片付けも失敗
+
+    def boom(path):
+        raise RuntimeError("disk full")
+
+    engine = _failing_download_engine(boom)
+    try:
+        with pytest.raises(RuntimeError, match="disk full"):  # 元の例外が見える
+            engine.download_file("download.aspx?id=1", "report.pdf", "detail.aspx?id=1")
+    finally:
+        monkeypatch.undo()
+        for d in created:
+            pa.shutil.rmtree(d, ignore_errors=True)
+
+
+def test_select_task_waits_for_the_page_to_settle_before_counting(engine):
+    """最初に見つかったフレームで数えると、他のフレームの描画前に1件と誤認する。"""
+    order = []
+    frame = _frame(1)
+    frame.locator.return_value.count.side_effect = lambda: order.append("count") or 1
+    engine.page = Mock(frames=[frame])
+    engine._find_frame_with_selector = Mock(return_value=frame)
+    engine._wait_for_navigation = Mock(side_effect=lambda *a: order.append("wait"))
+
+    engine._select_task("課題②")
+
+    assert order[:2] == ["wait", "count"]

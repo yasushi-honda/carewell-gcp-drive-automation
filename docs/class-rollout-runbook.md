@@ -151,7 +151,7 @@ python scripts/check_rollout_status.py --class 0N     # 「完了」になるこ
 **順序（状態を変える操作の前に、前段を確認する）**
 1. 収集コードの修正（課題名の一意選択・ダウンロードの一時ディレクトリ分離・課題②タブの非表示作成）が本番にデプロイされ、revision・traffic・ログの3点が確認できていること（`docs/common-mistakes.md` #8）。
 2. ポータル（zenkoukai）に課題②が公開されていること。**収集コードと同じ条件（`text=課題②`の部分一致）で候補が1件だけ**であること（`decision-maker`がログインし、AIは表示名と件数だけを読む）。2件以上だと収集は中断する（誤った課題を黙って集めない）。
-3. `gcloud scheduler jobs resume carewell-classNN-task02 --location=asia-northeast1 --project=carewell-automation`（1クラスずつ。次の実行は:05/:35前後）。再開後の新revisionの実行ログで、`Count verification passed`（0件なら確定ゼロ件のログ）と中断がないことを確認する。
+3. `gcloud scheduler jobs resume carewell-classNN-task02 --location=asia-northeast1 --project=carewell-automation`（1クラスずつ。次の実行は:05/:35前後）。再開後の新revisionの実行ログで、`Count verification passed`（0件なら確定ゼロ件のログ）と中断がないことを確認する。**`Task not found` / `Task not yet created` が出ているときは「正常に0件」と読まない**: 課題名の表記違い（`task_pattern`の誤り）や画面の読込み遅れでも同じ応答（HTTP 200）になり、Cloud Schedulerは緑のまま0件収集が続く（課題①から続く既存の仕様）。ポータルに課題②が公開済みなのにこのログが出る場合は、`task_pattern`とポータルの表示名を突き合わせる。
 4. 反映（クラスごと）。コマンドは1つずつ実行する。
 ```
 python scripts/apply_submission_formulas.py --class 0N --task 課題②             # dry-run

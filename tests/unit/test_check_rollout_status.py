@@ -469,3 +469,163 @@ class TestTask2:
     def test_done_with_task2(self):
         state, _ = classify_class(_facts(task="課題②"))
         assert state == STATE_DONE
+
+
+class _GatherEnv:
+    """gather_facts のAPI層を差し替える偽環境。読み取った範囲を記録する。"""
+
+    def __init__(self, monkeypatch, task_formulas_in):
+        import apply_submission_formulas as a
+        import check_rollout_status as m
+
+        self.m = m
+        self.reads = []
+        self.task_formulas_in = (
+            task_formulas_in  # 判定式が入っている列("I"=課題①, "M"=課題②)
+        )
+        self.roster = [
+            ["N1", "k", "D1", "", "", "", "", "A", "", "A001"],
+            ["N2", "k", "D2", "", "", "", "", "A", "", "A002"],
+            ["N3", "k", "D3", "", "", "", "", "A", "", "A003"],
+        ]
+        self.a = a
+        monkeypatch.setattr(m, "resolve_attendance_spreadsheet_id", lambda c: "ATT")
+        monkeypatch.setattr(m, "TASK1_SUBMISSION_SPREADSHEET_IDS", {"03": "SUB"})
+        monkeypatch.setitem(m.EXPECTED_STUDENT_COUNT_BY_CLASS, "03", 3)
+        monkeypatch.setattr(m, "_get_values", self._get)
+        monkeypatch.setattr(m, "_get_full_sheets_list", self._full)
+
+    def _full(self, sid, build_fn=None):
+        def tab(title, sheet_id, hidden=True, protected=True):
+            return {
+                "properties": {"sheetId": sheet_id, "title": title, "hidden": hidden},
+                "protectedRanges": (
+                    [{"range": {"sheetId": sheet_id}}] if protected else []
+                ),
+            }
+
+        if sid == "SUB":
+            return [tab("課題②", 3, protected=False)]
+        return [tab("受講者リスト", 1), tab("課題②", 2)]
+
+    def _get(self, build_fn, sid, rng, render="FORMATTED_VALUE"):
+        self.reads.append((sid, rng))
+        f = self.a.build_status_formula
+        if "リスト'!A2:G" in rng and "受講者" not in rng:
+            # 取込み済みの名簿と一致する正本リスト(A=グループ, C=受講者番号, D=氏名, E=ふりがな)
+            return [
+                ["A", "", "A001", "N1", "k", ""],
+                ["A", "", "A002", "N2", "k", ""],
+                ["A", "", "A003", "N3", "k", ""],
+            ]
+        if rng.startswith("'受講者リスト'!A2:J"):
+            return self.roster
+        if rng.endswith("C5:C500"):
+            return [["A001"], ["A002"], [], ["A003"]]
+        if rng.endswith("A4:AZ4"):
+            header = [""] * 13
+            header[8], header[12] = "課題①", "課題②"
+            return [header]
+        if rng.startswith("'課題②'!A1") and rng.endswith("A1"):
+            return [[self.a.build_import_formula("SUB", "課題②")]]
+        if rng.endswith("!C1"):
+            return [[self.a.XLOOKUP_FORMULA]]
+        if rng.endswith("A1:C1"):
+            return [["氏名", "日介番号", "受講者番号"]]
+        if sid == "SUB":
+            return [["D2"]]  # 提出記録の日介番号列(D2:D)
+        col = rng.split("!")[1][0]
+        if rng.endswith(f"{col}5:{col}500"):
+            if col != self.task_formulas_in:
+                return []
+            label = "課題②" if col == "M" else "課題①"
+            if render == "FORMULA":
+                return [[f(5, label)], [f(6, label)], [], [f(8, label)]]
+            return [["未提出"], ["提出"], [], ["未提出"]]
+        raise AssertionError(f"想定外の読取り: {sid} {rng}")
+
+
+class TestGatherFactsTask2:
+    def test_task2_reads_task2_tabs_and_column_and_reports_all(self, monkeypatch):
+        env = _GatherEnv(monkeypatch, task_formulas_in="M")
+
+        facts = env.m.gather_facts("03", "課題②")
+
+        assert facts["task"] == "課題②"
+        assert facts["formulas"] == "all"
+        assert facts["admin_task_tab"] and facts["sub_task_tab"]
+        assert (
+            facts["sub_hidden"] and facts["admin_hidden"] and facts["admin_protected"]
+        )
+        assert facts["tally_issues"] == []
+        assert (facts["_submitted"], facts["_unsubmitted"]) == (1, 2)
+        # 課題②の判定: 課題名つきの範囲だけを読み、課題①のタブは一切読まない
+        assert not any("'課題①'" in rng for _sid, rng in env.reads)
+        assert ("SUB", "'課題②'!D2:D5000") in env.reads
+        assert env.m.classify_class(facts)[0] == STATE_DONE
+
+    def test_task1_formulas_in_the_task1_column_do_not_count_for_task2(
+        self, monkeypatch
+    ):
+        env = _GatherEnv(monkeypatch, task_formulas_in="I")  # M列(課題②)は空
+
+        facts = env.m.gather_facts("03", "課題②")
+
+        assert facts["formulas"] == "none"
+        state, action = env.m.classify_class(facts)
+        assert state == STATE_TODO
+        assert "--task 課題②" in action
+
+
+class TestMainTaskOption:
+    def _run(self, monkeypatch, argv):
+        import check_rollout_status as m
+
+        calls = []
+        monkeypatch.setattr(sys, "argv", ["check_rollout_status.py", *argv])
+        monkeypatch.setattr(
+            m,
+            "gather_facts",
+            lambda cn, task="課題①": calls.append((cn, task))
+            or _facts(**{"class": cn}),
+        )
+        return m, calls
+
+    def test_task_option_is_passed_to_gather_facts(self, monkeypatch):
+        m, calls = self._run(monkeypatch, ["--class", "01", "--task", "課題②"])
+        m.main()
+        assert calls == [("01", "課題②")]
+
+    def test_default_task_is_task1(self, monkeypatch):
+        m, calls = self._run(monkeypatch, ["--class", "01"])
+        m.main()
+        assert calls == [("01", "課題①")]
+
+    def test_rate_limit_retry_keeps_the_task(self, monkeypatch):
+        from unittest.mock import Mock
+
+        import check_rollout_status as m
+        from googleapiclient.errors import HttpError
+
+        calls = []
+
+        def flaky(cn, task="課題①"):
+            calls.append((cn, task))
+            if len(calls) == 1:
+                raise HttpError(Mock(status=429), b"quota")
+            return _facts(**{"class": cn})
+
+        monkeypatch.setattr(
+            sys, "argv", ["check_rollout_status.py", "--class", "01", "--task", "課題②"]
+        )
+        monkeypatch.setattr(m, "gather_facts", flaky)
+        monkeypatch.setattr(m.time, "sleep", lambda _s: None)
+        m.main()
+        assert calls == [("01", "課題②"), ("01", "課題②")]
+
+    def test_invalid_task_is_rejected(self, monkeypatch):
+        import pytest
+
+        m, _ = self._run(monkeypatch, ["--class", "01", "--task", "課題③"])
+        with pytest.raises(SystemExit):
+            m.main()

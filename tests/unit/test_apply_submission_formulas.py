@@ -924,3 +924,72 @@ class TestProcessClassTask2:
 
         assert env.m.process_class("03", True, False, "課題②") == 2
         assert env.log == []
+
+
+class TestMainTaskOption:
+    def _run(self, monkeypatch, argv):
+        import apply_submission_formulas as m
+
+        calls = []
+        monkeypatch.setattr(sys, "argv", ["apply_submission_formulas.py", *argv])
+        monkeypatch.setattr(
+            m,
+            "process_class",
+            lambda cn, commit, provision, label="課題①": calls.append(
+                (cn, commit, provision, label)
+            )
+            or 0,
+        )
+        return m, calls
+
+    def test_task_option_reaches_process_class(self, monkeypatch):
+        m, calls = self._run(
+            monkeypatch, ["--class", "01", "--task", "課題②", "--commit"]
+        )
+        assert m.main() == 0
+        assert calls == [("01", True, False, "課題②")]
+
+    def test_default_is_task1(self, monkeypatch):
+        m, calls = self._run(monkeypatch, ["--class", "01"])
+        m.main()
+        assert calls == [("01", False, False, "課題①")]
+
+    def test_invalid_task_is_rejected(self, monkeypatch):
+        m, _ = self._run(monkeypatch, ["--class", "01", "--task", "課題③"])
+        with pytest.raises(SystemExit):
+            m.main()
+
+
+class TestProcessClassTask2Provisioning:
+    def test_provision_passes_task2_label_and_creates_admin_tab_named_task2(
+        self, monkeypatch, tmp_path
+    ):
+        env = _env(
+            monkeypatch,
+            tmp_path,
+            label="課題②",
+            col="M",
+            sub_titles=["シート1"],  # 提出記録側に「課題②」タブが無い
+            att_titles=["受講者リスト"],
+            a1="",
+            c1="",
+        )
+        provisioned = []
+        monkeypatch.setattr(
+            env.m,
+            "provision_submission_tab",
+            lambda sid, label="課題①": provisioned.append((sid, label)) or "created",
+        )
+        batches = []
+        monkeypatch.setattr(
+            env.m, "_batch_update", lambda b, sid, reqs: batches.append((sid, reqs))
+        )
+
+        assert env.m.process_class("03", True, True, "課題②") == 0
+
+        assert provisioned == [("SUB", "課題②")]
+        admin = [r for sid, reqs in batches if sid == "ATT" for r in reqs]
+        assert admin[0]["addSheet"]["properties"] == {
+            "title": "課題②",
+            "hidden": True,
+        }
