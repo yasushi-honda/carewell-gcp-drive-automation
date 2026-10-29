@@ -36,6 +36,7 @@ _ensure_sheet_exists)。本スクリプトは既存タブへの一括適用と�
     python scripts/hide_sensitive_sheets.py            # dry-run(現状確認のみ)
     python scripts/hide_sensitive_sheets.py --commit   # 実際に非表示化+保護を適用
     python scripts/hide_sensitive_sheets.py --class 02 --commit  # 特定クラスのみ
+    python scripts/hide_sensitive_sheets.py --class 01 --task 課題② --commit  # 課題②(既定は課題①)
 """
 
 import argparse
@@ -81,7 +82,10 @@ TASK1_SUBMISSION_SPREADSHEET_IDS = {
     "09": "15tbkPsitAVjr65xThn5869Ve6l5evvPv4avd28fAV9U",
 }
 
-TASK1_TAB_NAME = "課題①"
+TASK1_TAB_NAME = "課題①"  # 既定の課題。--task で課題②にも使える
+TASK_TAB_NAMES = ("課題①", "課題②")
+# バックアップのファイル名に使う識別子(課題①は従来のファイル名を変えない)
+_TASK_SLUGS = {"課題①": "task1", "課題②": "task2"}
 COMPANY_OFFICE_COLUMN_RANGE = (3, 5)  # 0-indexed [start, end) = D,E列
 
 
@@ -334,8 +338,22 @@ def _scratch_dir() -> Path:
     return PROJECT_ROOT / "var" / "scratch" / "hide_sensitive_sheets"
 
 
-def process_class(class_num: str, commit: bool, backup_dir: Path) -> dict:
-    result = {"class": class_num, "roster": None, "task1": None, "dest_task1": None}
+def process_class(
+    class_num: str,
+    commit: bool,
+    backup_dir: Path,
+    task_label: str = TASK1_TAB_NAME,
+) -> dict:
+    """1クラスを処理する。task1=提出記録シート側の課題タブ、dest_task1=出欠管理ファイル側の
+    課題タブ(キー名は課題①時代からの互換のため課題②でも同じ。対象課題はresult["task"])。"""
+    slug = _TASK_SLUGS[task_label]
+    result = {
+        "class": class_num,
+        "task": task_label,
+        "roster": None,
+        "task1": None,
+        "dest_task1": None,
+    }
 
     # --- 事前準備: シート一覧・編集者一覧の取得 ---
     # roster/dest_task1は同一ファイル内の2タブなので、1回の取得で両方に使い回す。
@@ -344,7 +362,7 @@ def process_class(class_num: str, commit: bool, backup_dir: Path) -> dict:
         attendance_id = resolve_attendance_spreadsheet_id(class_num)
         full_sheets = _get_full_sheets_list(attendance_id)
         roster_sheet = _find_sheet_entry(full_sheets, ROSTER_TARGET_TAB)
-        dest_task1_sheet = _find_sheet_entry(full_sheets, TASK1_TAB_NAME)
+        dest_task1_sheet = _find_sheet_entry(full_sheets, task_label)
         editor_emails = (
             _get_writer_emails(attendance_id)
             if (roster_sheet is not None or dest_task1_sheet is not None)
@@ -423,17 +441,17 @@ def process_class(class_num: str, commit: bool, backup_dir: Path) -> dict:
             else:
                 result["roster"] = {"status": "error", "detail": str(e)}
 
-    # --- `{No}_受講者リスト_出欠管理`ファイル自身の「課題①」タブ(IMPORTRANGE配線先) ---
+    # --- `{No}_受講者リスト_出欠管理`ファイル自身の課題タブ(IMPORTRANGE配線先) ---
     # Step 2(数式配線)実施時に新規作成される。課題①提出記録シート側(下のtask1処理)とは別物。
     if attendance_id is not None and result["dest_task1"] is None:
         try:
             if dest_task1_sheet is None:
                 result["dest_task1"] = {
                     "status": "skipped",
-                    "detail": f"「{TASK1_TAB_NAME}」タブが未作成(spreadsheet_id={attendance_id})",
+                    "detail": f"「{task_label}」タブが未作成(spreadsheet_id={attendance_id})",
                 }
             else:
-                backup_path = backup_dir / f"class{class_num}_dest_task1_before.json"
+                backup_path = backup_dir / f"class{class_num}_dest_{slug}_before.json"
                 backup_path.write_text(
                     json.dumps(dest_task1_sheet, ensure_ascii=False, indent=2)
                 )
@@ -465,7 +483,7 @@ def process_class(class_num: str, commit: bool, backup_dir: Path) -> dict:
                         "spreadsheet_id": attendance_id,
                     }
                     after_sheets = _get_full_sheets_list(attendance_id)
-                    after_sheet = _find_sheet_entry(after_sheets, TASK1_TAB_NAME)
+                    after_sheet = _find_sheet_entry(after_sheets, task_label)
                     result["dest_task1"] = {
                         "status": "applied",
                         "spreadsheet_id": attendance_id,
@@ -490,7 +508,7 @@ def process_class(class_num: str, commit: bool, backup_dir: Path) -> dict:
             else:
                 result["dest_task1"] = {"status": "error", "detail": str(e)}
 
-    # --- 「課題①」タブ ---
+    # --- 提出記録シート側の課題タブ ---
     task1_id = TASK1_SUBMISSION_SPREADSHEET_IDS.get(class_num)
     if task1_id is None:
         result["task1"] = {"status": "skipped", "detail": "spreadsheet_id未登録"}
@@ -499,14 +517,14 @@ def process_class(class_num: str, commit: bool, backup_dir: Path) -> dict:
             task1_props_list = _get_sheet_properties_list(
                 task1_id, build_service_fn=_build_task1_sheets_service
             )
-            task1_sheet = _find_sheet(task1_props_list, TASK1_TAB_NAME)
+            task1_sheet = _find_sheet(task1_props_list, task_label)
             if task1_sheet is None:
                 result["task1"] = {
                     "status": "skipped",
-                    "detail": f"「{TASK1_TAB_NAME}」タブが未作成(spreadsheet_id={task1_id})",
+                    "detail": f"「{task_label}」タブが未作成(spreadsheet_id={task1_id})",
                 }
             else:
-                backup_path = backup_dir / f"class{class_num}_task1_before.json"
+                backup_path = backup_dir / f"class{class_num}_{slug}_before.json"
                 backup_path.write_text(
                     json.dumps(task1_sheet, ensure_ascii=False, indent=2)
                 )
@@ -533,7 +551,7 @@ def process_class(class_num: str, commit: bool, backup_dir: Path) -> dict:
                     after_props_list = _get_sheet_properties_list(
                         task1_id, build_service_fn=_build_task1_sheets_service
                     )
-                    after_sheet = _find_sheet(after_props_list, TASK1_TAB_NAME)
+                    after_sheet = _find_sheet(after_props_list, task_label)
                     result["task1"] = {
                         "status": "applied",
                         "spreadsheet_id": task1_id,
@@ -545,6 +563,29 @@ def process_class(class_num: str, commit: bool, backup_dir: Path) -> dict:
             result["task1"] = {"status": "error", "detail": str(e)}
 
     return result
+
+
+def failed_results(all_results: list[dict]) -> list[str]:
+    """適用結果の中から、失敗・未検証のものを説明文にして返す(空なら全件問題なし)。
+
+    以前は個別エラーを結果に格納しても終了コードが常に0で、適用失敗や、適用後に
+    非表示/保護が実際には効いていない状態を見落とせた。dry-run・skipped(タブ未作成)・
+    already_*(適用済み)は失敗ではない。
+    """
+    failures = []
+    for r in all_results:
+        head = f"クラス{r['class']}({r.get('task', TASK1_TAB_NAME)})"
+        for slot in ("roster", "task1", "dest_task1"):
+            v = r.get(slot) or {}
+            status = v.get("status")
+            if status in ("error", "applied_verification_failed"):
+                failures.append(f"{head} {slot}: {status}")
+            elif status == "applied":
+                if v.get("after_hidden") is not True:
+                    failures.append(f"{head} {slot}: 適用後も非表示になっていません")
+                if slot != "task1" and v.get("after_protected") is not True:
+                    failures.append(f"{head} {slot}: 適用後も保護されていません")
+    return failures
 
 
 def main() -> int:
@@ -559,6 +600,12 @@ def main() -> int:
         dest="class_num",
         default=None,
         help="対象クラスを1件に限定する場合に指定(例: 01)。省略時は対象8クラス全件",
+    )
+    parser.add_argument(
+        "--task",
+        choices=TASK_TAB_NAMES,
+        default=TASK1_TAB_NAME,
+        help="対象の課題タブ(既定: 課題①)。受講者リストの処理は課題に依らず同じ",
     )
     args = parser.parse_args()
 
@@ -580,11 +627,11 @@ def main() -> int:
     all_results = []
     for class_num in classes:
         print(f"\n=== クラス{class_num} ===")
-        result = process_class(class_num, args.commit, backup_dir)
+        result = process_class(class_num, args.commit, backup_dir, args.task)
         all_results.append(result)
         print(f"  受講者リスト        : {result['roster']}")
-        print(f"  課題①(提出記録シート): {result['task1']}")
-        print(f"  課題①(出欠管理ファイル): {result['dest_task1']}")
+        print(f"  {args.task}(提出記録シート): {result['task1']}")
+        print(f"  {args.task}(出欠管理ファイル): {result['dest_task1']}")
 
     manifest_path = backup_dir / "manifest.json"
     manifest_path.write_text(json.dumps(all_results, ensure_ascii=False, indent=2))
@@ -593,7 +640,19 @@ def main() -> int:
 
     if not args.commit:
         print("\n[DRY-RUN] --commitが指定されていないため変更は行いませんでした。")
-    return 0
+    if args.commit:
+        # タブ未作成(skipped)は正当な保留だが、--commitが0で終わっても「隠れた」とは限らない
+        for r in all_results:
+            for slot in ("task1", "dest_task1"):
+                if (r.get(slot) or {}).get("status") == "skipped":
+                    print(
+                        f"[未適用] クラス{r['class']}の{r.get('task', args.task)}"
+                        f"({slot}): 対象タブが無いため何も適用していません"
+                    )
+    failures = failed_results(all_results)
+    for line in failures:
+        print(f"[失敗] {line}")
+    return 1 if failures else 0
 
 
 if __name__ == "__main__":

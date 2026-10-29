@@ -5,6 +5,8 @@ Playwright Automation Engine for Carewell Web Service
 import logging
 import os
 import re
+import shutil
+import tempfile
 import time
 from typing import Dict, Optional
 
@@ -120,6 +122,26 @@ class ContextLoggerAdapter(logging.LoggerAdapter):
             # Prepend context to message
             return f"{context} {msg}", kwargs
         return msg, kwargs
+
+
+# ダウンロードの一時保存先ディレクトリの接頭辞。remove_download()はこの接頭辞の
+# ディレクトリだけを削除する(/tmp自体や他のパスを消さないための安全装置)。
+DOWNLOAD_DIR_PREFIX = "carewell_dl_"
+
+
+def remove_download(file_path: str) -> None:
+    """download_file()が返したファイルと、その一時ディレクトリを削除する。
+
+    削除できずに残った場合はOSErrorにする(Cloud Runの/tmpはメモリ上のため、
+    残骸が溜まるとメモリを圧迫する。「削除した」と誤ってログしないため)。
+    """
+    download_dir = os.path.dirname(file_path)
+    if os.path.basename(download_dir).startswith(DOWNLOAD_DIR_PREFIX):
+        shutil.rmtree(download_dir, ignore_errors=True)
+        if os.path.exists(download_dir):
+            raise OSError(f"一時ディレクトリが残っています: {download_dir}")
+    elif os.path.exists(file_path):
+        os.remove(file_path)
 
 
 class PlaywrightAutomationEngine:
@@ -336,12 +358,27 @@ class PlaywrightAutomationEngine:
         self.logger.info(f"Selecting task with pattern: {task_pattern}")
 
         # Use text= selector without quotes for partial match
-        if not self._click_in_any_frame(
-            f"text={task_pattern}", f'task "{task_pattern}"'
-        ):
+        selector = f"text={task_pattern}"
+        frame = self._find_frame_with_selector(selector, timeout_ms=10000)
+        if frame is None:
             self.logger.info(f"Task not found (likely not yet created): {task_pattern}")
             return False
 
+        # 部分一致で候補が複数あると、最初の候補を黙って選び、別の課題を「正常な
+        # 収集」として記録してしまう(件数検証は選んだ課題の件数と照合するため通る)。
+        # 全フレームの候補を数え、1件に定まらないときは中断する。
+        # 最初に見つかったフレームで返るため、他フレームの描画前に数えると1件と誤認する。
+        # 数える前に画面の安定を待つ。
+        self._wait_for_navigation()
+        candidates = sum(f.locator(selector).count() for f in self.page.frames)
+        if candidates > 1:
+            raise Exception(
+                f"Task pattern matched multiple elements ({candidates}), "
+                f"refusing to guess: {task_pattern} (候補が複数あります)"
+            )
+
+        self.logger.info(f"Clicking 'task \"{task_pattern}\"'")
+        frame.click(selector)
         self._wait_for_navigation()
         return True
 
@@ -1575,7 +1612,8 @@ class PlaywrightAutomationEngine:
             detail_url: Detail page URL where download link exists
 
         Returns:
-            Path to downloaded file in /tmp
+            Path to downloaded file (in a per-request temporary directory;
+            release it with remove_download())
 
         Raises:
             Exception if download fails
@@ -1665,21 +1703,35 @@ class PlaywrightAutomationEngine:
                 for c in filename
                 if c.isalnum() or c in (" ", ".", "_", "-", "（", "）", "　")
             )
-            download_path = f"/tmp/{safe_filename}"
+            # リクエストごとに一意なディレクトリへ保存する。Cloud Runは1コンテナで
+            # 複数リクエストを並行処理するため、/tmp/{ファイル名}固定だと同名ファイルの
+            # 保存・アップロード・削除が他のリクエストと衝突し、中身が入れ替わりうる。
+            download_dir = tempfile.mkdtemp(prefix=DOWNLOAD_DIR_PREFIX)
+            download_path = os.path.join(download_dir, safe_filename)
 
-            # Save the file
-            self.logger.debug(f"Saving file to: {download_path}")
-            download.save_as(download_path)
+            try:
+                # Save the file
+                self.logger.debug(f"Saving file to: {download_path}")
+                download.save_as(download_path)
 
-            # Verify file exists and has size
-            if os.path.exists(download_path):
-                file_size = os.path.getsize(download_path)
-                self.logger.info(
-                    f"Downloaded successfully: {download_path} ({file_size} bytes)"
-                )
-                return download_path
-            else:
-                raise Exception(f"Download failed: file not found at {download_path}")
+                # Verify file exists and has size
+                if not os.path.exists(download_path):
+                    raise Exception(
+                        f"Download failed: file not found at {download_path}"
+                    )
+            except Exception:
+                try:
+                    remove_download(download_path)
+                except OSError as cleanup_error:
+                    # 後片付けの失敗で、元のダウンロード失敗の原因を隠さない
+                    self.logger.warning(f"Failed to clean up: {cleanup_error}")
+                raise
+
+            file_size = os.path.getsize(download_path)
+            self.logger.info(
+                f"Downloaded successfully: {download_path} ({file_size} bytes)"
+            )
+            return download_path
 
         except Exception as e:
             self.logger.error(f"Error downloading {filename}: {e}", exc_info=True)

@@ -137,6 +137,36 @@ python scripts/check_rollout_status.py --class 0N     # 「完了」になるこ
 - **Dashboardの確認**: 名簿の取込み後、最大15分で`carewell-attendance-roster-sync`がFirestoreへ同期し、Dashboard（https://carewell-dashboard-2026.web.app/）の「受講生一覧」にクラスの受講者が表示される。管理者アカウントでログインし、件数とグループ別人数が名簿と一致することを確認する（氏名をスクリーンショットに残さない）。
 - クライアントへの報告は、検証済みの事実だけを書く（2026-09-14の「完了」報告が実際には崩れていた前例あり）。
 
+## 3.5 課題②の受け入れ（№01から）
+
+課題②も、課題①と同じ仕組みで出欠確認表（見出し行の「課題②」列）へ反映する。スクリプトの`--task 課題②`で課題ラベルだけを差し替える（省略時は課題①で、従来の挙動は変わらない）。数式・タブの組み立てがすべて課題名に追従する（収集側のコード修正と合わせて、2026-10-29に対応）。
+
+| 項目 | 課題②での扱い |
+|---|---|
+| 提出記録シートのタブ | 「課題②」。初回の書込み時にCloud Runが**非表示**で自動作成する（課題①と同じ）。 |
+| 管理側ファイルのタブ | 「課題②」。非表示＋保護（課題①と同じ）。 |
+| 提出記録側の保護 | しない（課題①と同じ。収集用のSAが書込めなくなるのを避ける）。 |
+| 出欠確認の列 | 見出し行（4行目）の「課題②」列（№01はM列）。 |
+
+**順序（状態を変える操作の前に、前段を確認する）**
+1. **デプロイの前に**、ポータル（zenkoukai）で課題の候補数を確認する（`decision-maker`がログインし、AIは表示名と件数だけを読む）。収集コードと同じ条件（`text=<課題名>`の部分一致）で、**課題①と課題②の両方が候補1件だけ**であること。課題②が未公開なら、課題①だけ確認する。
+   - 新しい収集コードは、候補が2件以上だと中断する（誤った課題を黙って集めない）。課題①のジョブは稼働中のため、課題①の候補が2件以上だと**デプロイ後に全クラスの課題①収集が止まる**。課題②の公開で「課題①」を含む文言が増えていないかも、ここで確かめる。
+2. 収集コードの修正（課題名の一意選択・ダウンロードの一時ディレクトリ分離・課題②タブの非表示作成）をデプロイし、revision・traffic・ログの3点を確認する（`docs/common-mistakes.md` #8）。デプロイ後の最初の課題①の実行ログで、`Task pattern matched multiple elements`（HTTP 500）が出ていないことを確認する。
+3. 課題②がポータルに公開されていることを確認してから、`gcloud scheduler jobs resume carewell-classNN-task02 --location=asia-northeast1 --project=carewell-automation`（1クラスずつ。次の実行は:05/:35前後）。再開後の新revisionの実行ログで、`Count verification passed`（0件なら確定ゼロ件のログ）と中断がないことを確認する。**`Task not found` / `Task not yet created` が出ているときは「正常に0件」と読まない**: 課題名の表記違い（`task_pattern`の誤り）や画面の読込み遅れでも同じ応答（HTTP 200）になり、Cloud Schedulerは緑のまま0件収集が続く（課題①から続く既存の仕様）。ポータルに課題②が公開済みなのにこのログが出る場合は、`task_pattern`とポータルの表示名を突き合わせる。
+4. 反映（クラスごと）。コマンドは1つずつ実行する。
+```
+python scripts/apply_submission_formulas.py --class 0N --task 課題②             # dry-run
+python scripts/apply_submission_formulas.py --class 0N --task 課題② --commit
+# 提出記録側の「課題②」タブがまだ無く、最初の提出前に連携を済ませたいとき:
+python scripts/apply_submission_formulas.py --class 0N --task 課題② --commit --provision-submission-tab
+python scripts/hide_sensitive_sheets.py --class 0N --task 課題②                 # dry-run
+python scripts/hide_sensitive_sheets.py --class 0N --task 課題② --commit
+python scripts/check_rollout_status.py --class 0N --task 課題②                  # 「完了」になること
+```
+- `hide_sensitive_sheets.py`は、エラー・適用後に非表示/保護が効いていない結果があれば終了コード1で終わる（`[失敗]`行に原因が出る）。`--commit`が0で終わっても、読み取りの`check_rollout_status.py`で状態を確かめる。
+- **「完了」は設定の完了**。提出が0件の間は収集から表示までが未確認で、`Count verification passed`は一覧の件数照合であり、Sheets追記の成功までは証明しない。最初の実提出後に、手順5の**4段突合**（課題名を「課題②」に読み替える）を必ず行う。
+- Dashboardは、課題の親ドキュメントが作られる**初回の収集後**でないと課題②を出さない。表示の確認は初回収集の後に行う。
+
 ## 4. 運用上の約束
 
 | 項目 | ルール |

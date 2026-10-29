@@ -20,7 +20,7 @@ from config.classes import (
 )
 from firestore_service import FirestoreService
 from google_drive_service import GoogleDriveService
-from playwright_automation import PlaywrightAutomationEngine
+from playwright_automation import PlaywrightAutomationEngine, remove_download
 from sheets_retry import append_record_with_retry
 from sheets_service import SheetsService
 
@@ -343,7 +343,7 @@ def main(request):
                     # Clean up temporary file
                     if file_path and os.path.exists(file_path):
                         try:
-                            os.remove(file_path)
+                            remove_download(file_path)
                             logger.info(f"Cleaned up temporary file: {file_path}")
                         except Exception as cleanup_error:
                             logger.warning(

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-{No}_受講者リスト_出欠管理 の「{No}_出欠確認」シートへ、課題①の提出/未提出を
+{No}_受講者リスト_出欠管理 の「{No}_出欠確認」シートへ、課題①(--task 課題② で課題②)の提出/未提出を
 自動表示する数式(IMPORTRANGE + XLOOKUP + COUNTIF)を、検証ゲート付きで書き込む。
 
 クラス№01で行ってきた連携作業(docs/class-rollout-runbook.md)を、全クラスで
@@ -11,6 +11,7 @@
     python scripts/apply_submission_formulas.py --class 03 --commit   # 実書き込み
     python scripts/apply_submission_formulas.py --class 03 --commit \\
         --provision-submission-tab   # 提出記録シート側「課題①」タブを事前作成する
+    python scripts/apply_submission_formulas.py --class 01 --task 課題②   # 課題②(dry-run)
 
 終了コード: 0=成功(dry-run含む) / 1=検証失敗・エラー / 2=保留(提出記録側に「課題①」
 タブが無く、--provision-submission-tab も未指定)
@@ -49,7 +50,8 @@ from scripts.merge_student_roster import (  # noqa: E402
 )
 from src.gcp_sa_auth import call_with_reauth  # noqa: E402
 
-TASK_LABEL = "課題①"
+TASK_LABEL = "課題①"  # 既定の課題。--task で課題②にも使える
+TASK_LABELS = ("課題①", "課題②")
 HEADER_ROW = 4  # 出欠確認シートの見出し行(「課題①」「課題②」等が並ぶ行)
 FIRST_STUDENT_ROW = 5
 ATTENDANCE_NUMBER_COL = "C"  # 受講者番号列
@@ -91,14 +93,15 @@ _VALID_STATUSES = ("提出", "未提出")
 # ---------------------------------------------------------------------------
 
 
-def build_import_formula(submission_spreadsheet_id: str) -> str:
-    return f'=IMPORTRANGE("{submission_spreadsheet_id}","{TASK_LABEL}!C:D")'
+def build_import_formula(
+    submission_spreadsheet_id: str, label: str = TASK_LABEL
+) -> str:
+    return f'=IMPORTRANGE("{submission_spreadsheet_id}","{label}!C:D")'
 
 
-def build_status_formula(row: int) -> str:
+def build_status_formula(row: int, label: str = TASK_LABEL) -> str:
     return (
-        f'=IF(C{row}="","",IF(COUNTIF(\'{TASK_LABEL}\'!C:C,C{row})=0,'
-        f'"未提出","提出"))'
+        f'=IF(C{row}="","",IF(COUNTIF(\'{label}\'!C:C,C{row})=0,' f'"未提出","提出"))'
     )
 
 
@@ -113,7 +116,7 @@ def col_letter(idx: int) -> str:
 
 
 def find_task_column(header_row: list, label: str = TASK_LABEL) -> int:
-    """見出し行から課題①列を特定する(0-indexed)。0件・複数件は異常として中断する。
+    """見出し行から課題列(既定は課題①)を特定する(0-indexed)。0件・複数件は異常として中断する。
 
     I列決め打ちにしない: 同じ見出し行に課題②が並び、クラスごとに列位置が
     変わりうるため。
@@ -191,7 +194,7 @@ def extract_attendance_numbers(
 def statuses_for_rows(
     col_values: list[list], student_rows: list[int], first_row: int = FIRST_STUDENT_ROW
 ) -> list[str]:
-    """課題①列の読取り結果から、受講者行の表示値を取り出す。
+    """課題列の読取り結果から、受講者行の表示値を取り出す。
 
     APIは末尾の空セルを省略し、途中の空は[]で返すため、範囲外・空は""にする。
     """
@@ -225,11 +228,13 @@ def validate_roster_keys(nichikai: list[str], numbers: list[str]) -> list[str]:
     return issues
 
 
-def plan_attendance_writes(existing: dict[int, str], student_rows: list[int]) -> dict:
-    """課題①列への書込み計画を作る。既存の異なる入力は上書きせず衝突として返す。"""
+def plan_attendance_writes(
+    existing: dict[int, str], student_rows: list[int], label: str = TASK_LABEL
+) -> dict:
+    """課題列(既定は課題①)への書込み計画を作る。既存の異なる入力は上書きせず衝突として返す。"""
     writes, conflicts, same = [], [], 0
     for row in student_rows:
-        formula = build_status_formula(row)
+        formula = build_status_formula(row, label)
         kind = classify_cell(existing.get(row, ""), formula)
         if kind == "empty":
             writes.append((row, formula))
@@ -249,17 +254,20 @@ def independent_submitted_count(
 
 
 def verify_results(
-    statuses: list[str], n_students: int, independent_submitted: int
+    statuses: list[str],
+    n_students: int,
+    independent_submitted: int,
+    label: str = TASK_LABEL,
 ) -> list[str]:
     """書込み後の検証: エラーなし・件数一致・独立集計一致"""
     issues = []
     errors = [s for s in statuses if str(s).startswith("#")]
     if errors:
-        issues.append(f"課題①列にエラーセルが{len(errors)}件あります")
+        issues.append(f"{label}列にエラーセルが{len(errors)}件あります")
     unexpected = [s for s in statuses if s not in _VALID_STATUSES and s not in errors]
     if unexpected:
         issues.append(
-            f"課題①列に「提出」「未提出」以外の値が{len(unexpected)}件あります"
+            f"{label}列に「提出」「未提出」以外の値が{len(unexpected)}件あります"
         )
     judged = [s for s in statuses if s in _VALID_STATUSES]
     if len(statuses) != n_students or len(judged) != n_students:
@@ -284,12 +292,14 @@ def import_cell_has_error(value) -> bool:
     )
 
 
-def validate_submission_header(values: list[list]) -> list[str]:
-    """提出記録側「課題①」タブのA1:H1がシステムの見出しと一致するか"""
+def validate_submission_header(
+    values: list[list], label: str = TASK_LABEL
+) -> list[str]:
+    """提出記録側の課題タブ(既定は「課題①」)のA1:H1がシステムの見出しと一致するか"""
     if not values or not values[0]:
-        return ["提出記録側「課題①」タブの見出し行(A1:H1)が空です"]
+        return [f"提出記録側「{label}」タブの見出し行(A1:H1)が空です"]
     if [str(v) for v in values[0]] != SUBMISSION_HEADER:
-        return ["提出記録側「課題①」タブの見出しがシステムの定義と一致しません"]
+        return [f"提出記録側「{label}」タブの見出しがシステムの定義と一致しません"]
     return []
 
 
@@ -302,12 +312,14 @@ def check_row_cap(rows: list, cap: int = SUBMISSION_READ_CAP - 1) -> None:
         )
 
 
-def build_provision_requests(sheet_id: int, header: list[str]) -> list[dict]:
+def build_provision_requests(
+    sheet_id: int, header: list[str], label: str = TASK_LABEL
+) -> list[dict]:
     """タブ作成と見出し書込みを1回のbatchUpdateで原子的に行うリクエスト"""
     return [
         {
             "addSheet": {
-                "properties": {"sheetId": sheet_id, "title": TASK_LABEL, "hidden": True}
+                "properties": {"sheetId": sheet_id, "title": label, "hidden": True}
             }
         },
         {
@@ -381,7 +393,7 @@ def _update_values(build_fn, spreadsheet_id: str, range_: str, values, raw=False
 
 
 def _write_status_formulas(att_id: str, att_tab: str, task_col: str, writes: list):
-    """課題①列の判定式を一括で書き込む(書込みを他の呼び出しと区別して扱うための関数)"""
+    """課題列の判定式を一括で書き込む(書込みを他の呼び出しと区別して扱うための関数)"""
     return call_with_reauth(
         _build_sheets_service,
         lambda svc: svc.spreadsheets()
@@ -400,8 +412,8 @@ def _write_status_formulas(att_id: str, att_tab: str, task_col: str, writes: lis
     )
 
 
-def provision_submission_tab(submission_id: str) -> str:
-    """提出記録側に非表示の「課題①」タブを見出しつきで作る。
+def provision_submission_tab(submission_id: str, label: str = TASK_LABEL) -> str:
+    """提出記録側に非表示の課題タブ(既定は「課題①」)を見出しつきで作る。
 
     Cloud Run(毎時、_ensure_sheet_exists/_ensure_headers)と同時に動いても壊さない:
     タブ作成と見出しは1回のbatchUpdateで原子的に行い、「既に存在」で失敗した場合は
@@ -412,7 +424,7 @@ def provision_submission_tab(submission_id: str) -> str:
         _batch_update(
             _build_task1_sheets_service,
             submission_id,
-            build_provision_requests(sheet_id, SUBMISSION_HEADER),
+            build_provision_requests(sheet_id, SUBMISSION_HEADER, label),
         )
         outcome = "created"
     except HttpError as e:
@@ -420,27 +432,29 @@ def provision_submission_tab(submission_id: str) -> str:
             raise
         outcome = "already_exists"
         header = _get_values(
-            _build_task1_sheets_service, submission_id, f"'{TASK_LABEL}'!A1:H1"
+            _build_task1_sheets_service, submission_id, f"'{label}'!A1:H1"
         )
         if not header or not header[0]:
             # システムがタブだけ作って見出し書込み前の状態。システムと同じ内容を書く。
             _update_values(
                 _build_task1_sheets_service,
                 submission_id,
-                f"'{TASK_LABEL}'!A1:H1",
+                f"'{label}'!A1:H1",
                 [SUBMISSION_HEADER],
                 raw=True,
             )
     readback = _get_values(
-        _build_task1_sheets_service, submission_id, f"'{TASK_LABEL}'!A1:H1"
+        _build_task1_sheets_service, submission_id, f"'{label}'!A1:H1"
     )
-    issues = validate_submission_header(readback)
+    issues = validate_submission_header(readback, label)
     if issues:
         raise ValidationError("; ".join(issues))
     return outcome
 
 
-def process_class(class_num: str, commit: bool, provision: bool) -> int:
+def process_class(
+    class_num: str, commit: bool, provision: bool, task_label: str = TASK_LABEL
+) -> int:
     expected = EXPECTED_STUDENT_COUNT_BY_CLASS.get(class_num)
     if expected is None:
         print(
@@ -469,11 +483,11 @@ def process_class(class_num: str, commit: bool, provision: bool) -> int:
             f"受講者リストの件数({len(roster_numbers)})が期待人数({expected})と一致しません"
         )
 
-    # 出欠確認シート: 課題①列の特定と受講者番号の対応検証
+    # 出欠確認シート: 課題列の特定と受講者番号の対応検証
     header = _get_values(
         _build_sheets_service, att_id, f"'{att_tab}'!A{HEADER_ROW}:AZ{HEADER_ROW}"
     )
-    task_idx = find_task_column(header[0] if header else [])
+    task_idx = find_task_column(header[0] if header else [], task_label)
     task_col = col_letter(task_idx)
     number_col = _get_values(
         _build_sheets_service,
@@ -487,47 +501,47 @@ def process_class(class_num: str, commit: bool, provision: bool) -> int:
         raise ValidationError("事前ゲート失敗: " + "; ".join(issues))
     student_rows = select_student_rows(number_col, roster_set)
 
-    # 2. 提出記録側の「課題①」タブ
+    # 2. 提出記録側の課題タブ
     sub_titles = _list_titles(_build_sheets_service, sub_id)
     need_provision = False
-    if TASK_LABEL not in sub_titles:
+    if task_label not in sub_titles:
         if not provision:
             print(
-                f"[保留] クラス{class_num}: 提出記録側に「{TASK_LABEL}」タブがありません。"
+                f"[保留] クラス{class_num}: 提出記録側に「{task_label}」タブがありません。"
                 "最初の提出を待つか、--provision-submission-tab で事前作成してください。"
             )
             return 2
         # 作成は、管理側の検証・計画がすべて通った後(--commit時)に行う
         need_provision = True
-        print(f"[計画] 提出記録側に非表示の「{TASK_LABEL}」タブを作成予定")
+        print(f"[計画] 提出記録側に非表示の「{task_label}」タブを作成予定")
     else:
-        hdr = _get_values(_build_sheets_service, sub_id, f"'{TASK_LABEL}'!A1:H1")
-        issues = validate_submission_header(hdr)
+        hdr = _get_values(_build_sheets_service, sub_id, f"'{task_label}'!A1:H1")
+        issues = validate_submission_header(hdr, task_label)
         if issues:
             raise ValidationError("; ".join(issues))
         check_row_cap(
             _get_values(
                 _build_sheets_service,
                 sub_id,
-                f"'{TASK_LABEL}'!{SUBMISSION_NICHIKAI_COL}2:{SUBMISSION_NICHIKAI_COL}{SUBMISSION_READ_CAP}",
+                f"'{task_label}'!{SUBMISSION_NICHIKAI_COL}2:{SUBMISSION_NICHIKAI_COL}{SUBMISSION_READ_CAP}",
             )
         )
 
     # 3. 書込み計画
     att_titles = _list_titles(_build_sheets_service, att_id)
-    admin_tab_exists = TASK_LABEL in att_titles
-    a1_expected = build_import_formula(sub_id)
+    admin_tab_exists = task_label in att_titles
+    a1_expected = build_import_formula(sub_id, task_label)
     existing_a1 = existing_c1 = ""
     if admin_tab_exists:
-        a1 = _get_values(_build_sheets_service, att_id, f"'{TASK_LABEL}'!A1", "FORMULA")
-        c1 = _get_values(_build_sheets_service, att_id, f"'{TASK_LABEL}'!C1", "FORMULA")
+        a1 = _get_values(_build_sheets_service, att_id, f"'{task_label}'!A1", "FORMULA")
+        c1 = _get_values(_build_sheets_service, att_id, f"'{task_label}'!C1", "FORMULA")
         existing_a1 = a1[0][0] if a1 and a1[0] else ""
         existing_c1 = c1[0][0] if c1 and c1[0] else ""
     a1_kind = classify_cell(existing_a1, a1_expected)
     c1_kind = classify_cell(existing_c1, XLOOKUP_FORMULA)
     if "conflict" in (a1_kind, c1_kind):
         raise ValidationError(
-            f"管理側「{TASK_LABEL}」タブのA1/C1に期待と異なる既存入力があります"
+            f"管理側「{task_label}」タブのA1/C1に期待と異なる既存入力があります"
             f"(A1={a1_kind}, C1={c1_kind})。上書きせず中断します。"
         )
     existing_col = _get_values(
@@ -539,15 +553,15 @@ def process_class(class_num: str, commit: bool, provision: bool) -> int:
     existing = {
         FIRST_STUDENT_ROW + i: (r[0] if r else "") for i, r in enumerate(existing_col)
     }
-    plan = plan_attendance_writes(existing, student_rows)
+    plan = plan_attendance_writes(existing, student_rows, task_label)
     if plan["conflicts"]:
         raise ValidationError(
-            f"課題①列に期待と異なる既存入力が{len(plan['conflicts'])}行あります。"
+            f"{task_label}列に期待と異なる既存入力が{len(plan['conflicts'])}行あります。"
             "自動修正せず中断します(式の生値・参照先・計算結果を比較して原因を分類してください)。"
         )
 
     print(
-        f"[計画] クラス{class_num}: 受講者{len(student_rows)}行 / 課題①列={task_col}列 / "
+        f"[計画] クラス{class_num}: 受講者{len(student_rows)}行 / {task_label}列={task_col}列 / "
         f"書込み{len(plan['writes'])}行・同一式{plan['same']}行・衝突0 / "
         f"管理側タブ={'既存' if admin_tab_exists else '新規作成'}"
         f"(A1:{a1_kind}, C1:{c1_kind})"
@@ -558,7 +572,7 @@ def process_class(class_num: str, commit: bool, provision: bool) -> int:
 
     # 4. 提出記録側タブの事前作成(管理側の検証・計画がすべて通った後) → バックアップ → 書込み
     if need_provision:
-        outcome = provision_submission_tab(sub_id)
+        outcome = provision_submission_tab(sub_id, task_label)
         print(f"[提出記録側タブ] {outcome}(見出し一致を読み戻しで確認)")
     ts = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
     backup_dir = _scratch_dir() / ts
@@ -582,15 +596,15 @@ def process_class(class_num: str, commit: bool, provision: bool) -> int:
         _batch_update(
             _build_sheets_service,
             att_id,
-            [{"addSheet": {"properties": {"title": TASK_LABEL, "hidden": True}}}],
+            [{"addSheet": {"properties": {"title": task_label, "hidden": True}}}],
         )
     if a1_kind == "empty":
         _update_values(
-            _build_sheets_service, att_id, f"'{TASK_LABEL}'!A1", [[a1_expected]]
+            _build_sheets_service, att_id, f"'{task_label}'!A1", [[a1_expected]]
         )
     if c1_kind == "empty":
         _update_values(
-            _build_sheets_service, att_id, f"'{TASK_LABEL}'!C1", [[XLOOKUP_FORMULA]]
+            _build_sheets_service, att_id, f"'{task_label}'!C1", [[XLOOKUP_FORMULA]]
         )
     if plan["writes"]:
         _write_status_formulas(att_id, att_tab, task_col, plan["writes"])
@@ -600,11 +614,11 @@ def process_class(class_num: str, commit: bool, provision: bool) -> int:
         time.sleep(5)
         problems = []
         import_cells = _get_values(
-            _build_sheets_service, att_id, f"'{TASK_LABEL}'!A1:C1"
+            _build_sheets_service, att_id, f"'{task_label}'!A1:C1"
         )
         if any(import_cell_has_error(v) for row in import_cells for v in row):
             problems.append(
-                "管理側「課題①」のIMPORTRANGEがエラー/接続未許可です"
+                f"管理側「{task_label}」のIMPORTRANGEがエラー/接続未許可です"
                 "(シート上で「アクセスを許可」を1回押す必要があります)"
             )
         col_after = _get_values(
@@ -616,13 +630,13 @@ def process_class(class_num: str, commit: bool, provision: bool) -> int:
         sub_after = _get_values(
             _build_sheets_service,
             sub_id,
-            f"'{TASK_LABEL}'!{SUBMISSION_NICHIKAI_COL}2:{SUBMISSION_NICHIKAI_COL}{SUBMISSION_READ_CAP}",
+            f"'{task_label}'!{SUBMISSION_NICHIKAI_COL}2:{SUBMISSION_NICHIKAI_COL}{SUBMISSION_READ_CAP}",
         )
         check_row_cap(sub_after)
         independent = independent_submitted_count(
             [r[0] for r in sub_after if r], roster_nichikai
         )
-        problems += verify_results(statuses, len(student_rows), independent)
+        problems += verify_results(statuses, len(student_rows), independent, task_label)
         if not problems:
             break
         if attempt < 2:
@@ -662,14 +676,22 @@ def main() -> int:
     parser.add_argument(
         "--provision-submission-tab",
         action="store_true",
-        help="提出記録側に「課題①」タブが無い場合、非表示で事前作成する(--commit時のみ実行)",
+        help="提出記録側に課題タブが無い場合、非表示で事前作成する(--commit時のみ実行)",
+    )
+    parser.add_argument(
+        "--task",
+        choices=TASK_LABELS,
+        default=TASK_LABEL,
+        help="対象の課題(既定: 課題①)",
     )
     args = parser.parse_args()
     if args.class_num not in TARGET_CLASSES:
         print(f"[エラー] クラス{args.class_num}は対象外です(対象: {TARGET_CLASSES})")
         return 1
     try:
-        return process_class(args.class_num, args.commit, args.provision_submission_tab)
+        return process_class(
+            args.class_num, args.commit, args.provision_submission_tab, args.task
+        )
     except ValidationError as e:
         print(f"[中断] {e}")
         return 1
