@@ -202,6 +202,7 @@ python scripts/check_rollout_status.py                                      # �
 - 手動で前倒しして実行するなら `gcloud scheduler jobs run carewell-classNN-task02 --location=asia-northeast1`（定期実行と同じ処理）。実行中に新しい提出が入ると、手動実行と定期実行で件数が違うことがある（既存分は重複せず、新しい分だけ取得される）。
 - 出欠確認の「提出」が、新しい提出の直後に独立集計より1件少なく見えて`check_rollout_status.py`が「退行・検証失敗」になることがある。IMPORTRANGEの再計算待ちで、数十秒〜で解消する。1〜2回再実行してから原因を調べる。
 - ログを手で確認するときは、氏名が出ない条件に絞る（`Count verification`・`Starting file collection`等）。`textPayload:"№0N-課題②"`のように広く取ると、ダウンロード行に氏名が出る。上の`check_collection_status.py`を使えば原文は出ない。
+- `check_collection_status.py`の限界: 収集コードに「実行の終了」を示すログ行が無いため、手動実行と定期実行が重なると、片方のERRORがもう片方に付くことがある（誤ってERRORと出る安全側の誤り）。ERRORが出たらログを手で確認する。毎回、課題ページに着く前に中断する場合は「中断（繰り返し）」と出る。
 
 ## 4. 運用上の約束
 

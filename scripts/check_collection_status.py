@@ -22,6 +22,11 @@ ERROR」がある / 2=ログやジョブ一覧を取得できなかった
 ERRORは、重大度(収集コードのテキストログでは空になる)ではなく、整形済みの本文の
 「 - ERROR - 」で判定する。2つの実行(手動と定期)が重なった可能性があるときは、その旨を付記する。
 
+【限界】収集コードに「実行の終了」を示すログ行が無いため、実行の重なりは推定。前の実行がダウンロード中に
+次の実行が始まると、前の実行のERRORが新しい実行に付くことがある(誤ってERRORと出る安全側の誤り)。
+ERRORが出たら、ログを手で確認する。毎回、課題ページに着く前に中断する場合は、前の実行も未完了であることから
+「中断」と判定する(30分ごとの新しい開始で、永遠に「実行中」に見えないようにしている)。
+
 出力はログの原文を一切含まない(固定のパターンから取り出した件数・時刻・分類のみ)。
 ダウンロード行など氏名を含みうるログは、そもそも取得しない。
 """
@@ -47,6 +52,9 @@ LOG_LIMIT = 2000
 # Cloud Runのリクエストのタイムアウト(3000秒)に余裕を足した値。大きな課題はリンク取得だけで
 # 10分を超えうるが、その途中の進捗ログは氏名を含むため取得していない。
 RUNNING_WINDOW_SEC = 3100
+# Cloud Schedulerのattemptdeadline(1500秒)。前の実行の開始からこれより後に次の実行が始まり、
+# 前の実行に終了の印が無ければ、前の実行は完了しないまま終わったとみなす。
+ATTEMPT_DEADLINE_SEC = 1500
 
 OUTCOME_OK = "OK"
 OUTCOME_ZERO = "ZERO_CONFIRMED"
@@ -164,12 +172,20 @@ def summarize(
             "started": None,
             "errors": 0,
             "overlap_suspected": False,
+            "repeated_unfinished": False,
         }
     mine.sort(key=lambda e: _parse_ts(e["ts"]))
     starts = [i for i, e in enumerate(mine) if e["kind"] == "start"]
     segment = mine[starts[-1] :] if starts else mine
     started = mine[starts[-1]]["ts"] if starts else None
     overlap = False
+    repeated_unfinished = False
+    for a, b in zip(starts, starts[1:]):
+        gap = (_parse_ts(mine[b]["ts"]) - _parse_ts(mine[a]["ts"])).total_seconds()
+        if gap >= ATTEMPT_DEADLINE_SEC and not any(
+            e["kind"] in _TERMINAL_KINDS for e in mine[a:b]
+        ):
+            repeated_unfinished = True
     if len(starts) >= 2:
         prev_i, last_i = starts[-2], starts[-1]
         gap = (
@@ -189,6 +205,7 @@ def summarize(
         "extracted": None,
         "total": None,
         "overlap_suspected": overlap,
+        "repeated_unfinished": repeated_unfinished,
     }
     terminal = last("verified") or last("mismatch")
     if terminal:
@@ -208,7 +225,8 @@ def summarize(
         outcome = OUTCOME_UNVERIFIED
     else:
         outcome = OUTCOME_ABORTED
-        if now is not None:
+        # 前の実行も完了していなければ、新しい開始で猶予をリセットして「実行中」と見せない
+        if now is not None and not repeated_unfinished:
             age = (now - _parse_ts(segment[-1]["ts"])).total_seconds()
             if age < RUNNING_WINDOW_SEC:
                 outcome = OUTCOME_RUNNING
@@ -229,6 +247,8 @@ def render_row(class_no: str, task: str, job_state: str, summary: dict) -> str:
         note = f"ERRORあり({summary.get('errors', 0)}件)"
     if job_state == "PAUSED" and outcome == OUTCOME_NO_RUN:
         note = "ジョブ停止中"
+    if summary.get("repeated_unfinished") and outcome == OUTCOME_ABORTED:
+        note += "(直前の実行も完了しておらず、繰り返し中断している)"
     if summary.get("overlap_suspected"):
         # 手動実行と定期実行が重なると、片方の結果が他方に混ざりうる(結果は参考)
         note += "(直前の実行と重なった可能性があり、結果は参考)"

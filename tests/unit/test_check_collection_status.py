@@ -324,3 +324,61 @@ class TestLongRunningAndOverlap:
             _ev("10:30", "✓ Count verification passed: 7/7"),
         )
         assert "重なった" in render_row("01", T, "ENABLED", r)
+
+
+class TestRepeatedFailuresAreNotHiddenByTheRunningWindow:
+    """30分ごとの新しい開始が猶予をリセットし、毎回の中断が『実行中』に見え続けてはいけない。"""
+
+    NOW = datetime(2026, 10, 29, 1, 36, 0, tzinfo=timezone.utc)
+
+    def _summarize(self, *events):
+        return summarize([parse_event(e) for e in events], "01", T, now=self.NOW)
+
+    def test_two_unfinished_attempts_in_a_row_are_aborted_not_running(self):
+        r = self._summarize(
+            _start("00:00"),
+            _ev("01:30", "Selecting task with pattern: 課題②"),
+            _start("30:00"),
+            _ev("31:30", "Selecting task with pattern: 課題②"),
+        )
+        assert r["outcome"] == OUTCOME_ABORTED
+        assert r["repeated_unfinished"] is True
+
+    def test_a_finished_previous_attempt_keeps_the_new_one_running(self):
+        r = self._summarize(
+            _start("00:00"),
+            _ev("04:00", "✓ Count verification passed: 7/7"),
+            _start("30:00"),
+            _ev("31:30", "Selecting task with pattern: 課題②"),
+        )
+        assert r["outcome"] == OUTCOME_RUNNING
+        assert r["repeated_unfinished"] is False
+
+    def test_an_overlapping_start_is_not_counted_as_a_failed_attempt(self):
+        # 手動実行の途中で、10分後に定期実行が始まった(前の実行はまだ動いているかもしれない)
+        r = self._summarize(
+            _start("22:00"),
+            _ev("23:00", "Successfully navigated to task page"),
+            _start("32:00"),
+            _ev("33:00", "Selecting task with pattern: 課題②"),
+        )
+        assert r["outcome"] == OUTCOME_RUNNING
+        assert r["repeated_unfinished"] is False
+
+    def test_render_says_the_previous_attempt_also_did_not_finish(self):
+        r = self._summarize(
+            _start("00:00"),
+            _ev("01:30", "Selecting task with pattern: 課題②"),
+            _start("30:00"),
+            _ev("31:30", "Selecting task with pattern: 課題②"),
+        )
+        assert "繰り返し" in render_row("01", T, "ENABLED", r)
+
+    def test_exit_code_is_1_for_the_repeated_failure(self):
+        r = self._summarize(
+            _start("00:00"),
+            _ev("01:30", "Selecting task with pattern: 課題②"),
+            _start("30:00"),
+            _ev("31:30", "Selecting task with pattern: 課題②"),
+        )
+        assert exit_code([("ENABLED", r)]) == 1
