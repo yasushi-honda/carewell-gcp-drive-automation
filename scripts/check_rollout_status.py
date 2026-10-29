@@ -434,6 +434,7 @@ def gather_facts(class_num: str, task_label: str = TASK_LABEL) -> dict:
             statuses, len(student_rows), independent, task_label
         )
         facts["_submitted"] = sum(1 for s in statuses if s == "提出")
+        facts["_independent"] = independent  # 提出記録のユニーク提出者(名簿内)
         facts["_unsubmitted"] = sum(1 for s in statuses if s == "未提出")
     return facts
 

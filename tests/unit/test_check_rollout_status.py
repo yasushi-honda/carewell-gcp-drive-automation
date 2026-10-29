@@ -559,6 +559,9 @@ class TestGatherFactsTask2:
         )
         assert facts["tally_issues"] == []
         assert (facts["_submitted"], facts["_unsubmitted"]) == (1, 2)
+        assert (
+            facts["_independent"] == 1
+        )  # 提出記録のユニーク提出者(名簿内)。4段突合が再利用する
         # 課題②の判定: 課題名つきの範囲だけを読み、課題①のタブは一切読まない
         assert not any("'課題①'" in rng for _sid, rng in env.reads)
         assert ("SUB", "'課題②'!D2:D5000") in env.reads

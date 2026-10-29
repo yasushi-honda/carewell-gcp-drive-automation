@@ -127,7 +127,7 @@ python scripts/hide_sensitive_sheets.py --class 0N --commit
 python scripts/check_rollout_status.py --class 0N     # 「完了」になること
 ```
 - 「完了」は**設定の完了**を意味する。提出が0件の間は、収集から表示までの動作は未確認のまま。初回の実提出が入ったら、**収集から表示までの確認を別途行う**: 実提出者数が「提出」と一致すること（№01では往復テスト＝テスト提出→「提出」→削除→「未提出」で確認済み）。
-- **収集から表示までの4段突合**（№01で2026-09-20に実施した方法。収集漏れを検出できる唯一の手段）:
+- **収集から表示までの4段突合**（№01で2026-09-20に実施した方法。収集漏れを検出できる唯一の手段）。**`python scripts/verify_task_rollout.py --class 0N --task 課題X`で、2〜4段目と提出者数の一致を1コマンドで確認できる**（読み取り専用・氏名を出さない。終了コード0=全段一致 / 1=食い違い / 2=確定できない）。1段目の「提出元画面の件数」は、スクリプトでは収集コードが画面から読んだ値（`Count verification`）で代用する。人が画面で数えた値と比べたいときは、下の手順1を使う:
   1. 提出元画面の件数（課題①の「未添削＋添削済」の合計）。decision-makerから画面のスクリーンショットを受け取る（AIはzenkoukaiにログインしない）
   2. Cloud Runログの確認件数。`gcloud logging read 'resource.type="cloud_run_revision" AND resource.labels.service_name="carewell-file-collector" AND textPayload:"№0N-課題①" AND textPayload:"Count verification"' --freshness=1d --limit=3 --format='value(timestamp,textPayload)'` の `Count verification passed: N/N` のNが、1と一致すること
   3. 提出記録シート「課題①」のデータ行数（見出しを除く）が、1と一致すること
@@ -198,10 +198,12 @@ python scripts/hide_sensitive_sheets.py --class NN --task 課題②            #
 python scripts/hide_sensitive_sheets.py --class NN --task 課題② --commit
 python scripts/check_rollout_status.py --class NN --task 課題②            # 「完了」
 python scripts/check_rollout_status.py                                      # 課題①の回帰（全クラスが完了のまま）
+python scripts/verify_task_rollout.py --class NN --task 課題②             # 4段突合（全段PASS・終了コード0）
 ```
 - 手動で前倒しして実行するなら `gcloud scheduler jobs run carewell-classNN-task02 --location=asia-northeast1`（定期実行と同じ処理）。実行中に新しい提出が入ると、手動実行と定期実行で件数が違うことがある（既存分は重複せず、新しい分だけ取得される）。
 - 出欠確認の「提出」が、新しい提出の直後に独立集計より1件少なく見えて`check_rollout_status.py`が「退行・検証失敗」になることがある。IMPORTRANGEの再計算待ちで、数十秒〜で解消する。1〜2回再実行してから原因を調べる。
 - ログを手で確認するときは、氏名が出ない条件に絞る（`Count verification`・`Starting file collection`等）。`textPayload:"№0N-課題②"`のように広く取ると、ダウンロード行に氏名が出る。上の`check_collection_status.py`を使えば原文は出ない。
+- **Dashboardの確認**（ログイン不要。閲覧系は認証で塞いでいない。`docs/admin-authentication.md`）: https://carewell-dashboard-2026.web.app/ → クラス一覧 → 対象クラス。クラス画面に「課題①」「課題②」が並び、課題②のグループ画面は`/class/{クラス名}/task/課題②/groups`（グループ一覧）→ グループの受講生一覧で「採点待ち」などの件数が出る。**確認するのは件数だけ**（受講生一覧・提出履歴は氏名が出るため、スクリーンショットを共有・保存しない）。受講生の画面（`/students/{日介番号}`）の「提出履歴」に、課題②のファイルが並ぶ。Dashboardは、課題の親ドキュメント（初回収集で作られる）が無い課題を出さない。管理者ログインは、手動同期など書き込み系の操作のときだけ要る。
 - `check_collection_status.py`の終了コード: ENABLEDのジョブに「中断・不一致・確認不能・ERROR」があるか、期間内に実行が無い・ジョブが無い場合は1（**再開した直後は、次の実行まで「実行なし」で1になる**）。クラス・課題を特定できないERROR（ダウンロード失敗・保存/同期の失敗・HTTP 500など。`main.py`のログには接頭辞が付かない）は「帰属不明」として別に数え、1件でもあれば1。ログが取得上限（2000件）に達したら不完全なので2。実行は`.venv/bin/python`。
 - `check_collection_status.py`の限界: 収集コードに「実行の終了」を示すログ行が無いため、手動実行と定期実行が重なると、片方のERRORがもう片方に付くことがある（誤ってERRORと出る安全側の誤り）。ERRORが出たらログを手で確認する。毎回、課題ページに着く前に中断する場合は「中断（繰り返し）」と出る。
 
