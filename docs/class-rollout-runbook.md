@@ -152,7 +152,7 @@ python scripts/check_rollout_status.py --class 0N     # 「完了」になるこ
 1. **デプロイの前に**、ポータル（zenkoukai）で課題の候補数を確認する（`decision-maker`がログインし、AIは表示名と件数だけを読む）。収集コードと同じ条件（`text=<課題名>`の部分一致）で、**課題①と課題②の両方が候補1件だけ**であること。課題②が未公開なら、課題①だけ確認する。
    - 新しい収集コードは、候補が2件以上だと中断する（誤った課題を黙って集めない）。課題①のジョブは稼働中のため、課題①の候補が2件以上だと**デプロイ後に全クラスの課題①収集が止まる**。課題②の公開で「課題①」を含む文言が増えていないかも、ここで確かめる。
 2. 収集コードの修正（課題名の一意選択・ダウンロードの一時ディレクトリ分離・課題②タブの非表示作成）をデプロイし、revision・traffic・ログの3点を確認する（`docs/common-mistakes.md` #8）。デプロイ後の最初の課題①の実行ログで、`Task pattern matched multiple elements`（HTTP 500）が出ていないことを確認する。
-3. 課題②がポータルに公開されていることを確認してから、`gcloud scheduler jobs resume carewell-classNN-task02 --location=asia-northeast1 --project=carewell-automation`（1クラスずつ。次の実行は:05/:35前後）。再開後の新revisionの実行ログで、`Count verification passed`（0件なら確定ゼロ件のログ）と中断がないことを確認する。**`Task not found` / `Task not yet created` が出ているときは「正常に0件」と読まない**: 課題名の表記違い（`task_pattern`の誤り）や画面の読込み遅れでも同じ応答（HTTP 200）になり、Cloud Schedulerは緑のまま0件収集が続く（課題①から続く既存の仕様）。ポータルに課題②が公開済みなのにこのログが出る場合は、`task_pattern`とポータルの表示名を突き合わせる。
+3. 課題②がポータルに公開されていることを確認してから、`gcloud scheduler jobs resume carewell-classNN-task02 --location=asia-northeast1 --project=carewell-automation`（1クラスずつ。次の実行は:05/:35前後）。再開後は、`python scripts/check_collection_status.py --class 0N --task 課題②`（読み取り専用・氏名が出ない）で、直近の実行が「収集OK」（`Count verification passed`、0件なら「提出0件を確認」）であることを確認する。**スクリプトの結果が「課題が見つからない」「課題ページに到達せず中断」のときは「正常に0件」と読まない**（ログの`Task not found` / `Task not yet created`も同じ）: 課題名の表記違い（`task_pattern`の誤り）や画面の読込み遅れでも同じ応答（HTTP 200）になり、Cloud Schedulerは緑のまま0件収集が続く（課題①から続く既存の仕様）。ポータルに課題②が公開済みなのにこのログが出る場合は、`task_pattern`とポータルの表示名を突き合わせる。
 4. 反映（クラスごと）。コマンドは1つずつ実行する。
 ```
 python scripts/apply_submission_formulas.py --class 0N --task 課題②             # dry-run
@@ -166,6 +166,42 @@ python scripts/check_rollout_status.py --class 0N --task 課題②              
 - `hide_sensitive_sheets.py`は、エラー・適用後に非表示/保護が効いていない結果があれば終了コード1で終わる（`[失敗]`行に原因が出る）。`--commit`が0で終わっても、読み取りの`check_rollout_status.py`で状態を確かめる。
 - **「完了」は設定の完了**。提出が0件の間は収集から表示までが未確認で、`Count verification passed`は一覧の件数照合であり、Sheets追記の成功までは証明しない。最初の実提出後に、手順5の**4段突合**（課題名を「課題②」に読み替える）を必ず行う。
 - Dashboardは、課題の親ドキュメントが作られる**初回の収集後**でないと課題②を出さない。表示の確認は初回収集の後に行う。
+
+### クラス別の展開チェックリスト（課題②）
+
+2026-10-29時点。ジョブは`gcloud scheduler jobs list`で確認した実際の設定（再開済みは№01のみ）。**1クラスずつ**、上の順序（ポータル確認 → デプロイ済みの確認 → 再開 → 反映）で進める。
+
+| クラス | ジョブ | 実行（毎時） | 状態 | 着手の前提 |
+|---|---|---|---|---|
+| №01 | `carewell-class01-task02` | :05 / :35 | **ENABLED（完了）** | 完了（2026-10-29） |
+| №02 | `carewell-class02-task02` | :15 / :45 | PAUSED | №02のポータルで課題②が公開済み・候補1件 |
+| №03 | `carewell-class03-task02` | :25 / :55 | PAUSED | 同上（№03） |
+| №04 | `carewell-class04-task02` | :05 / :35 | PAUSED | 同上（№04） |
+| №05 | `carewell-class05-task02` | :15 / :45 | PAUSED | 同上（№05） |
+| №06 | `carewell-class06-task02` | :25 / :55 | PAUSED | 名簿の取込み（手順1〜）が先 |
+| №07・№09 | `carewell-class07-task02` / `carewell-class09-task02` | :05 / :35 | PAUSED | 正本リスト（名簿）の入力が先 |
+| №08・№10 | `carewell-class08-task02` / `carewell-class10-task02` | :25 / :55、:15 / :45 | PAUSED | 本スクリプト群の対象外（課題①ジョブも停止中。収集側の再開が先） |
+
+**ポータルの候補数の確認（クラスごと、デプロイ済みの今は「課題②の公開確認」が目的）**
+1. `decision-maker`がブラウザでログインする。AIは氏名や画面の本文を読まず、件数だけを数える。
+2. 収集コードと同じ順で進む: ホームで**「クラス管理」**（`a[href="course/default.aspx"]`）→「教科クラス一覧」→ 対象クラス（`令和8年度 デジタル中核人材養成研修 №0N`）→「レポート採点」。ホームで「教科クラス一覧」を直接探しても見つからない。
+3. 課題の一覧で、`text=課題①`と`text=課題②`がそれぞれ**1件**であること（複数なら、そのクラスの収集は中断する）。
+4. 作業後は、ポータルからログアウトしてもらい、ブラウザのタブを閉じる。
+
+**クラスNNごとの実行（番号は置き換える。コマンドは1つずつ実行し、状態を変える操作は都度承認を取る）**
+```
+gcloud scheduler jobs resume carewell-classNN-task02 --location=asia-northeast1 --project=carewell-automation
+python scripts/check_collection_status.py --class NN --task 課題②          # 次の実行（:05/:35等）の後に「収集OK」か
+python scripts/apply_submission_formulas.py --class NN --task 課題②        # dry-run（衝突0・ゲート通過を確認）
+python scripts/apply_submission_formulas.py --class NN --task 課題② --commit
+python scripts/hide_sensitive_sheets.py --class NN --task 課題②            # dry-run
+python scripts/hide_sensitive_sheets.py --class NN --task 課題② --commit
+python scripts/check_rollout_status.py --class NN --task 課題②            # 「完了」
+python scripts/check_rollout_status.py                                      # 課題①の回帰（全クラスが完了のまま）
+```
+- 手動で前倒しして実行するなら `gcloud scheduler jobs run carewell-classNN-task02 --location=asia-northeast1`（定期実行と同じ処理）。実行中に新しい提出が入ると、手動実行と定期実行で件数が違うことがある（既存分は重複せず、新しい分だけ取得される）。
+- 出欠確認の「提出」が、新しい提出の直後に独立集計より1件少なく見えて`check_rollout_status.py`が「退行・検証失敗」になることがある。IMPORTRANGEの再計算待ちで、数十秒〜で解消する。1〜2回再実行してから原因を調べる。
+- ログを手で確認するときは、氏名が出ない条件に絞る（`Count verification`・`Starting file collection`等）。`textPayload:"№0N-課題②"`のように広く取ると、ダウンロード行に氏名が出る。上の`check_collection_status.py`を使えば原文は出ない。
 
 ## 4. 運用上の約束
 
