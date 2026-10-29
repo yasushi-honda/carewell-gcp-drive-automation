@@ -268,9 +268,14 @@ def render_row(class_no: str, task: str, job_state: str, summary: dict) -> str:
     return f"№{class_no} | {task} | {job_state} | {when} | {count} | {note}"
 
 
-def count_unattributed_errors(events: list[dict | None]) -> tuple[int, str | None]:
-    """クラス・課題を特定できないERRORの件数と、最新の時刻(原文は扱わない)。"""
+def count_unattributed_errors(
+    events: list[dict | None], since: str | None = None
+) -> tuple[int, str | None]:
+    """クラス・課題を特定できないERRORの件数と、最新の時刻(原文は扱わない)。
+    since を渡すと、その時刻以降のものだけを数える。"""
     ts = [e["ts"] for e in events if e and e["kind"] == "error_unattributed"]
+    if since is not None:
+        ts = [t for t in ts if _parse_ts(t) >= _parse_ts(since)]
     if not ts:
         return 0, None
     return len(ts), max(ts, key=_parse_ts)

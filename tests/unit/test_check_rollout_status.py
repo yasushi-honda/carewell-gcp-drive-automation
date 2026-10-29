@@ -559,6 +559,9 @@ class TestGatherFactsTask2:
         )
         assert facts["tally_issues"] == []
         assert (facts["_submitted"], facts["_unsubmitted"]) == (1, 2)
+        assert (
+            facts["_independent"] == 1
+        )  # 提出記録のユニーク提出者(名簿内)。4段突合が再利用する
         # 課題②の判定: 課題名つきの範囲だけを読み、課題①のタブは一切読まない
         assert not any("'課題①'" in rng for _sid, rng in env.reads)
         assert ("SUB", "'課題②'!D2:D5000") in env.reads
@@ -572,6 +575,8 @@ class TestGatherFactsTask2:
         facts = env.m.gather_facts("03", "課題②")
 
         assert facts["formulas"] == "none"
+        # 判定できない値は欠落(0と区別され、突合スクリプトでUNKNOWNになる)
+        assert "_independent" not in facts and "_submitted" not in facts
         state, action = env.m.classify_class(facts)
         assert state == STATE_TODO
         assert "--task 課題②" in action
