@@ -165,6 +165,24 @@ GROUP_CATEGORY_MAP_BY_CLASS = {
         "Q": "通所系訪問系",
         "R": "居宅介護支援",
     },
+    # 2026-10-30、クラス01〜05と同じ推定ルールをクラス06に適用(decision-maker承認済み、計画承認に含む)。
+    "06": {
+        "A": "入所系居住系",
+        "B": "入所系居住系",
+        "C": "入所系居住系",
+        "D": "入所系居住系",
+        "E": "入所系居住系",
+        "F": "入所系居住系",
+        "G": "入所系居住系",
+        "H": "入所系居住系",
+        "J": "入所系居住系",
+        "K": "通所系訪問系",
+        "M": "通所系訪問系",
+        "N": "通所系訪問系",
+        "P": "通所系訪問系",
+        "Q": "通所系訪問系",
+        "R": "居宅介護支援",
+    },
 }
 
 # 自動正規化(NFKC/カタカナ→ひらがな変換)では解決できない名寄せ例外のみ登録する。
@@ -201,6 +219,7 @@ EXPECTED_STUDENT_COUNT_BY_CLASS = {
     "03": 254,
     "04": 252,
     "05": 237,
+    "06": 233,
 }
 
 
@@ -523,8 +542,8 @@ def find_cross_class_nichikai_duplicates(
 
     重複するとDashboardの名簿同期が、書込み前に全クラスで中断する
     (2026-10-19、№04で3件を見逃した)。人間確認済みの異動者
-    (ATTENDANCE_ROSTER_TRANSFERRED_STUDENTS)は、異動元と異動先の組だけを許容する
-    (第三のクラスとの重複は許容しない)。
+    (ATTENDANCE_ROSTER_TRANSFERRED_STUDENTS)は、異動の経路(異動元から現在のクラスまで)
+    のクラス同士の重複だけを許容する(経路外のクラスとの重複は許容しない)。
 
     Args:
         other_class_ids: クラス名(例: "No1") -> そのクラスの日介番号の集合。
@@ -543,7 +562,8 @@ def find_cross_class_nichikai_duplicates(
             if not ids or nichikai not in ids:
                 continue
             t = transfers.get(nichikai)
-            if t and {t["from"], t["to"]} == {class_name, other}:
+            # 連鎖異動(No4→No5→No6)は、経路上のクラス同士の重複だけを許容する
+            if t and {class_name, other} <= {*t["from"], t["to"]}:
                 continue
             dups.setdefault(nichikai, []).append(other)
     for nichikai, classes in sorted(dups.items()):

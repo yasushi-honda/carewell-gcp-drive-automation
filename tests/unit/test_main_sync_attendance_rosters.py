@@ -539,7 +539,7 @@ class TestTransferredStudents:
 
         with patch.dict(
             main.ATTENDANCE_ROSTER_TRANSFERRED_STUDENTS,
-            {"N001": {"from": "No1", "to": "No2"}},
+            {"N001": {"from": ["No1"], "to": "No2"}},
         ):
             result = main._sync_students_from_attendance_rosters(
                 sheets_service, firestore_service
@@ -581,7 +581,7 @@ class TestTransferredStudents:
 
         with patch.dict(
             main.ATTENDANCE_ROSTER_TRANSFERRED_STUDENTS,
-            {"N001": {"from": "No1", "to": "No2"}},
+            {"N001": {"from": ["No1"], "to": "No2"}},
         ):
             result = main._sync_students_from_attendance_rosters(
                 sheets_service, firestore_service
@@ -603,7 +603,7 @@ class TestTransferredStudents:
 
         with patch.dict(
             main.ATTENDANCE_ROSTER_TRANSFERRED_STUDENTS,
-            {"N001": {"from": "No1", "to": "No2"}},
+            {"N001": {"from": ["No1"], "to": "No2"}},
         ):
             main._sync_students_from_attendance_rosters(
                 sheets_service, firestore_service
@@ -624,7 +624,7 @@ class TestTransferredStudents:
 
         with patch.dict(
             main.ATTENDANCE_ROSTER_TRANSFERRED_STUDENTS,
-            {"N001": {"from": "No1", "to": "No2"}},
+            {"N001": {"from": ["No1"], "to": "No2"}},
         ):
             result = main._sync_students_from_attendance_rosters(
                 sheets_service, firestore_service, dry_run=True
@@ -663,7 +663,7 @@ class TestTransferredStudents:
 
             with patch.dict(
                 main.ATTENDANCE_ROSTER_TRANSFERRED_STUDENTS,
-                {"N001": {"from": "No1", "to": "No2"}},
+                {"N001": {"from": ["No1"], "to": "No2"}},
             ):
                 result = main._sync_students_from_attendance_rosters(
                     sheets_service, firestore_service
@@ -693,7 +693,7 @@ class TestTransferredStudents:
 
         with patch.dict(
             main.ATTENDANCE_ROSTER_TRANSFERRED_STUDENTS,
-            {"N001": {"from": "No1", "to": "No2"}},
+            {"N001": {"from": ["No1"], "to": "No2"}},
         ):
             result = main._sync_students_from_attendance_rosters(
                 sheets_service, firestore_service
@@ -714,7 +714,7 @@ class TestTransferredStudents:
 
         with patch.dict(
             main.ATTENDANCE_ROSTER_TRANSFERRED_STUDENTS,
-            {"N001": {"from": "No1", "to": "No2"}},
+            {"N001": {"from": ["No1"], "to": "No2"}},
         ):
             result = main._sync_students_from_attendance_rosters(
                 sheets_service, firestore_service
@@ -734,7 +734,7 @@ class TestTransferredStudents:
 
         with patch.dict(
             main.ATTENDANCE_ROSTER_TRANSFERRED_STUDENTS,
-            {"N001": {"from": "No1", "to": "No2"}},
+            {"N001": {"from": ["No1"], "to": "No2"}},
             clear=True,
         ):
             result = main._sync_students_from_attendance_rosters(
@@ -743,7 +743,7 @@ class TestTransferredStudents:
 
         assert result["transferred_students"] == []
         assert result["unapplied_transfers"] == [
-            {"student_id": "N001", "from": "No1", "to": "No2"}
+            {"student_id": "N001", "from": ["No1"], "to": "No2"}
         ]
 
     def test_applied_transfer_is_not_listed_as_unapplied(self, patched_config):
@@ -755,7 +755,7 @@ class TestTransferredStudents:
 
         with patch.dict(
             main.ATTENDANCE_ROSTER_TRANSFERRED_STUDENTS,
-            {"N001": {"from": "No1", "to": "No2"}},
+            {"N001": {"from": ["No1"], "to": "No2"}},
             clear=True,
         ):
             result = main._sync_students_from_attendance_rosters(
@@ -782,7 +782,7 @@ class TestTransferredStudents:
 
         with patch.dict(
             main.ATTENDANCE_ROSTER_TRANSFERRED_STUDENTS,
-            {"N001": {"from": "No1", "to": "No2"}},
+            {"N001": {"from": ["No1"], "to": "No2"}},
         ):
             result = main._sync_students_from_attendance_rosters(
                 sheets_service, firestore_service
@@ -818,7 +818,7 @@ class TestTransferredStudents:
 
             with patch.dict(
                 main.ATTENDANCE_ROSTER_TRANSFERRED_STUDENTS,
-                {"N001": {"from": "No1", "to": "No2"}},
+                {"N001": {"from": ["No1"], "to": "No2"}},
                 clear=True,
             ), caplog.at_level("WARNING"):
                 main._sync_students_from_attendance_rosters(
@@ -838,7 +838,7 @@ class TestTransferredStudents:
 
         with patch.dict(
             main.ATTENDANCE_ROSTER_TRANSFERRED_STUDENTS,
-            {"N001": {"from": "No1", "to": "No2"}},
+            {"N001": {"from": ["No1"], "to": "No2"}},
             clear=True,
         ), caplog.at_level("WARNING"):
             main._sync_students_from_attendance_rosters(
@@ -846,6 +846,103 @@ class TestTransferredStudents:
             )
 
         assert any("Reconcile skipped for class=No1" in m for m in caplog.messages)
+
+
+class TestChainedTransfer:
+    """連鎖異動(例: No1→No2→No3)は、`from`に異動元を古い順に並べて登録する。
+
+    どの時点(No3の書込み前後)でも、同じ日介番号が複数クラスに残って全クラスの
+    同期が中断することがないこと。
+    """
+
+    CHAIN = {"N001": {"from": ["No1", "No2"], "to": "No3"}}
+
+    def _rosters(self, no1_ids, no2_ids, no3_ids):
+        return [
+            RosterReadResult(
+                class_name=name,
+                status="ok",
+                students=[_student(i, class_name=name) for i in ids],
+            )
+            for name, ids in (("No1", no1_ids), ("No2", no2_ids), ("No3", no3_ids))
+        ]
+
+    def _run(self, rosters, dry_run=True):
+        sheets_service = Mock()
+        sheets_service.get_attendance_roster_data.side_effect = rosters
+        firestore_service = Mock()
+        firestore_service.student_exists.return_value = True
+        firestore_service.create_student.return_value = True
+        firestore_service.get_student_ids_by_class_and_source.return_value = {}
+        with patch.dict(
+            main.ATTENDANCE_ROSTER_TRANSFERRED_STUDENTS, self.CHAIN, clear=True
+        ):
+            result = main._sync_students_from_attendance_rosters(
+                sheets_service, firestore_service, dry_run=dry_run
+            )
+        return result, firestore_service
+
+    @pytest.fixture
+    def three_classes(self, patched_config):
+        with patch.dict(main.ATTENDANCE_ROSTER_FILE_IDS, {"03": "sheet-id-03"}), patch(
+            "main.KNOWN_CLASSES", ["dummy"] * 3
+        ):
+            yield
+
+    def test_before_destination_is_written_only_the_older_row_is_skipped(
+        self, three_classes
+    ):
+        """No3にまだ載っていない間は、No1の行だけ読み飛ばし、No2の行は残す。"""
+        result, _ = self._run(self._rosters(["N001"], ["N001"], ["N009"]))
+
+        assert result["status"] == "success"
+        assert result["transferred_students"] == [
+            {"student_id": "N001", "from": "No1", "to": "No3"}
+        ]
+        assert result["duplicate_student_ids"] == []
+
+    def test_after_destination_is_written_both_older_rows_are_skipped(
+        self, three_classes
+    ):
+        result, firestore_service = self._run(
+            self._rosters(["N001"], ["N001"], ["N001"]), dry_run=False
+        )
+
+        assert result["status"] == "success"
+        assert [t["from"] for t in result["transferred_students"]] == [
+            "No1",
+            "No2",
+        ]
+        written = [
+            (c.args[0]["student_id"], c.args[0]["class_name"])
+            for c in firestore_service.create_student.call_args_list
+        ]
+        assert written == [("N001", "No3")]
+        assert result["unapplied_transfers"] == []
+
+    def test_student_only_in_the_middle_class_is_kept(self, three_classes):
+        """経路の後ろのクラスに居なければ、どの旧クラスの行も落とさない。"""
+        result, _ = self._run(self._rosters([], ["N001"], []))
+
+        assert result["status"] == "success"
+        assert result["transferred_students"] == []
+        assert len(result["unapplied_transfers"]) == 1
+
+    def test_row_in_a_class_outside_the_path_still_aborts(self, three_classes):
+        sheets_service = Mock()
+        sheets_service.get_attendance_roster_data.side_effect = self._rosters(
+            [], ["N001"], ["N001"]
+        )
+        with patch.dict(
+            main.ATTENDANCE_ROSTER_TRANSFERRED_STUDENTS,
+            {"N001": {"from": ["No1"], "to": "No3"}},
+            clear=True,
+        ):
+            result = main._sync_students_from_attendance_rosters(
+                sheets_service, Mock(), dry_run=True
+            )
+
+        assert result["status"] == "aborted"
 
 
 class TestAbortIsVisibleInLogs:
