@@ -812,11 +812,20 @@ def _sync_students_from_attendance_rosters(
         kept = []
         for s in r.students:
             transfer = ATTENDANCE_ROSTER_TRANSFERRED_STUDENTS.get(s["student_id"])
+            # 経路は異動元を古い順に並べ、最後に現在のクラス。このクラスより後ろの
+            # クラスのどれかに載っている場合に限り、この行を読み飛ばす（連鎖異動は
+            # 現在のクラスの書込み前でも、途中のクラスの行は残す）
+            path = transfer["from"] + [transfer["to"]] if transfer else []
+            later_classes = (
+                path[path.index(r.class_name) + 1 :] if r.class_name in path else []
+            )
             if (
                 transfer
                 and row_counts[s["student_id"]] == 1
-                and transfer["from"] == r.class_name
-                and s["student_id"] in ids_by_class.get(transfer["to"], set())
+                and r.class_name in transfer["from"]
+                and any(
+                    s["student_id"] in ids_by_class.get(c, set()) for c in later_classes
+                )
             ):
                 transferred_students.append(
                     {

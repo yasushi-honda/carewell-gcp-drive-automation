@@ -148,11 +148,19 @@ class TestResolveFirestoreDatabaseId:
 class TestAttendanceRosterTransferredStudents:
     """異動登録の整合性と、№05への異動5名の登録を検証する。"""
 
-    def test_each_entry_has_distinct_known_classes(self):
+    def test_each_entry_has_a_valid_path(self):
+        """`from`は空でない重複なしのリスト、`to`は`from`に含まれず、全て既知のクラス。"""
         registry = classes_config.ATTENDANCE_ROSTER_TRANSFERRED_STUDENTS
+        known = {f"No{int(n)}" for n in classes_config.ATTENDANCE_ROSTER_FILE_IDS}
         for sid, t in registry.items():
             assert set(t) == {"from", "to"}, sid
-            assert t["from"] != t["to"], sid
+            assert isinstance(t["from"], list) and t["from"], sid
+            assert len(set(t["from"])) == len(t["from"]), sid
+            assert t["to"] not in t["from"], sid
+            assert set(t["from"]) | {t["to"]} <= known, sid
+            # 経路は古い順。順序を取り違えると読み飛ばしの向きが逆になる
+            path = [int(c.removeprefix("No")) for c in [*t["from"], t["to"]]]
+            assert path == sorted(path), sid
 
     @pytest.mark.parametrize(
         "sid,origin",
@@ -166,13 +174,29 @@ class TestAttendanceRosterTransferredStudents:
     )
     def test_class05_transfers_registered(self, sid, origin):
         assert classes_config.ATTENDANCE_ROSTER_TRANSFERRED_STUDENTS[sid] == {
-            "from": origin,
+            "from": [origin],
             "to": "No5",
         }
 
-    def test_n9907036_registered_as_class04_to_class05(self):
-        # №04→№05→№06(№06は予定)。登録は1組のみのため、現在の№04→№05を登録する
+    def test_n9907036_registered_as_chain_class04_class05_to_class06(self):
         assert classes_config.ATTENDANCE_ROSTER_TRANSFERRED_STUDENTS["N9907036"] == {
-            "from": "No4",
-            "to": "No5",
+            "from": ["No4", "No5"],
+            "to": "No6",
+        }
+
+    @pytest.mark.parametrize(
+        "sid,origin",
+        [
+            ("N9905947", "No1"),
+            ("N9906492", "No2"),
+            ("N9906734", "No2"),
+            ("N9906934", "No4"),
+            ("N9904158", "No5"),
+            ("N9906413", "No5"),
+        ],
+    )
+    def test_class06_transfers_registered(self, sid, origin):
+        assert classes_config.ATTENDANCE_ROSTER_TRANSFERRED_STUDENTS[sid] == {
+            "from": [origin],
+            "to": "No6",
         }

@@ -767,7 +767,7 @@ class TestCrossClassNichikaiGate:
         assert "N2" in issues[0] and "No1" in issues[0]
 
     def test_registered_transfer_into_this_class_is_allowed(self):
-        transfers = {"N2": {"from": "No1", "to": "No4"}}
+        transfers = {"N2": {"from": ["No1"], "to": "No4"}}
         assert (
             find_cross_class_nichikai_duplicates(
                 self.merged("N1", "N2"), {"No1": {"N2"}}, "No4", transfers
@@ -777,7 +777,7 @@ class TestCrossClassNichikaiGate:
 
     def test_registered_transfer_out_of_this_class_is_allowed(self):
         """異動元(No1)を再取込みするときも、登録済みの異動者は許容する。"""
-        transfers = {"N2": {"from": "No1", "to": "No4"}}
+        transfers = {"N2": {"from": ["No1"], "to": "No4"}}
         assert (
             find_cross_class_nichikai_duplicates(
                 self.merged("N1", "N2"), {"No4": {"N2"}}, "No1", transfers
@@ -786,12 +786,39 @@ class TestCrossClassNichikaiGate:
         )
 
     def test_registered_transfer_does_not_excuse_a_third_class(self):
-        transfers = {"N2": {"from": "No1", "to": "No4"}}
+        transfers = {"N2": {"from": ["No1"], "to": "No4"}}
         issues = find_cross_class_nichikai_duplicates(
             self.merged("N2"), {"No1": {"N2"}, "No3": {"N2"}}, "No4", transfers
         )
         assert len(issues) == 1
         assert "No3" in issues[0]
+
+    def test_chain_transfer_allows_every_class_on_the_path(self):
+        """No4→No5→No6の連鎖: No6の取込みで、No4・No5との重複はどちらも許容する。"""
+        transfers = {"N2": {"from": ["No4", "No5"], "to": "No6"}}
+        assert (
+            find_cross_class_nichikai_duplicates(
+                self.merged("N2"), {"No4": {"N2"}, "No5": {"N2"}}, "No6", transfers
+            )
+            == []
+        )
+
+    def test_chain_transfer_allows_reimport_of_a_middle_class(self):
+        transfers = {"N2": {"from": ["No4", "No5"], "to": "No6"}}
+        assert (
+            find_cross_class_nichikai_duplicates(
+                self.merged("N2"), {"No4": {"N2"}, "No6": {"N2"}}, "No5", transfers
+            )
+            == []
+        )
+
+    def test_chain_transfer_does_not_excuse_a_class_off_the_path(self):
+        transfers = {"N2": {"from": ["No4", "No5"], "to": "No6"}}
+        issues = find_cross_class_nichikai_duplicates(
+            self.merged("N2"), {"No4": {"N2"}, "No1": {"N2"}}, "No6", transfers
+        )
+        assert len(issues) == 1
+        assert "No1" in issues[0] and "No4" not in issues[0]
 
     def test_unreadable_other_class_fails_closed(self):
         issues = find_cross_class_nichikai_duplicates(
