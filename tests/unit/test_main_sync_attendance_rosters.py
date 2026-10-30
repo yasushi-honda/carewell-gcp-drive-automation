@@ -943,6 +943,27 @@ class TestChainedTransfer:
             )
 
         assert result["status"] == "aborted"
+        # 誤って読み飛ばして重複が消えたのではなく、重複として検出されて中断する
+        assert result["transferred_students"] == []
+        assert [d["student_id"] for d in result["duplicate_student_ids"]] == ["N001"]
+
+    def test_row_is_skipped_when_destination_is_not_the_next_class_on_the_path(
+        self, three_classes
+    ):
+        """No1とNo3に居てNo2に居なくても、経路上の後ろ(No3)に居ればNo1は読み飛ばす。"""
+        result, _ = self._run(self._rosters(["N001"], [], ["N001"]))
+
+        assert result["status"] == "success"
+        assert result["transferred_students"] == [
+            {"student_id": "N001", "from": "No1", "to": "No3"}
+        ]
+
+    def test_duplicate_rows_in_one_class_of_the_chain_still_abort(self, three_classes):
+        """連鎖でも、異動元の同一クラスに同じ日介番号が複数行あれば読み飛ばさず中断する。"""
+        result, _ = self._run(self._rosters(["N001", "N001"], ["N001"], ["N001"]))
+
+        assert result["status"] == "aborted"
+        assert [d["student_id"] for d in result["duplicate_student_ids"]] == ["N001"]
 
 
 class TestAbortIsVisibleInLogs:

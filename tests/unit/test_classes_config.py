@@ -158,6 +158,9 @@ class TestAttendanceRosterTransferredStudents:
             assert len(set(t["from"])) == len(t["from"]), sid
             assert t["to"] not in t["from"], sid
             assert set(t["from"]) | {t["to"]} <= known, sid
+            # 経路は古い順。順序を取り違えると読み飛ばしの向きが逆になる
+            path = [int(c.removeprefix("No")) for c in [*t["from"], t["to"]]]
+            assert path == sorted(path), sid
 
     @pytest.mark.parametrize(
         "sid,origin",
