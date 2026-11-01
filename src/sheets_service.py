@@ -19,6 +19,12 @@ HIDDEN_TASK_SHEETS = ("課題①", "課題②")
 
 RosterStatus = Literal["ok", "empty", "read_error", "schema_error"]
 
+# 出欠名簿の読み取りで、一時的な通信エラー(SSL切断・タイムアウト・接続エラー・
+# HTTP 5xx/429)を再試行する回数。googleapiclientが指数バックオフで再試行し、その間は
+# WARNINGログになる。使い切ってもなお失敗した場合のみERROR(read_error)となり、
+# Cloud Loggingのエラー通知が発火する。
+ATTENDANCE_ROSTER_READ_NUM_RETRIES = 3
+
 
 @dataclass
 class RosterReadResult:
@@ -295,7 +301,7 @@ class SheetsService:
                     spreadsheetId=spreadsheet_id,
                     range=f"'{escaped_tab}'!A1:J1",
                 )
-                .execute()
+                .execute(num_retries=ATTENDANCE_ROSTER_READ_NUM_RETRIES)
             )
             header_values = header_result.get("values", [])
             actual_header = header_values[0] if header_values else []
@@ -324,7 +330,7 @@ class SheetsService:
                     spreadsheetId=spreadsheet_id,
                     ranges=[f"'{escaped_tab}'!A2:C", f"'{escaped_tab}'!F2:J"],
                 )
-                .execute()
+                .execute(num_retries=ATTENDANCE_ROSTER_READ_NUM_RETRIES)
             )
             value_ranges = batch_result.get("valueRanges", [])
             left_rows = value_ranges[0].get("values", []) if value_ranges else []

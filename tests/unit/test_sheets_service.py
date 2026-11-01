@@ -294,3 +294,38 @@ class TestGetAttendanceRosterDataErrorHandling:
         result = service.get_attendance_roster_data("sheet-id", "No5")
 
         assert result.status == "read_error"
+
+
+class TestGetAttendanceRosterDataTransientRetry:
+    """一時的な通信エラー(SSL切断・HTTP 5xx・タイムアウト)で即ERRORにしない。
+
+    googleapiclientのexecute(num_retries=N)は、SSLError・タイムアウト・接続エラー・
+    HTTP 5xx/429を指数バックオフで再試行し、その間のログはWARNINGになる。
+    再試行を使い切った場合のみ例外が上がり、read_error + ERRORログになる
+    （障害の通知は残す）。
+    """
+
+    def test_header_and_batch_get_requests_use_retries(self, sheets_service):
+        service, mock_service = sheets_service
+        _mock_header(mock_service, ATTENDANCE_ROSTER_HEADER)
+        _mock_batch_get(mock_service, [], [])
+
+        service.get_attendance_roster_data("sheet-id", "No1")
+
+        values = mock_service.spreadsheets.return_value.values.return_value
+        header_execute = values.get.return_value.execute
+        batch_execute = values.batchGet.return_value.execute
+        header_execute.assert_called_once_with(num_retries=3)
+        batch_execute.assert_called_once_with(num_retries=3)
+
+    def test_exhausted_retries_still_returns_read_error(self, sheets_service):
+        """再試行後も失敗すれば従来どおりread_error(0件のemptyと区別される)。"""
+        service, mock_service = sheets_service
+        mock_service.spreadsheets.return_value.values.return_value.get.return_value.execute.side_effect = OSError(
+            "ssl eof"
+        )
+
+        result = service.get_attendance_roster_data("sheet-id", "No1")
+
+        assert result.status == "read_error"
+        assert result.students == []
