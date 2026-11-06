@@ -137,7 +137,18 @@ class TestValueShapes:
 
     @pytest.mark.parametrize(
         "value",
-        ["提出済", "提出。", "提 出", "✓", '="提出"', "'提出", "未提出のため後日", 1, 0, True],
+        [
+            "提出済",
+            "提出。",
+            "提 出",
+            "✓",
+            '="提出"',
+            "'提出",
+            "未提出のため後日",
+            1,
+            0,
+            True,
+        ],
     )
     def test_non_exact_values_are_reported_not_restored(self, value):
         r = classify_manual_cells({5: value}, [5], LABEL)
@@ -150,7 +161,9 @@ class TestValueShapes:
         assert r == {"restorable": [], "other": []}
 
     def test_unsorted_student_rows_give_sorted_result(self):
-        r = classify_manual_cells({5: "提出", 7: "未提出", 9: "メモ", 8: "メモ"}, [9, 7, 8, 5], LABEL)
+        r = classify_manual_cells(
+            {5: "提出", 7: "未提出", 9: "メモ", 8: "メモ"}, [9, 7, 8, 5], LABEL
+        )
         assert r["restorable"] == [(5, "提出"), (7, "未提出")]
         assert r["other"] == [8, 9]
 
@@ -179,14 +192,18 @@ class TestFindUnrestoredShapes:
         assert find_unrestored({5: " " + _f(5)}, [5], LABEL) == [5]
 
     def test_formula_of_other_label_is_unrestored(self):
-        assert find_unrestored({5: build_status_formula(5, "課題②")}, [5], "課題①") == [5]
+        assert find_unrestored({5: build_status_formula(5, "課題②")}, [5], "課題①") == [
+            5
+        ]
 
     def test_empty_targets_pass(self):
         assert find_unrestored({5: "メモ"}, [], LABEL) == []
 
 
 class TestFindUnexpectedDisplayShapes:
-    @pytest.mark.parametrize("value", ["#N/A", "#REF!", "Loading...", "✓", "提出済み", 1, None])
+    @pytest.mark.parametrize(
+        "value", ["#N/A", "#REF!", "Loading...", "✓", "提出済み", 1, None]
+    )
     def test_unexpected_values_are_reported(self, value):
         assert find_unexpected_display({5: value}, [5]) == [5]
 
@@ -201,7 +218,12 @@ class TestFindDisplayMismatch:
     """復元後の表示が、手入力の元の値と同じかを行ごとに比べる。"""
 
     def test_same_values_return_empty(self):
-        assert find_display_mismatch({5: "提出", 7: "未提出"}, [(5, "提出"), (7, "未提出")]) == []
+        assert (
+            find_display_mismatch(
+                {5: "提出", 7: "未提出"}, [(5, "提出"), (7, "未提出")]
+            )
+            == []
+        )
 
     def test_changed_value_is_reported(self):
         assert find_display_mismatch({5: "未提出"}, [(5, "提出")]) == [5]
@@ -266,7 +288,9 @@ def fake(monkeypatch, tmp_path):
         if reads["n"] == 1:
             existing = state["existing"]
         elif reads["n"] == 2:
-            existing = state["recheck"] if state["recheck"] is not None else state["existing"]
+            existing = (
+                state["recheck"] if state["recheck"] is not None else state["existing"]
+            )
         else:
             existing = state["after"]
         rows = state["rows"]
@@ -291,7 +315,9 @@ def fake(monkeypatch, tmp_path):
     monkeypatch.setattr(rmc, "_read_state", read_state)
     monkeypatch.setattr(rmc, "_read_displayed", read_displayed)
     monkeypatch.setattr(rmc, "_write_backup", write_backup)
-    monkeypatch.setattr(rmc, "_read_task_tab_a1c1", lambda att_id, label: state["a1c1"] or ok)
+    monkeypatch.setattr(
+        rmc, "_read_task_tab_a1c1", lambda att_id, label: state["a1c1"] or ok
+    )
     monkeypatch.setattr(rmc, "_submission_id", lambda class_num: "SUBID")
     monkeypatch.setattr(rmc.a, "_list_titles", lambda build_fn, sid: state["titles"])
     monkeypatch.setattr(rmc.a, "_write_status_formulas", write_formulas)
@@ -368,9 +394,10 @@ class TestProcessClass:
 
     def test_display_that_differs_from_manual_value_fails(self, fake):
         _, state = fake
-        state["displayed"] = {5: "未提出"}  # 手入力は「提出」だったが、数式の結果は「未提出」
+        state["displayed"] = {
+            5: "未提出"
+        }  # 手入力は「提出」だったが、数式の結果は「未提出」
         assert rmc.process_class("07", LABEL, commit=True) == 2
-
 
     def test_no_student_rows_fails_instead_of_reporting_clean(self, fake):
         calls, state = fake
@@ -396,8 +423,12 @@ class TestProcessClass:
     def test_backup_is_written_before_the_sheet_is_changed(self, fake, monkeypatch):
         calls, _ = fake
         order = []
-        monkeypatch.setattr(rmc, "_write_backup", lambda *args: order.append("backup") or "b")
-        monkeypatch.setattr(rmc.a, "_write_status_formulas", lambda *args: order.append("write"))
+        monkeypatch.setattr(
+            rmc, "_write_backup", lambda *args: order.append("backup") or "b"
+        )
+        monkeypatch.setattr(
+            rmc.a, "_write_status_formulas", lambda *args: order.append("write")
+        )
         rmc.process_class("07", LABEL, commit=True)
         assert order[:2] == ["backup", "write"]
 
@@ -412,7 +443,9 @@ class TestMain:
         monkeypatch.setattr(sys, "argv", ["restore_manual_cells.py", "--class", "99"])
         assert rmc.main() == 1
 
-    def test_exception_in_one_class_returns_two_and_continues(self, monkeypatch, capsys):
+    def test_exception_in_one_class_returns_two_and_continues(
+        self, monkeypatch, capsys
+    ):
         seen = []
 
         def boom(cn, label, commit):

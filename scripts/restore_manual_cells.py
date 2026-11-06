@@ -258,7 +258,9 @@ def process_class(class_num: str, label: str, commit: bool) -> int:
     # 読取りから書込みまでの間に人が編集した場合に、別の内容を上書きしない。
     _, _, _, _, existing_again = _read_state(class_num, label)
     if classify_manual_cells(existing_again, student_rows, label) != result:
-        print("[保留] 読取り後にセルが変更されました。何も書いていません。もう一度実行してください。")
+        print(
+            "[保留] 読取り後にセルが変更されました。何も書いていません。もう一度実行してください。"
+        )
         return 1
 
     backup = _write_backup(class_num, label, att_id, att_tab, task_col, restorable)
@@ -319,7 +321,9 @@ def process_class(class_num: str, label: str, commit: bool) -> int:
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
-        "--class", dest="class_num", help="対象クラス(例: 04)。省略時は全クラスを検出のみ"
+        "--class",
+        dest="class_num",
+        help="対象クラス(例: 04)。省略時は全クラスを検出のみ",
     )
     parser.add_argument("--task", choices=a.TASK_LABELS, default=a.TASK_LABEL)
     parser.add_argument(
