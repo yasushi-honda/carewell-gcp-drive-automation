@@ -169,7 +169,6 @@ class TestAttendanceRosterTransferredStudents:
             ("N9905956", "No1"),
             ("N9905760", "No2"),
             ("N9905997", "No3"),
-            ("N9906948", "No4"),
         ],
     )
     def test_class05_transfers_registered(self, sid, origin):
@@ -191,7 +190,6 @@ class TestAttendanceRosterTransferredStudents:
             ("N9906492", "No2"),
             ("N9906734", "No2"),
             ("N9906934", "No4"),
-            ("N9904158", "No5"),
             ("N9906413", "No5"),
         ],
     )
@@ -200,3 +198,35 @@ class TestAttendanceRosterTransferredStudents:
             "from": [origin],
             "to": "No6",
         }
+
+    @pytest.mark.parametrize(
+        "sid,path",
+        [
+            ("N9906371", ["No6"]),
+            ("N9906943", ["No4"]),
+            ("N9906889", ["No5"]),
+            ("N0104472", ["No3"]),
+            ("N9904964", ["No3"]),
+            ("N9906146", ["No6"]),
+            ("N9905680", ["No3"]),
+            ("N9905944", ["No2"]),
+            ("N9907091", ["No5"]),
+            ("N9907162", ["No5"]),
+            # 連鎖異動(№04→№05→№07、№05→№06→№07)
+            ("N9906948", ["No4", "No5"]),
+            ("N9904158", ["No5", "No6"]),
+        ],
+    )
+    def test_class07_transfers_registered(self, sid, path):
+        assert classes_config.ATTENDANCE_ROSTER_TRANSFERRED_STUDENTS[sid] == {
+            "from": path,
+            "to": "No7",
+        }
+
+    def test_class07_transfer_count_is_twelve(self):
+        to07 = [
+            s
+            for s, t in classes_config.ATTENDANCE_ROSTER_TRANSFERRED_STUDENTS.items()
+            if t["to"] == "No7"
+        ]
+        assert len(to07) == 12
