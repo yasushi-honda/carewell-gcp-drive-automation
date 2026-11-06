@@ -252,6 +252,7 @@ gcloud logging read 'resource.type="cloud_run_revision" AND resource.labels.serv
 | `apply_submission_formulas.py` が「期待人数が未登録」 | 手順1の `EXPECTED_STUDENT_COUNT_BY_CLASS` を登録（人間確認）。先に名簿取込みが必要 |
 | 「課題①列に期待と異なる既存入力」で中断 | 自動修正しない。式の生値・参照先・計算結果を比較して原因を分類。№01は見出し行以外の既存ラベルがあるが、受講者行の式は同一 |
 | `403 The caller does not have permission`（提出記録側） | `carewell-automation-sa` で書こうとしている。`github-actions-sa` 経由か確認 |
+| `check_rollout_status.py` が「数式未設定」で、`apply_submission_formulas.py` が「課題①列に期待と異なる既存入力」で中断 | 講義中などに、数式のセルへ「提出」等が**直接入力**された（現場では普通に起きる。クライアントには入力を止めてもらわず、こちらで引き受ける）。`python scripts/restore_manual_cells.py`（全クラスの検出のみ）→ `--class NN`（検出）→ `--class NN --commit`（バックアップ付きで数式へ戻す）。戻せるのは内容が「提出」「未提出」だけのセルで、それ以外（メモ等）は行番号だけ報告して自動では触らない。戻した後の表示は提出記録に基づく値になる。事例: 2026-10-29の№01・№04、2026-11-06の№04・№05（入力内容は提出記録と一致していた） |
 | `check_rollout_status.py` が「取得失敗: Sheets API HTTP 400」（`Unable to parse range`） | 出欠確認タブの名前が`№{N}_出欠確認`でない。テンプレートのコピー由来の誤ラベル（実例: 2026-09-04、№02が「№01_出欠確認」のまま）。タブ名を確認し、クライアントに修正を依頼する |
 | `hide_sensitive_sheets.py` が自己ロックアウト防止ガード（`check_sa_not_locked_out`）で中断 | 保護の編集者リストに`carewell-automation-sa`が含まれない設定。**保護を適用せず中断するのが正しい動作**（2026-09-18、共有ドライブのorganizer系ロールの扱いで発覚）。編集者の取得結果を確認し、勝手に保護を外さない |
 | `gcloud` の再認証エラー | `! gcloud auth login`（`system@jaccw.or.jp`） |

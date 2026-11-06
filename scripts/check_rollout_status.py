@@ -240,7 +240,8 @@ def classify_class(f: dict) -> tuple[str, str]:
     if f["formulas"] != "all" or not f["admin_task_tab"]:
         return (
             STATE_TODO,
-            f"数式未設定 → apply_submission_formulas.py --class {cn}{task_opt} --commit",
+            f"数式未設定 → apply_submission_formulas.py --class {cn}{task_opt} --commit"
+            f"（途中で止まる場合は手入力が原因。restore_manual_cells.py --class {cn}{task_opt} で確認）",
         )
 
     missing = []
