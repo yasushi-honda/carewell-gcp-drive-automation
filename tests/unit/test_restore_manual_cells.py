@@ -10,10 +10,9 @@ import sys
 
 sys.path.insert(0, "scripts")
 
-from apply_submission_formulas import build_status_formula  # noqa: E402
 import pytest  # noqa: E402
-
 import restore_manual_cells as rmc  # noqa: E402
+from apply_submission_formulas import build_status_formula  # noqa: E402
 from restore_manual_cells import (  # noqa: E402
     classify_manual_cells,
     find_display_mismatch,
