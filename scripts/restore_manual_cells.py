@@ -62,6 +62,20 @@ def classify_manual_cells(
     return {"restorable": restorable, "other": other}
 
 
+def find_unrestored(
+    after: dict[int, str], target_rows: list[int], label: str = a.TASK_LABEL
+) -> list[int]:
+    """復元の読み戻し検証: 対象の全行が、期待の数式と完全一致していることを確かめる。
+
+    空・手入力・メモ・別の数式・行の欠落のいずれも「戻っていない」として返す(行番号の昇順)。
+    """
+    return sorted(
+        row
+        for row in target_rows
+        if str(after.get(row, "")) != a.build_status_formula(row, label)
+    )
+
+
 def _read_state(class_num: str, label: str):
     """課題列の現在値(FORMULA)と受講者行を読む。読取りのみ。"""
     att_id = a.resolve_attendance_spreadsheet_id(class_num)
@@ -136,12 +150,11 @@ def process_class(class_num: str, label: str, commit: bool) -> int:
         task_col,
         [(row, a.build_status_formula(row, label)) for row, _ in restorable],
     )
-    # 読み戻し: 復元した行が期待の数式になっていること
-    _, _, _, rows_after, after = _read_state(class_num, label)
-    still = classify_manual_cells(after, rows_after, label)
-    remaining = {r for r, _ in still["restorable"]} & {r for r, _ in restorable}
-    if remaining:
-        print(f"[失敗] 復元後も手入力が残っています: 行 {sorted(remaining)}")
+    # 読み戻し: 復元した全行が期待の数式と完全一致していること
+    _, _, _, _, after = _read_state(class_num, label)
+    unrestored = find_unrestored(after, [r for r, _ in restorable], label)
+    if unrestored:
+        print(f"[失敗] 復元後に期待の数式になっていない行があります: 行 {unrestored}")
         return 1
     print(
         f"[成功] {len(restorable)}件を数式へ戻しました。"

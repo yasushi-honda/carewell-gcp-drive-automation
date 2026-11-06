@@ -11,7 +11,7 @@ import sys
 sys.path.insert(0, "scripts")
 
 from apply_submission_formulas import build_status_formula  # noqa: E402
-from restore_manual_cells import classify_manual_cells  # noqa: E402
+from restore_manual_cells import classify_manual_cells, find_unrestored  # noqa: E402
 
 LABEL = "課題①"
 
@@ -68,3 +68,31 @@ class TestClassifyManualCells:
         r = classify_manual_cells(existing, [5, 6, 7, 9], LABEL)
         assert r["restorable"] == [(7, "未提出"), (9, "提出")]
         assert r["other"] == [5]
+
+
+class TestFindUnrestored:
+    def test_all_restored_returns_empty(self):
+        after = {5: _f(5), 7: _f(7)}
+        assert find_unrestored(after, [5, 7], LABEL) == []
+
+    def test_literal_remaining_is_reported(self):
+        after = {5: "提出", 7: _f(7)}
+        assert find_unrestored(after, [5, 7], LABEL) == [5]
+
+    def test_cleared_cell_is_reported(self):
+        after = {5: "", 7: _f(7)}
+        assert find_unrestored(after, [5, 7], LABEL) == [5]
+
+    def test_changed_to_note_is_reported(self):
+        after = {5: "メモ", 7: _f(7)}
+        assert find_unrestored(after, [5, 7], LABEL) == [5]
+
+    def test_changed_to_other_formula_is_reported(self):
+        after = {5: '=IF(C5="","","提出")', 7: _f(7)}
+        assert find_unrestored(after, [5, 7], LABEL) == [5]
+
+    def test_missing_row_is_reported(self):
+        assert find_unrestored({7: _f(7)}, [5, 7], LABEL) == [5]
+
+    def test_returns_sorted_rows(self):
+        assert find_unrestored({}, [9, 5, 7], LABEL) == [5, 7, 9]
