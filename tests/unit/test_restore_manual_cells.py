@@ -11,7 +11,11 @@ import sys
 sys.path.insert(0, "scripts")
 
 from apply_submission_formulas import build_status_formula  # noqa: E402
-from restore_manual_cells import classify_manual_cells, find_unrestored  # noqa: E402
+from restore_manual_cells import (  # noqa: E402
+    classify_manual_cells,
+    find_unexpected_display,
+    find_unrestored,
+)
 
 LABEL = "課題①"
 
@@ -96,3 +100,23 @@ class TestFindUnrestored:
 
     def test_returns_sorted_rows(self):
         assert find_unrestored({}, [9, 5, 7], LABEL) == [5, 7, 9]
+
+
+class TestFindUnexpectedDisplay:
+    def test_expected_values_return_empty(self):
+        assert find_unexpected_display({5: "提出", 7: "未提出"}, [5, 7]) == []
+
+    def test_error_value_is_reported(self):
+        assert find_unexpected_display({5: "#REF!", 7: "提出"}, [5, 7]) == [5]
+
+    def test_empty_display_is_reported(self):
+        assert find_unexpected_display({5: "", 7: "提出"}, [5, 7]) == [5]
+
+    def test_missing_row_is_reported(self):
+        assert find_unexpected_display({7: "提出"}, [5, 7]) == [5]
+
+    def test_whitespace_around_expected_value_is_accepted(self):
+        assert find_unexpected_display({5: " 提出 "}, [5]) == []
+
+    def test_returns_sorted_rows(self):
+        assert find_unexpected_display({}, [9, 5]) == [5, 9]

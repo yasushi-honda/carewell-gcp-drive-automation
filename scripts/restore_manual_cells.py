@@ -76,6 +76,30 @@ def find_unrestored(
     )
 
 
+def find_unexpected_display(
+    displayed: dict[int, str], target_rows: list[int]
+) -> list[int]:
+    """復元後の表示値の検証: 対象の全行が「提出」または「未提出」を表示していること。
+
+    エラー値(#REF!など)・空・行の欠落は「期待外」として返す(行番号の昇順)。
+    """
+    return sorted(
+        row
+        for row in target_rows
+        if str(displayed.get(row, "")).strip() not in RESTORABLE_LITERALS
+    )
+
+
+def _read_displayed(att_id: str, att_tab: str, task_col: str) -> dict[int, str]:
+    """課題列の表示値(計算結果)を読む。読取りのみ。"""
+    col = a._get_values(
+        a._build_sheets_service,
+        att_id,
+        f"'{att_tab}'!{task_col}{a.FIRST_STUDENT_ROW}:{task_col}{a.MAX_ROW}",
+    )
+    return {a.FIRST_STUDENT_ROW + i: (r[0] if r else "") for i, r in enumerate(col)}
+
+
 def _read_state(class_num: str, label: str):
     """課題列の現在値(FORMULA)と受講者行を読む。読取りのみ。"""
     att_id = a.resolve_attendance_spreadsheet_id(class_num)
@@ -142,6 +166,14 @@ def process_class(class_num: str, label: str, commit: bool) -> int:
     if not restorable:
         print("[保留] 数式へ戻せるセルがありません。")
         return 1
+    # 数式は管理側の課題タブ(IMPORTRANGE+XLOOKUP)を参照する。未連携のまま戻すとエラー表示に
+    # なるため、タブが無いときは戻さない(先に apply_submission_formulas.py で連携する)。
+    if label not in a._list_titles(a._build_sheets_service, att_id):
+        print(
+            f"[保留] 管理側に「{label}」タブがないため、数式へ戻しません。先に "
+            f"apply_submission_formulas.py --class {class_num} --task {label} で連携してください。"
+        )
+        return 1
     backup = _write_backup(class_num, label, task_col, restorable)
     print(f"[バックアップ] {backup}")
     a._write_status_formulas(
@@ -155,6 +187,19 @@ def process_class(class_num: str, label: str, commit: bool) -> int:
     unrestored = find_unrestored(after, [r for r, _ in restorable], label)
     if unrestored:
         print(f"[失敗] 復元後に期待の数式になっていない行があります: 行 {unrestored}")
+        return 1
+    targets = [r for r, _ in restorable]
+    bad = targets
+    for attempt in range(3):
+        bad = find_unexpected_display(_read_displayed(att_id, att_tab, task_col), targets)
+        if not bad:
+            break
+        time.sleep(5)  # IMPORTRANGEの再計算待ち
+    if bad:
+        print(
+            f"[失敗] 数式へ戻した後の表示が「提出/未提出」になっていない行があります: 行 {bad}"
+            f"。バックアップ({backup})から手入力の内容を確認できます。"
+        )
         return 1
     print(
         f"[成功] {len(restorable)}件を数式へ戻しました。"
