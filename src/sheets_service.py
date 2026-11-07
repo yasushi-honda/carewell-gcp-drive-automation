@@ -23,7 +23,9 @@ RosterStatus = Literal["ok", "empty", "read_error", "schema_error"]
 # HTTP 5xx/429)を再試行する回数。googleapiclientが指数バックオフで再試行し、その間は
 # WARNINGログになる。使い切ってもなお失敗した場合のみERROR(read_error)となり、
 # Cloud Loggingのエラー通知が発火する。
-ATTENDANCE_ROSTER_READ_NUM_RETRIES = 3
+# バックオフは rand() * 2**n 秒。3回(期待値約7秒)では10秒級のHTTP 500を吸収できず
+# 2026-11-07にERRORとなったため、5回(期待値約15秒・最大62秒)にした。
+ATTENDANCE_ROSTER_READ_NUM_RETRIES = 5
 
 
 @dataclass

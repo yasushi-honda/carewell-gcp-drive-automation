@@ -315,8 +315,8 @@ class TestGetAttendanceRosterDataTransientRetry:
         values = mock_service.spreadsheets.return_value.values.return_value
         header_execute = values.get.return_value.execute
         batch_execute = values.batchGet.return_value.execute
-        header_execute.assert_called_once_with(num_retries=3)
-        batch_execute.assert_called_once_with(num_retries=3)
+        header_execute.assert_called_once_with(num_retries=5)
+        batch_execute.assert_called_once_with(num_retries=5)
 
     def test_exhausted_retries_still_returns_read_error(self, sheets_service):
         """再試行後も失敗すれば従来どおりread_error(0件のemptyと区別される)。"""
