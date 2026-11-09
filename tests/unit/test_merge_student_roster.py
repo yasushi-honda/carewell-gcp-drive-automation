@@ -930,24 +930,27 @@ class TestRosterExclusions:
         assert all("N9" not in i and "N2" not in i for i in issues)
 
     def test_gates_pass_on_full_source_then_exclude(self):
+        # 連番の途中(A002)を除外しても、連番ゲートは除外前の正本で通る
         rows = [
             client_row(student_number="A001", name="山田 太郎", kana="やまだ たろう"),
             client_row(student_number="A002", name="佐藤 花子", kana="さとう はなこ"),
+            client_row(student_number="A003", name="鈴木 一郎", kana="すずき いちろう"),
         ]
         apps = [
             app_row(name="山田 太郎", kana="やまだ たろう", nichikai="N1"),
             app_row(name="佐藤 花子", kana="さとう はなこ", nichikai="N2"),
+            app_row(name="鈴木 一郎", kana="すずき いちろう", nichikai="N3"),
         ]
         merged, results = run_validation_gates(
             rows,
             apps,
             {"A": "入所系居住系"},
             {},
-            2,
+            3,
             excluded={"A002": "N2"},
         )
         assert all(v == [] for v in results.values()), results
-        assert [r["student_number"] for r in merged] == ["A001"]
+        assert [r["student_number"] for r in merged] == ["A001", "A003"]
 
     def test_excluded_row_does_not_trigger_cross_class_duplicate(self):
         rows = [
@@ -984,3 +987,26 @@ class TestRosterExclusions:
             excluded={"A001": "N9"},
         )
         assert results["10_除外対象"] != []
+
+
+class TestProductionExclusionRegistry:
+    """本番の除外登録(EXCLUDED_ROSTER_ENTRIES_BY_CLASS)と異動登録の整合。"""
+
+    def test_class07_excludes_the_cancelled_student(self):
+        from merge_student_roster import EXCLUDED_ROSTER_ENTRIES_BY_CLASS
+
+        assert EXCLUDED_ROSTER_ENTRIES_BY_CLASS["07"] == {"D060": "N9904158"}
+
+    def test_excluded_student_is_not_registered_as_transferred_into_that_class(self):
+        # 除外した(そのクラスの受講者ではない)人を、そのクラスへの異動として
+        # 登録したままにすると、現在のクラスの行が読み飛ばされる(2026-11-09の訂正)
+        from merge_student_roster import EXCLUDED_ROSTER_ENTRIES_BY_CLASS
+
+        from src.config.classes import ATTENDANCE_ROSTER_TRANSFERRED_STUDENTS
+
+        for class_num, entries in EXCLUDED_ROSTER_ENTRIES_BY_CLASS.items():
+            for nichikai in entries.values():
+                t = ATTENDANCE_ROSTER_TRANSFERRED_STUDENTS.get(nichikai)
+                if t:
+                    assert t["to"] != f"No{int(class_num)}"
+                    assert f"No{int(class_num)}" not in t["from"]
