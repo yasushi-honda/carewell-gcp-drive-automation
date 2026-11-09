@@ -245,6 +245,20 @@ EXPECTED_STUDENT_COUNT_BY_CLASS = {
     "07": 254,
 }
 
+# 正本(クライアント入力)には残るが、受講者リストからは外す受講者(受講者番号 -> 日介番号)。
+# キャンセル等でそのクラスの受講者ではなくなったが、クライアントの正本・出欠確認は
+# こちらで変更しない場合に登録する。人間(クライアント)の確認が前提。
+# 正本の行数(EXPECTED_STUDENT_COUNT_BY_CLASS)・連番の検証は除外前の行で行い、
+# 受講者リストの期待件数は「期待人数 − 除外件数」(数式適用・進捗確認の各スクリプトが算出する)。
+# 登録と実データ(日介番号)が食い違う場合は、書込み前のゲート10が止める。
+EXCLUDED_ROSTER_ENTRIES_BY_CLASS: dict[str, dict[str, str]] = {
+    "07": {
+        # D060: №07のお申込みはキャンセル済みで、№06で受講継続(クライアント回答 2026-11-09)。
+        # 正本には行が残るため、受講者リストから外す(№05→№06の異動として登録済み)
+        "D060": "N9904158",
+    },
+}
+
 
 class ValidationError(RuntimeError):
     """検証ゲートで1つ以上失敗した"""
@@ -597,6 +611,34 @@ def find_cross_class_nichikai_duplicates(
     return issues
 
 
+def apply_roster_exclusions(
+    merged: list[dict], excluded: dict[str, str]
+) -> tuple[list[dict], list[str]]:
+    """登録された除外対象(受講者番号 -> 日介番号)を突合済みの行から外す。
+
+    受講者番号が見つからない、または日介番号が登録と食い違う場合は、外さずに
+    issuesを返す(fail-closed。誤った人を名簿から消さない)。メッセージに
+    日介番号・氏名は含めない。
+    """
+    issues = []
+    drop: set[str] = set()
+    by_number: dict[str, list[dict]] = {}
+    for r in merged:
+        by_number.setdefault(r["student_number"], []).append(r)
+    for number, nichikai in excluded.items():
+        rows = by_number.get(number, [])
+        if len(rows) != 1:
+            issues.append(
+                f"除外対象の受講者番号{number}が名簿の行に1件ありません({len(rows)}件)"
+            )
+        elif rows[0]["nichikai"].strip() != nichikai:
+            issues.append(f"除外対象の受講者番号{number}の日介番号が登録と一致しません")
+        else:
+            drop.add(number)
+    kept = [r for r in merged if r["student_number"] not in drop]
+    return kept, issues
+
+
 def run_validation_gates(
     client_rows: list[dict],
     app_rows: list[dict],
@@ -606,10 +648,13 @@ def run_validation_gates(
     other_class_ids: dict | None = None,
     class_name: str | None = None,
     transfers: dict | None = None,
+    excluded: dict[str, str] | None = None,
 ) -> tuple[list[dict], dict[str, list[str]]]:
     """全検証ゲートを実行し、(マージ結果, ゲート名->issuesのdict) を返す。
 
     issuesが空のゲートはPASS、1件以上あればFAIL。
+    excluded(受講者番号 -> 日介番号)は、正本の行数・連番の検証(ゲート0・1)を
+    除外前の行で通した後、突合済みの行から外す。マージ結果は除外後の行。
     """
     results: dict[str, list[str]] = {}
 
@@ -638,6 +683,9 @@ def run_validation_gates(
     results["7_例外テーブル機械検証"] = exception_issues
     if exception_used_for:
         print(f"  [情報] 例外テーブルが適用された受講者番号: {exception_used_for}")
+
+    merged, exclusion_issues = apply_roster_exclusions(merged, excluded or {})
+    results["10_除外対象"] = exclusion_issues
 
     results["4_必須列欠損"] = validate_required_fields(merged)
     results["5_グループマッピング完全性"] = validate_group_mapping(
@@ -875,6 +923,7 @@ def main() -> int:
         other_class_ids=read_other_class_nichikai(class_num),
         class_name=f"No{int(class_num)}",
         transfers=ATTENDANCE_ROSTER_TRANSFERRED_STUDENTS,
+        excluded=EXCLUDED_ROSTER_ENTRIES_BY_CLASS.get(class_num, {}),
     )
 
     print(f"=== クラス{class_num} 検証ゲート結果 ===")

@@ -191,6 +191,8 @@ class TestAttendanceRosterTransferredStudents:
             ("N9906734", "No2"),
             ("N9906934", "No4"),
             ("N9906413", "No5"),
+            # №07のお申込みはキャンセル済みで、№06で受講継続(クライアント回答 2026-11-09)
+            ("N9904158", "No5"),
         ],
     )
     def test_class06_transfers_registered(self, sid, origin):
@@ -212,9 +214,8 @@ class TestAttendanceRosterTransferredStudents:
             ("N9905944", ["No2"]),
             ("N9907091", ["No5"]),
             ("N9907162", ["No5"]),
-            # 連鎖異動(№04→№05→№07、№05→№06→№07)
+            # 連鎖異動(№04→№05→№07)
             ("N9906948", ["No4", "No5"]),
-            ("N9904158", ["No5", "No6"]),
         ],
     )
     def test_class07_transfers_registered(self, sid, path):
@@ -223,10 +224,12 @@ class TestAttendanceRosterTransferredStudents:
             "to": "No7",
         }
 
-    def test_class07_transfer_count_is_twelve(self):
+    def test_class07_transfer_count_is_eleven(self):
         to07 = [
             s
             for s, t in classes_config.ATTENDANCE_ROSTER_TRANSFERRED_STUDENTS.items()
             if t["to"] == "No7"
         ]
-        assert len(to07) == 12
+        assert len(to07) == 11
+        # キャンセル済みのN9904158は№07への異動ではない(名簿の除外で外す)
+        assert "N9904158" not in to07

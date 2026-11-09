@@ -42,6 +42,7 @@ from scripts.hide_sensitive_sheets import (  # noqa: E402
     _build_task1_sheets_service,
 )
 from scripts.merge_student_roster import (  # noqa: E402
+    EXCLUDED_ROSTER_ENTRIES_BY_CLASS,
     EXPECTED_STUDENT_COUNT_BY_CLASS,
     ROSTER_TARGET_TAB,
     ValidationError,
@@ -137,9 +138,15 @@ def classify_cell(current, expected: str) -> str:
 
 
 def validate_number_mapping(
-    attendance_numbers: list[str], roster_numbers: list[str]
+    attendance_numbers: list[str],
+    roster_numbers: list[str],
+    excluded: set[str] | frozenset = frozenset(),
 ) -> list[str]:
-    """出欠確認シートと受講者リストの受講者番号が一対一で対応しているか検証する"""
+    """出欠確認シートと受講者リストの受講者番号が一対一で対応しているか検証する
+
+    excluded: 受講者リストから外すと登録した受講者番号。出欠確認にだけ残っていても
+    よいが、受講者リストに残っているのは取込み前の状態なので指摘する。
+    """
     issues = []
     if len(attendance_numbers) != len(set(attendance_numbers)):
         issues.append("出欠確認シートの受講者番号に重複があります")
@@ -147,7 +154,13 @@ def validate_number_mapping(
         issues.append("受講者リストの受講者番号に重複があります")
     att, ros = set(attendance_numbers), set(roster_numbers)
     missing = ros - att
-    extra = att - ros
+    extra = att - ros - set(excluded)
+    still_in_roster = ros & set(excluded)
+    if still_in_roster:
+        issues.append(
+            f"除外登録した受講者が受講者リストに残っています({len(still_in_roster)}件。"
+            "merge_student_roster.pyの再取込みが先です)"
+        )
     if missing:
         issues.append(
             f"受講者リストにあり出欠確認に存在しない番号が{len(missing)}件あります"
@@ -462,6 +475,9 @@ def process_class(
             "(merge_student_roster.pyの名簿取込みが先です)"
         )
         return 2
+    # 受講者リストから外した受講者(正本・出欠確認には残る)は、期待件数から引く
+    excluded = set(EXCLUDED_ROSTER_ENTRIES_BY_CLASS.get(class_num, {}))
+    expected -= len(excluded)
 
     att_id = resolve_attendance_spreadsheet_id(class_num)
     sub_id = TASK1_SUBMISSION_SPREADSHEET_IDS[class_num]
@@ -496,7 +512,7 @@ def process_class(
     )
     roster_set = set(roster_numbers)
     att_numbers = extract_attendance_numbers(number_col, roster_set)
-    issues = validate_number_mapping(att_numbers, roster_numbers)
+    issues = validate_number_mapping(att_numbers, roster_numbers, excluded)
     if issues:
         raise ValidationError("事前ゲート失敗: " + "; ".join(issues))
     student_rows = select_student_rows(number_col, roster_set)

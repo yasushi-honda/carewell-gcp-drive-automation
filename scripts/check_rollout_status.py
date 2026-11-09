@@ -61,6 +61,7 @@ from scripts.hide_sensitive_sheets import (  # noqa: E402
     _is_whole_sheet_protected,
 )
 from scripts.merge_student_roster import (  # noqa: E402
+    EXCLUDED_ROSTER_ENTRIES_BY_CLASS,
     EXPECTED_STUDENT_COUNT_BY_CLASS,
     ROSTER_TARGET_TAB,
     ValidationError,
@@ -93,7 +94,9 @@ def _norm_group(value: str) -> str:
 
 
 def compare_source_to_roster(
-    source_rows: list[list], roster_rows: list[list]
+    source_rows: list[list],
+    roster_rows: list[list],
+    excluded: set[str] | frozenset = frozenset(),
 ) -> list[str]:
     """正本リスト(クライアント入力)と取込み済みの受講者リストを番号ごとに比較する。
 
@@ -101,6 +104,9 @@ def compare_source_to_roster(
     メッセージに氏名等は含めない(件数のみ)。
     正本: A=グループ, C=受講者番号, D=氏名, E=ふりがな, F=サービス種別
     名簿: A=氏名, B=ふりがな, F=サービス種別, H=グループ, J=受講者番号
+
+    excluded: 受講者リストから外すと登録した受講者番号。正本にだけあってよいが、
+    名簿に残っているのは取込み前の状態なので指摘する。
     """
     issues = []
     src = {}
@@ -139,7 +145,10 @@ def compare_source_to_roster(
         issues.append(f"正本リストに受講者番号が空の行が{blank_number_rows}件")
     if duplicated:
         issues.append(f"正本リストの受講者番号に重複が{duplicated}件")
-    only_src = set(src) - set(ros)
+    only_src = set(src) - set(ros) - set(excluded)
+    still_in_roster = set(ros) & set(excluded)
+    if still_in_roster:
+        issues.append(f"除外登録した受講者が名簿に残っている({len(still_in_roster)}件)")
     only_ros = set(ros) - set(src)
     if only_src:
         issues.append(f"正本にあり名簿に無い受講者番号が{len(only_src)}件")
@@ -312,6 +321,7 @@ def gather_facts(class_num: str, task_label: str = TASK_LABEL) -> dict:
     att_id = resolve_attendance_spreadsheet_id(class_num)
     sub_id = TASK1_SUBMISSION_SPREADSHEET_IDS[class_num]
     att_tab = f"№{class_num}_出欠確認"
+    excluded = set(EXCLUDED_ROSTER_ENTRIES_BY_CLASS.get(class_num, {}))
 
     source = _get_values(
         _build_sheets_service, att_id, f"'№{class_num}リスト'!A2:G{MAX_ROW}"
@@ -331,7 +341,12 @@ def gather_facts(class_num: str, task_label: str = TASK_LABEL) -> dict:
         "class": class_num,
         "task": task_label,
         "expected_registered": class_num in EXPECTED_STUDENT_COUNT_BY_CLASS,
-        "expected_count": EXPECTED_STUDENT_COUNT_BY_CLASS.get(class_num),
+        # 受講者リストの期待件数 = 正本の期待人数 − 受講者リストから外した人数
+        "expected_count": (
+            EXPECTED_STUDENT_COUNT_BY_CLASS[class_num] - len(excluded)
+            if class_num in EXPECTED_STUDENT_COUNT_BY_CLASS
+            else None
+        ),
         "company_office_filled": count_company_office_filled(roster),
         "link_issues": [],
         "source_count": source_count,
@@ -358,8 +373,10 @@ def gather_facts(class_num: str, task_label: str = TASK_LABEL) -> dict:
         f"'{att_tab}'!C{FIRST_STUDENT_ROW}:C{MAX_ROW}",
     )
     att_numbers = extract_attendance_numbers(number_col, roster_set)
-    facts["mapping_issues"] = validate_number_mapping(att_numbers, roster_numbers)
-    facts["source_issues"] = compare_source_to_roster(source, roster)
+    facts["mapping_issues"] = validate_number_mapping(
+        att_numbers, roster_numbers, excluded
+    )
+    facts["source_issues"] = compare_source_to_roster(source, roster, excluded)
 
     att_full = _get_full_sheets_list(att_id, _build_sheets_service)
     sub_full = _get_full_sheets_list(
