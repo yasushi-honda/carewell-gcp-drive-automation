@@ -166,6 +166,19 @@ class TestValidateNumberMapping:
     def test_empty_both_is_ok_but_empty_roster_flagged_elsewhere(self):
         assert validate_number_mapping([], []) == []
 
+    def test_excluded_number_only_in_attendance_is_allowed(self):
+        # 正本・出欠確認には残るが、受講者リストから外した受講者
+        assert validate_number_mapping(["A001", "A002"], ["A001"], {"A002"}) == []
+
+    def test_excluded_number_does_not_hide_other_extras(self):
+        issues = validate_number_mapping(["A001", "A002", "A003"], ["A001"], {"A002"})
+        assert any("受講者リストに存在しない番号が1件" in i for i in issues)
+
+    def test_excluded_number_still_in_roster_is_flagged(self):
+        # 除外を登録したのに名簿へ残っている(取込み前)状態は検出する
+        issues = validate_number_mapping(["A001", "A002"], ["A001", "A002"], {"A002"})
+        assert any("除外" in i for i in issues)
+
 
 class TestPlanAttendanceWrites:
     def test_empty_cells_get_written(self):
@@ -718,6 +731,27 @@ class TestProcessClass:
         with pytest.raises(ValidationError):
             env.m.process_class("03", True, False)
         assert env.log == []
+
+    def test_excluded_student_is_left_out_and_count_uses_roster_expected(
+        self, monkeypatch, tmp_path
+    ):
+        # 正本は3名、受講者リストは2名(A002を除外)。出欠確認には3名が残る
+        env = _env(
+            monkeypatch,
+            tmp_path,
+            roster=[
+                ["N1", "", "", "", "", "", "", "A001"],
+                ["N3", "", "", "", "", "", "", "A003"],
+            ],
+            after=[[["未提出"], [], [], ["未提出"]]],
+            sub_d=[["N9"]],
+        )
+        monkeypatch.setattr(
+            env.m, "EXCLUDED_ROSTER_ENTRIES_BY_CLASS", {"03": {"A002": "N2"}}
+        )
+        assert env.m.process_class("03", True, False) == 0
+        # 数式を書くのは名簿に居る2行(A001=5行目, A003=8行目)だけ
+        assert [row for row, _ in env.last_writes] == [5, 8]
 
     def test_roster_count_mismatch_aborts(self, monkeypatch, tmp_path):
         env = _env(monkeypatch, tmp_path, expected=4)

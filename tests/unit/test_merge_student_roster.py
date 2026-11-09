@@ -20,6 +20,7 @@ from merge_student_roster import (  # noqa: E402
     _find_key_duplicates,
     _rstrip_blank_rows,
     _scratch_dir,
+    apply_roster_exclusions,
     build_target_matrix,
     find_cross_class_nichikai_duplicates,
     match_students,
@@ -889,3 +890,123 @@ class TestReadOtherClassNichikai:
         )
         read_other_class_nichikai("04")
         assert seen and all(r.endswith("!C2:C") for r in seen), seen
+
+
+class TestRosterExclusions:
+    """キャンセル等で受講者リストから外す受講者(正本には残る)の除外。
+
+    正本の行数・連番ゲートは除外前の行で通し、除外は突合後に適用する。
+    登録と実データが食い違う場合は書込まず止める(fail-closed)。
+    """
+
+    def merged(self):
+        return [
+            {"student_number": "A001", "nichikai": "N1"},
+            {"student_number": "A002", "nichikai": "N2"},
+            {"student_number": "A003", "nichikai": "N3"},
+        ]
+
+    def test_removes_only_the_registered_row(self):
+        kept, issues = apply_roster_exclusions(self.merged(), {"A002": "N2"})
+        assert issues == []
+        assert [r["student_number"] for r in kept] == ["A001", "A003"]
+
+    def test_empty_exclusions_keep_every_row_and_pass(self):
+        kept, issues = apply_roster_exclusions(self.merged(), {})
+        assert issues == []
+        assert len(kept) == 3
+
+    def test_nichikai_mismatch_fails_and_keeps_the_row(self):
+        kept, issues = apply_roster_exclusions(self.merged(), {"A002": "N9"})
+        assert issues != []
+        assert len(kept) == 3
+
+    def test_number_not_found_fails(self):
+        _, issues = apply_roster_exclusions(self.merged(), {"A099": "N2"})
+        assert issues != []
+
+    def test_issue_messages_do_not_contain_nichikai(self):
+        _, issues = apply_roster_exclusions(self.merged(), {"A002": "N9"})
+        assert all("N9" not in i and "N2" not in i for i in issues)
+
+    def test_gates_pass_on_full_source_then_exclude(self):
+        # 連番の途中(A002)を除外しても、連番ゲートは除外前の正本で通る
+        rows = [
+            client_row(student_number="A001", name="山田 太郎", kana="やまだ たろう"),
+            client_row(student_number="A002", name="佐藤 花子", kana="さとう はなこ"),
+            client_row(student_number="A003", name="鈴木 一郎", kana="すずき いちろう"),
+        ]
+        apps = [
+            app_row(name="山田 太郎", kana="やまだ たろう", nichikai="N1"),
+            app_row(name="佐藤 花子", kana="さとう はなこ", nichikai="N2"),
+            app_row(name="鈴木 一郎", kana="すずき いちろう", nichikai="N3"),
+        ]
+        merged, results = run_validation_gates(
+            rows,
+            apps,
+            {"A": "入所系居住系"},
+            {},
+            3,
+            excluded={"A002": "N2"},
+        )
+        assert all(v == [] for v in results.values()), results
+        assert [r["student_number"] for r in merged] == ["A001", "A003"]
+
+    def test_excluded_row_does_not_trigger_cross_class_duplicate(self):
+        rows = [
+            client_row(student_number="A001", name="山田 太郎", kana="やまだ たろう"),
+            client_row(student_number="A002", name="佐藤 花子", kana="さとう はなこ"),
+        ]
+        apps = [
+            app_row(name="山田 太郎", kana="やまだ たろう", nichikai="N1"),
+            app_row(name="佐藤 花子", kana="さとう はなこ", nichikai="N2"),
+        ]
+        _, results = run_validation_gates(
+            rows,
+            apps,
+            {"A": "入所系居住系"},
+            {},
+            2,
+            other_class_ids={"No6": {"N2"}},
+            class_name="No7",
+            transfers={},
+            excluded={"A002": "N2"},
+        )
+        assert results["9_他クラス日介番号重複"] == []
+
+    def test_gate_fails_when_registered_exclusion_is_stale(self):
+        rows = [
+            client_row(student_number="A001", name="山田 太郎", kana="やまだ たろう")
+        ]
+        _, results = run_validation_gates(
+            rows,
+            [app_row(nichikai="N1")],
+            {"A": "入所系居住系"},
+            {},
+            1,
+            excluded={"A001": "N9"},
+        )
+        assert results["10_除外対象"] != []
+
+
+class TestProductionExclusionRegistry:
+    """本番の除外登録(EXCLUDED_ROSTER_ENTRIES_BY_CLASS)と異動登録の整合。"""
+
+    def test_class07_excludes_the_cancelled_student(self):
+        from merge_student_roster import EXCLUDED_ROSTER_ENTRIES_BY_CLASS
+
+        assert EXCLUDED_ROSTER_ENTRIES_BY_CLASS["07"] == {"D060": "N9904158"}
+
+    def test_excluded_student_is_not_registered_as_transferred_into_that_class(self):
+        # 除外した(そのクラスの受講者ではない)人を、そのクラスへの異動として
+        # 登録したままにすると、現在のクラスの行が読み飛ばされる(2026-11-09の訂正)
+        from merge_student_roster import EXCLUDED_ROSTER_ENTRIES_BY_CLASS
+
+        from src.config.classes import ATTENDANCE_ROSTER_TRANSFERRED_STUDENTS
+
+        for class_num, entries in EXCLUDED_ROSTER_ENTRIES_BY_CLASS.items():
+            for nichikai in entries.values():
+                t = ATTENDANCE_ROSTER_TRANSFERRED_STUDENTS.get(nichikai)
+                if t:
+                    assert t["to"] != f"No{int(class_num)}"
+                    assert f"No{int(class_num)}" not in t["from"]

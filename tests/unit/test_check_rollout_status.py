@@ -437,6 +437,71 @@ class TestCompareSourceToRoster:
         )
 
 
+class TestCompareSourceToRosterWithExclusions:
+    def _src(self, number):
+        return ["A", "先生", number, "山田 太郎", "やまだ たろう", "施設", ""]
+
+    def _ros(self, number):
+        return [
+            "山田 太郎",
+            "やまだ たろう",
+            "N1",
+            "",
+            "",
+            "施設",
+            "入所系居住系",
+            "A",
+            "X" + number,
+            number,
+        ]
+
+    def test_excluded_number_missing_from_roster_is_not_flagged(self):
+        issues = compare_source_to_roster(
+            [self._src("A001"), self._src("A002")], [self._ros("A001")], {"A002"}
+        )
+        assert issues == []
+
+    def test_other_missing_number_is_still_flagged(self):
+        issues = compare_source_to_roster(
+            [self._src("A001"), self._src("A002"), self._src("A003")],
+            [self._ros("A001")],
+            {"A002"},
+        )
+        assert any("正本にあり名簿に無い受講者番号が1件" in i for i in issues)
+
+    def test_excluded_number_still_in_roster_is_flagged(self):
+        issues = compare_source_to_roster(
+            [self._src("A001"), self._src("A002")],
+            [self._ros("A001"), self._ros("A002")],
+            {"A002"},
+        )
+        assert any("除外" in i for i in issues)
+
+    def test_no_exclusions_behaves_as_before(self):
+        issues = compare_source_to_roster(
+            [self._src("A001"), self._src("A002")], [self._ros("A001")]
+        )
+        assert any("正本にあり名簿に無い受講者番号が1件" in i for i in issues)
+
+
+class TestGatherFactsWithExclusion:
+    def test_excluded_student_gives_roster_expected_count_and_clean_checks(
+        self, monkeypatch
+    ):
+        env = _GatherEnv(monkeypatch, task_formulas_in="M")
+        env.roster = [r for r in env.roster if r[9] != "A002"]
+        monkeypatch.setitem(
+            env.m.EXCLUDED_ROSTER_ENTRIES_BY_CLASS, "03", {"A002": "N2"}
+        )
+
+        facts = env.m.gather_facts("03", "課題②")
+
+        assert facts["expected_count"] == 2  # 正本の期待人数3 − 除外1
+        assert facts["roster_count"] == 2
+        assert facts["mapping_issues"] == []
+        assert facts["source_issues"] == []
+
+
 class TestTask2:
     """課題②: 表示ラベルと、案内する復旧コマンドに --task 課題② が付く(既定の課題①は不変)。"""
 
