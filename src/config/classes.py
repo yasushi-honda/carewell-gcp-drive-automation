@@ -154,7 +154,7 @@ def resolve_firestore_database_id() -> str:
 # scripts/merge_student_roster.pyのKNOWN_ATTENDANCE_FILE_IDSと同一内容を正本として
 # ここに一元管理する（元は両ファイルに重複定義されており、ドリフトのリスクが
 # あったため統合。plan-crossreview対応、2026-09-14）。
-# №08・10は課程未作成のため意図的に不在（`_sync_students_from_attendance_rosters`が
+# №10は未登録のため意図的に不在（`_sync_students_from_attendance_rosters`が
 # not_configured_classesとしてレスポンスに明示する）。
 ATTENDANCE_ROSTER_FILE_IDS = {
     "01": "10pXxlqzIvWNGt0QZQpgcsgguOvW372RVS2eSkGpMws4",
@@ -164,6 +164,7 @@ ATTENDANCE_ROSTER_FILE_IDS = {
     "05": "1F45fZ0-q8-sncS6evRaJ31_hZLaFR3p6Jr5tXq0Byz8",
     "06": "16tpctLo8x_Bn_oLy2sfHv8qyHxGmnqyJufp6-AJJ2Rs",
     "07": "1ooY1O5eurA7MWXN7u8l8A-WytBRTVM62jwBUPSDR62A",
+    "08": "1W6nWozxaO2fez8Ur1Q8IdXOIIhgMqR1KEyyGRu7N8rE",
     "09": "1kTR2myJocAeDajT8Tr3Uy6_Kg7pbCVueVgLmJTdSy-U",
 }
 

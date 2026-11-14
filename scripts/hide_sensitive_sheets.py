@@ -57,7 +57,7 @@ from scripts.merge_student_roster import (  # noqa: E402
 )
 from src.gcp_sa_auth import call_with_reauth, get_impersonated_service  # noqa: E402
 
-TARGET_CLASSES = ["01", "02", "03", "04", "05", "06", "07", "09"]
+TARGET_CLASSES = ["01", "02", "03", "04", "05", "06", "07", "08", "09"]
 
 # 課題①提出記録シートは、merge_student_roster.py用SA(carewell-automation-sa)には
 # 編集権限がなく(anyone:readerのみの共有設定)、403で失敗することを実機確認済み(2026-09-12)。
@@ -79,6 +79,7 @@ TASK1_SUBMISSION_SPREADSHEET_IDS = {
     "05": "1D7GDi0Waem0g07se-MBO1AHa0nH2E8wblAcHIm16_2s",
     "06": "1cDV03woQ1tNur1n0XEmMJRxMPKAwl6V2FosGHzG0KA8",
     "07": "1OCX-7mLjFScEwcLx5A0tYMI8YkTNcCKE8C2vh-wQkU8",
+    "08": "1yBTyiSYG8ZTt-EZiAb69OENCvk9vHgsOPCQ3pzGAftY",
     "09": "15tbkPsitAVjr65xThn5869Ve6l5evvPv4avd28fAV9U",
 }
 
