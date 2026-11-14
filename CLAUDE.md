@@ -39,7 +39,7 @@ Kiro-style Spec Driven Development implementation using claude code slash comman
 - [ ] Firestore のデータベース名は？ → 年度ごとに分離済み。`src/config/classes.py`の`resolve_firestore_database_id()`で解決（現在＝令和8年度は`carewell-2026`。令和7年度以前の`carewell-native`は別DBとして残存中——クライアント読み取りのdeny-all化はPR-2で実施予定、まだ未実施。2026-09-14 PR-1対応、詳細: `docs/SERVICE_SHUTDOWN_AND_RESUME.md`「年度切替チェックリスト」）
 - [ ] 正しいコレクションパスは？ → `submissions/{class}/tasks/{task}/files/`
 - [ ] 現在のクラス数は？ → 令和8年度（2026年度）は10クラス (№01〜10、№06・07は今年度から追加) を計画中。ただしDrive/Sheets保存先が未検証のため`src/config/classes.py`のscripts側エントリは無効化中（詳細: `docs/SERVICE_SHUTDOWN_AND_RESUME.md`「令和8年度再開ステータス」）
-- [ ] Cloud Scheduler ジョブ数は？ → 全32ジョブ（ENABLED21/PAUSED11、2026-11-06時点）。ファイル収集は課題①8ジョブ(№01〜07・09)がENABLED(2026-08-31 resume済み)。課題②は**№01・№02がENABLED**（№01は2026-10-29、№02は2026-11-06に収集・出欠確認まで完了）で、№03〜07・09はPAUSED（展開は`docs/class-rollout-runbook.md`「3.5 課題②の受け入れ」）。№08・10は課題①・②とも作成済みでPAUSED。レガシー`pattern1〜10`（別システム管理・触らない）は全てENABLED。旧`student-sync-daily`はPAUSED（令和8年度は無効化）、新規`carewell-attendance-roster-sync`（出欠管理名簿→Firestore同期、15分間隔）がENABLED。詳細: `docs/SERVICE_SHUTDOWN_AND_RESUME.md`
+- [ ] Cloud Scheduler ジョブ数は？ → 全32ジョブ（ENABLED22/PAUSED10、2026-11-14時点）。ファイル収集は課題①8ジョブ(№01〜07・09)がENABLED(2026-08-31 resume済み)。課題②は**№01・№02がENABLED**（№01は2026-10-29、№02は2026-11-06に収集・出欠確認まで完了）で、№03〜07・09はPAUSED（展開は`docs/class-rollout-runbook.md`「3.5 課題②の受け入れ」）。№08の課題①は2026-11-14にresume済み(ポータル上の名称が「№08（山形県対象）」のため`PORTAL_CLASS_NAME_ALIASES`で対応、PR #110)、№08の課題②と№10の課題①・②はPAUSED。レガシー`pattern1〜10`（別システム管理・触らない）は全てENABLED。旧`student-sync-daily`はPAUSED（令和8年度は無効化）、新規`carewell-attendance-roster-sync`（出欠管理名簿→Firestore同期、15分間隔）がENABLED。詳細: `docs/SERVICE_SHUTDOWN_AND_RESUME.md`
 - [ ] 問題発生時に最初にやることは？ → CLAUDE.md CRITICAL を読む
 - [ ] Cloud Run ログの確認コマンドは？ → `gcloud logging read ...`（収集結果の一覧は氏名が出ない`scripts/check_collection_status.py`、収集から表示までの突合は`scripts/verify_task_rollout.py`。ログを広い条件で引くとダウンロード行に受講者の氏名が出る）
 - [ ] Dashboard の URL は？ → `https://carewell-dashboard-2026.web.app/`
@@ -296,6 +296,7 @@ Before committing changes to Firestore-related code:
 | 15 | Sheets Sync Silent Failure | 2025-01-28 | 5件データ欠落 | ✅ **外部API呼び出しはリトライ + ステータス追跡必須** |
 | 16 | External File Dependency Before Self-Check | 2026-09-11 | 外部作業用ファイルへの永続依存を検討しかけた | ✅ **クライアント/委託先に依頼・外部ファイルに依存する前に、自プロジェクト群内の既存データソースを確認**（詳細: `docs/common-mistakes.md` #16） |
 | 17 | Timeout Misdetected as Confirmed Zero | 2026-09-11 | 提出0件をログのみで断定しかけた | ✅ **ログの数値だけで断定せず直接ソースを確認。タイムアウト＝異常とタイムアウト＝正常(要素不在)を区別**（詳細: `docs/common-mistakes.md` #17） |
+| 18 | Class Not Found Misread as Not Yet Created | 2026-11-14 | №08の収集が始まらず、先方へ誤った依頼をしかけた | ✅ **ログの「見つからない=未作成」を直接確認せず断定しない。完全一致の探索は表記ゆれ（接尾辞等）で「存在しない」と同じ結果になる**（詳細: `docs/common-mistakes.md` #18） |
 
 ### 🚨 最重要パターン
 
