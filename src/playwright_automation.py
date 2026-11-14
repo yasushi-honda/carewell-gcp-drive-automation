@@ -13,6 +13,8 @@ from typing import Dict, Optional
 from google.cloud import secretmanager
 from playwright.sync_api import Browser, Frame, Page, sync_playwright
 
+from config.classes import resolve_portal_class_name
+
 logger = logging.getLogger(__name__)
 
 
@@ -325,12 +327,14 @@ class PlaywrightAutomationEngine:
         Returns:
             True if class found and selected, False if not found
         """
-        self.logger.info(f"Selecting class: {class_name}")
+        # ポータル上の名称が内部名と異なるクラス(№08・10)は対応表で引く
+        portal_name = resolve_portal_class_name(class_name)
+        self.logger.info(f"Selecting class: {portal_name}")
 
         # Increase timeout to 10 seconds for class selection
         # (concurrent jobs may cause slower page load)
         if not self._click_in_any_frame(
-            f'text="{class_name}"', f'class "{class_name}"'
+            f'text="{portal_name}"', f'class "{portal_name}"'
         ):
             self.logger.info(f"Class not found (likely not yet created): {class_name}")
             return False

@@ -28,6 +28,22 @@ KNOWN_CLASSES = [
     "令和8年度 デジタル中核人材養成研修 №10",
 ]
 
+# ポータル(study.jp)上のクラス名が内部名と異なるクラス(内部名 -> ポータル上の名称)。
+# 収集コードはポータルのクラスを完全一致で選ぶため、ここに無いクラスは内部名のまま探す。
+# 内部名(Firestoreキー・Drive・Dashboard・Schedulerで使用)は変えない。
+# 2026-11-14、Playwrightで「教科クラス一覧」を直接確認: №08・10は名称に接尾辞が付いている
+# (№08=山形県地域限定、№10=短縮版)。それまでは「未作成」と誤判定していた。
+PORTAL_CLASS_NAME_ALIASES = {
+    "令和8年度 デジタル中核人材養成研修 №08": "令和8年度 デジタル中核人材養成研修 №08（山形県対象）",
+    "令和8年度 デジタル中核人材養成研修 №10": "令和8年度 デジタル中核人材養成研修 №10（短縮版）",
+}
+
+
+def resolve_portal_class_name(class_name: str) -> str:
+    """ポータルでクラスを選ぶときの名称を返す。対応表に無ければ内部名のまま。"""
+    return PORTAL_CLASS_NAME_ALIASES.get(class_name, class_name)
+
+
 # Known task IDs
 # Note: Firestore subcollections exist even without parent documents,
 # so we maintain this list to query documents subcollections directly.
