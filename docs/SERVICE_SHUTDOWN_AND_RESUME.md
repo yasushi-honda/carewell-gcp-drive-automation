@@ -278,6 +278,16 @@ Hostingの問題ではなくバックエンドのデータモデル・実装の�
    なくなる）
 7. 前年度DBの凍結前に、監査目的の一時エクスポートを取得しておく
    （`gcloud firestore export`）
+8. **新年度の名簿スプレッドシート（`STUDENT_SPREADSHEET_IDS_BY_YEAR`の新年度ID）に「設定」タブを作る**。
+   Dashboardの重複受講者画面（`/admin/duplicate-students`）が、`src/sheets_service.py`の
+   `get_class_spreadsheet_urls`で`'設定'!C2:E20`を読み、クラス別シートへのリンクを作る。
+   列はC=No（1〜10）、D=スプレッドシートID、E=スプレッドシートURL（読むのはCとE）。
+   IDは新年度の各クラスのCloud Scheduler課題①ジョブ（`carewell-classNN-task01`）本文の
+   `spreadsheet_id`と同じ値にする。タブが無いと画面を開くたびに`Unable to parse range`
+   （HTTP 400）がERRORログに出て、`carewell-file-collector エラー検知`のアラートメールが飛ぶ
+   （収集・記録・出欠確認への反映には影響しない。関数は失敗時に空を返す作りで、画面は
+   「重複0件・リンク無し」になる）。事例: 2026-11-17、令和8年度の名簿シートに「設定」タブが
+   無く、管理者が画面を開いた際にアラートが発火。同日、No1〜10を入力して解消
 
 ### 既知の残存リスク（対応不要と判断済み・理由込み）
 
