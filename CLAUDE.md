@@ -44,6 +44,7 @@ Kiro-style Spec Driven Development implementation using claude code slash comman
 - [ ] Cloud Run ログの確認コマンドは？ → `gcloud logging read ...`（収集結果の一覧は氏名が出ない`scripts/check_collection_status.py`、収集から表示までの突合は`scripts/verify_task_rollout.py`。ログを広い条件で引くとダウンロード行に受講者の氏名が出る）
 - [ ] Dashboard の URL は？ → `https://carewell-dashboard-2026.web.app/`
 - [ ] 受講生同期の自動実行タイミングは？ → 毎日 JST 02:00
+- [ ] Dashboardの内容確認（件数・表示の確認）にログインは要るか？ → **不要**（閲覧系は認証で塞いでいない）。ユーザーにログインを頼まない。管理者ログインは手動同期など書き込み系だけ（`docs/admin-authentication.md`、runbook「Dashboardの確認」）
 - [ ] 手動同期ボタンの出し方は？ → 管理者許可リスト（Firestore `admins` コレクション）登録済みアカウントでDashboardにログイン（Issue #12、詳細: `docs/admin-authentication.md`）
 - [ ] 受講生を無効化する方法は？ → Google Sheets L列「無効」にチェック
 
