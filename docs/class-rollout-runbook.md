@@ -147,7 +147,7 @@ python scripts/check_rollout_status.py --class 0N     # 「完了」になるこ
   4. 出欠確認の「提出」件数（`check_rollout_status.py` の提出/未提出）が、提出記録のユニーク日介番号数と一致すること
   - **同じ受講者が複数回提出すると、行数は増えるが提出者は1名として数える**（№01: 13行・12名）。1〜3は行数、4はユニーク数で比べる。
   - 食い違いの読み方: 1≠2 → 収集漏れ（Cloud Runの収集ログを調査）。2≠3 → Sheets追記の失敗（Firestoreの`sheets_sync_status=failed`）。3とユニーク数は合うが4が合わない → 数式・名簿の問題。
-- **Dashboardの確認**: 名簿の取込み後、最大15分で`carewell-attendance-roster-sync`がFirestoreへ同期し、Dashboard（https://carewell-dashboard-2026.web.app/）の「受講生一覧」にクラスの受講者が表示される。管理者アカウントでログインし、件数とグループ別人数が名簿と一致することを確認する（氏名をスクリーンショットに残さない）。
+- **Dashboardの確認**: 名簿の取込み後、最大15分で`carewell-attendance-roster-sync`がFirestoreへ同期し、Dashboard（https://carewell-dashboard-2026.web.app/）の「受講生一覧」にクラスの受講者が表示される。**ログインは不要**（閲覧系は認証で塞いでいない。管理者ログインは手動同期など書き込み系の操作だけ。詳細は下の「Dashboardの確認」と`docs/admin-authentication.md`）。件数とグループ別人数が名簿と一致することを確認する（氏名をスクリーンショットに残さない）。
 - クライアントへの報告は、検証済みの事実だけを書く（2026-09-14の「完了」報告が実際には崩れていた前例あり）。
 
 ## 3.5 課題②の受け入れ（№01から）
