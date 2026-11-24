@@ -19,6 +19,7 @@ dist/
 !tests/rules/package.json
 !tests/rules/firebase.json
 !scripts/monitoring/cloud-run-error-alert-policy.json
+!scripts/monitoring/scheduler-job-failure-alert-policy.json
 *.key
 *.pem
 .env

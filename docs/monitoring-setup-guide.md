@@ -272,6 +272,25 @@ echo "通知チャネルID: ${NOTIFICATION_CHANNEL_ID}"
 
 ---
 
+### 3.2b 収集ジョブ連続失敗検知（IaC管理・2026-11-25追加）
+
+上の3.2（コンソール手作り・未作成）とは別に、`scripts/setup-monitoring.sh` のステップ5が作成する。
+
+| 項目 | 内容 |
+|---|---|
+| メトリクス | `carewell_scheduler_job_failure_count`（Cloud Scheduler の HTTP 5xx を job_id 別に数える。対象は `carewell-classNN-taskNN` と `carewell-attendance-roster-sync`、レガシー `carewell-automation-pattern*` は除外） |
+| 条件 | 同一ジョブの失敗が45分以内に2回以上（`scripts/monitoring/scheduler-job-failure-alert-policy.json`） |
+| 通知 | 既存の `carewell-email-notification`（ログ抜粋は付かないので個人情報は含まれない） |
+| 既存の「エラー検知」 | 廃止せず併存（Cloud Run 側の想定外の例外を、ジョブ失敗を待たず拾うため） |
+
+**設計の根拠**: ERRORログ即時通知は、提出元ポータルの一過性の遅延（単発の `Timeout 180000ms`）でも毎回鳴る。2026-10-26以降の30日でSchedulerのHTTP 500は計60件あり、この条件を過去ログに当てると鳴るのは2026-10-28の約40分間のポータル全体障害（約9ジョブが同時に失敗）の1エピソードだけで、単発の失敗は鳴らない。
+
+**限界**: ①「連続」ではなく「45分以内に2回」なので、15分間隔のジョブでは失敗→成功→失敗でも鳴る。②15分間隔のジョブも30分間隔のジョブも同じ窓で見るため、30分間隔のジョブは2回連続失敗で約30分後に通知される（即時ではない）。③メトリクスは作成時点以降の分しか数えない。
+
+**実機確認（未実施の項目）**: 失敗を意図的に起こさないと発火は確認できない。本番で初めて鳴ったときに、窓の切れ目をまたぐ2回の失敗でも検知できているかを確認する。
+
+---
+
 ### 3.3 アラート3: 実行時間8分超過
 
 #### GCPコンソールでの作成手順
@@ -744,6 +763,7 @@ resource "google_monitoring_alert_policy" "high_error_rate" {
 | 日付 | バージョン | 変更内容 | 担当者 |
 |------|-----------|---------|--------|
 | 2025-10-13 | 1.0 | 初版作成 - Cloud Monitoring セットアップガイド | AI Assistant (Claude) |
+| 2026-11-25 | 1.1 | 3.2b 収集ジョブ連続失敗検知（IaC）を追加 | AI Assistant (Claude) |
 
 ---
 
