@@ -462,7 +462,7 @@ print(chs[0]['name'] if ok else '')
                     JOB_FAIL_CREATED=true
                     break
                 fi
-                if echo "${JOB_FAIL_ERR}" | grep -qiE "NOT_FOUND|not found|Cannot find metric"; then
+                if echo "${JOB_FAIL_ERR}" | grep -qiE "NOT_FOUND|not found|Cannot find metric|could not be found|metric referenced by the provided filter"; then
                     echo -e "${YELLOW}メトリクス反映待ち(${ATTEMPT}/12)。60秒後に再試行します${NC}"
                     sleep 60
                 else
@@ -474,7 +474,8 @@ print(chs[0]['name'] if ok else '')
                 echo -e "${GREEN}✓ アラートポリシー作成成功${NC}"
                 JOB_FAIL_ALERT_STATUS="created"
             else
-                echo -e "${RED}✗ アラートポリシーの作成に失敗しました。メトリクスは作成済みのため、再実行してください。${NC}"
+                echo -e "${RED}✗ アラートポリシーの作成に失敗しました。メトリクスは作成済みのため、原因を確認して再実行してください。最後のエラー:${NC}"
+                echo "${JOB_FAIL_ERR}"
                 JOB_FAIL_ALERT_STATUS="create_failed"
                 exit 1
             fi
