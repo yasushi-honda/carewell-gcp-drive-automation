@@ -361,8 +361,11 @@ echo ""
 # ========================================
 #
 # 2026-11-25追加。ステップ4のERRORログ即時通知は、提出元ポータルの一過性の遅延
-# (単発のTimeout 180000ms)でも毎回鳴る。そこでCloud SchedulerのHTTP 500を
-# ジョブ別に数え、「同一ジョブが45分以内に2回以上失敗」した場合だけ通知する。
+# (単発のTimeout 180000ms)でも毎回鳴る。そこでCloud SchedulerのHTTP 5xxを
+# ジョブ別に数え、「同一ジョブが60分以内に2回以上失敗」した場合だけ通知する。
+# 窓を60分にしたのは、ログベースメトリクスの取り込み遅延(最大約10分)で、
+# 45分窓だと窓の端の2回を取りこぼしうるため(codex review指摘)。過去30日の
+# シミュレーションは45分窓でも60分窓でも同じ結果(2件の評価点、1エピソード)。
 # 過去30日(2026-10-26以降)のSchedulerログで条件を検証済み: 失敗は計60件、
 # 単発(2026-11-24のcarewell-class02-task02等)は鳴らず、鳴るのは
 # 2026-10-28の約40分間のポータル全体障害のみ(2件の評価点、1エピソード)。
@@ -404,18 +407,24 @@ fi
 echo ""
 
 echo "[5-2] ${JOB_FAIL_ALERT_NAME}"
-echo "条件: 同一ジョブのHTTP 500が45分以内に2回以上"
+echo "条件: 同一ジョブのHTTP 5xxが60分以内に2回以上"
 echo ""
 
-if gcloud monitoring policies list --project="${PROJECT_ID}" --filter="displayName='${JOB_FAIL_ALERT_NAME}'" --format="value(name)" | grep -q .; then
+# 一覧取得の失敗を「存在しない」と誤判定して重複作成しないよう、終了コードを別に見る
+if ! JOB_FAIL_EXISTING=$(gcloud monitoring policies list --project="${PROJECT_ID}" --filter="displayName='${JOB_FAIL_ALERT_NAME}'" --format="value(name)"); then
+    echo -e "${RED}✗ エラー: アラートポリシー一覧の取得に失敗しました。存在確認ができないため作成しません。${NC}"
+    JOB_FAIL_ALERT_STATUS="list_failed"
+    [ "$DRY_RUN" = true ] || exit 1
+elif [ -n "${JOB_FAIL_EXISTING}" ]; then
     echo -e "${YELLOW}⚠️  アラートポリシーは既に存在します${NC}"
     JOB_FAIL_ALERT_STATUS="already_exists"
 else
     # 通知チャネルのfail-close検証（ステップ4と同じ条件。新規作成しない）
+    # 取得失敗の理由を隠さず(stderrを出す)、失敗時は空JSONとして検証失敗側へ倒す
     JOB_FAIL_CHANNEL_JSON=$(gcloud alpha monitoring channels list \
       --project="${PROJECT_ID}" \
       --filter="displayName='${NOTIFICATION_CHANNEL_NAME}'" \
-      --format="json" 2>/dev/null)
+      --format="json") || JOB_FAIL_CHANNEL_JSON="[]"
     JOB_FAIL_CHANNEL_ID=$(echo "${JOB_FAIL_CHANNEL_JSON}" | python3 -c "
 import json, sys
 chs = json.load(sys.stdin)
@@ -441,12 +450,34 @@ print(chs[0]['name'] if ok else '')
             echo "  --project=\"${PROJECT_ID}\""
             JOB_FAIL_ALERT_STATUS="dry_run_preview"
         else
-            gcloud monitoring policies create \
-              --policy-from-file="${JOB_FAIL_POLICY_FILE}" \
-              --notification-channels="${JOB_FAIL_CHANNEL_ID}" \
-              --project="${PROJECT_ID}"
-            echo -e "${GREEN}✓ アラートポリシー作成成功${NC}"
-            JOB_FAIL_ALERT_STATUS="created"
+            # 作成直後のログベースメトリクスは、Monitoring側に反映されるまで最大約10分
+            # 「メトリクスが無い」(NOT_FOUND)で失敗する。その場合だけ有界でリトライし、
+            # それ以外のエラーは即座に表示して止める(codex review指摘)。
+            JOB_FAIL_CREATED=false
+            for ATTEMPT in 1 2 3 4 5 6 7 8 9 10 11 12; do
+                if JOB_FAIL_ERR=$(gcloud monitoring policies create \
+                  --policy-from-file="${JOB_FAIL_POLICY_FILE}" \
+                  --notification-channels="${JOB_FAIL_CHANNEL_ID}" \
+                  --project="${PROJECT_ID}" 2>&1); then
+                    JOB_FAIL_CREATED=true
+                    break
+                fi
+                if echo "${JOB_FAIL_ERR}" | grep -qiE "NOT_FOUND|not found|Cannot find metric"; then
+                    echo -e "${YELLOW}メトリクス反映待ち(${ATTEMPT}/12)。60秒後に再試行します${NC}"
+                    sleep 60
+                else
+                    echo "${JOB_FAIL_ERR}"
+                    break
+                fi
+            done
+            if [ "${JOB_FAIL_CREATED}" = true ]; then
+                echo -e "${GREEN}✓ アラートポリシー作成成功${NC}"
+                JOB_FAIL_ALERT_STATUS="created"
+            else
+                echo -e "${RED}✗ アラートポリシーの作成に失敗しました。メトリクスは作成済みのため、再実行してください。${NC}"
+                JOB_FAIL_ALERT_STATUS="create_failed"
+                exit 1
+            fi
         fi
     fi
 fi
@@ -475,7 +506,7 @@ if [ "$DRY_RUN" = true ]; then
     echo "      2. ${ALERT_NAME_2} (連続3回失敗)"
     echo "      3. ${ALERT_NAME_3} (実行時間8分超過)"
     echo "      4. ${ERROR_ALERT_NAME} (ERRORログ即時通知)"
-    echo "      5. ${JOB_FAIL_ALERT_NAME} (同一ジョブ45分以内に2回以上失敗) + メトリクス ${JOB_FAIL_METRIC_NAME}"
+    echo "      5. ${JOB_FAIL_ALERT_NAME} (同一ジョブ60分以内に2回以上失敗) + メトリクス ${JOB_FAIL_METRIC_NAME}"
     echo ""
     echo -e "${GREEN}実際に設定を作成するには:${NC}"
     echo "  DRY_RUN=false $0"

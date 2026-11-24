@@ -2,18 +2,18 @@
   "displayName": "carewell 収集ジョブ連続失敗検知",
   "documentation": {
     "subject": "⚠️【carewell】収集ジョブが短時間に連続して失敗しています",
-    "content": "Cloud Schedulerの収集ジョブ(carewell-classNN-taskNN / carewell-attendance-roster-sync)のうち、同一ジョブが45分以内に2回以上HTTP 500で失敗しました。\n\n単発の失敗(提出元ポータルの一過性の遅延等)は通知しません。複数クラスが同時に出ている場合は提出元ポータル全体の遅延・障害の可能性があります(2026-10-28に約40分間の実例あり)。\n\n**確認手順**:\n1. このメールの「Policy」「失敗したジョブ名」から対象ジョブを特定\n2. `gcloud logging read` でcarewell-file-collectorのERRORを確認(ログを広い条件で引くと受講者の氏名が出るため、時刻とジョブで絞る)\n3. タイムアウトなら提出元ポータルの状態を確認、それ以外ならCLAUDE.md「Incident Response Workflow」を参照\n\nこの通知にはログ抜粋は付きません(件数メトリクスのため)。",
+    "content": "Cloud Schedulerの収集ジョブ(carewell-classNN-taskNN / carewell-attendance-roster-sync)のうち、同一ジョブが60分以内に2回以上HTTP 5xxで失敗しました。\n\n単発の失敗(提出元ポータルの一過性の遅延等)は通知しません。複数クラスが同時に出ている場合は提出元ポータル全体の遅延・障害の可能性があります(2026-10-28に約40分間の実例あり)。\n\n**確認手順**:\n1. このメールの「Policy」「失敗したジョブ名」から対象ジョブを特定\n2. `gcloud logging read` でcarewell-file-collectorのERRORを確認(ログを広い条件で引くと受講者の氏名が出るため、時刻とジョブで絞る)\n3. タイムアウトなら提出元ポータルの状態を確認、それ以外ならCLAUDE.md「Incident Response Workflow」を参照\n\nこの通知にはログ抜粋は付きません(件数メトリクスのため)。",
     "mimeType": "text/markdown"
   },
   "combiner": "OR",
   "conditions": [
     {
-      "displayName": "同一ジョブのHTTP 500が45分以内に2回以上",
+      "displayName": "同一ジョブのHTTP 5xxが60分以内に2回以上",
       "conditionThreshold": {
         "filter": "metric.type=\"logging.googleapis.com/user/carewell_scheduler_job_failure_count\" AND resource.type=\"cloud_scheduler_job\"",
         "aggregations": [
           {
-            "alignmentPeriod": "2700s",
+            "alignmentPeriod": "3600s",
             "perSeriesAligner": "ALIGN_DELTA",
             "crossSeriesReducer": "REDUCE_SUM",
             "groupByFields": [
