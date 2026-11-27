@@ -60,13 +60,20 @@ from src.gcp_sa_auth import call_with_reauth, get_impersonated_service  # noqa: 
 TARGET_CLASSES = ["01", "02", "03", "04", "05", "06", "07", "08", "09", "10"]
 
 # クラスごとに実施しない課題。№10(短縮版)は課題②のみで、出欠確認に課題①の列も
-# 提出記録の課題①タブも無い(2026-11-28、クライアント連絡)。課題①の全クラス実行から外す。
+# 提出記録の課題①タブも無い(2026-11-28、クライアント連絡)。
 CLASSES_WITHOUT_TASK = {"10": {"課題①"}}
 
 
-def classes_for_task(task: str) -> list[str]:
-    """課題を実施するクラスだけを返す(全クラス実行用)。"""
-    return [c for c in TARGET_CLASSES if task not in CLASSES_WITHOUT_TASK.get(c, set())]
+def task_for_class(class_num: str, task: str) -> str:
+    """全クラス実行で、課題を実施しないクラスを、実施する課題へ読み替える。
+
+    クラスごと外すと、課題に依らない検査(名簿の保護・件数など)まで全クラス実行から
+    落ちるため、読み替えて残す(codex review指摘、2026-11-28)。
+    """
+    skipped = CLASSES_WITHOUT_TASK.get(class_num, set())
+    if task not in skipped:
+        return task
+    return next(t for t in TASK_TAB_NAMES if t not in skipped)
 
 
 # 課題①提出記録シートは、merge_student_roster.py用SA(carewell-automation-sa)には
@@ -628,7 +635,7 @@ def main() -> int:
         )
         return 1
 
-    classes = [args.class_num] if args.class_num else classes_for_task(args.task)
+    classes = [args.class_num] if args.class_num else TARGET_CLASSES
 
     scratch_dir = _scratch_dir()
     timestamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
@@ -639,11 +646,12 @@ def main() -> int:
     all_results = []
     for class_num in classes:
         print(f"\n=== クラス{class_num} ===")
-        result = process_class(class_num, args.commit, backup_dir, args.task)
+        task = args.task if args.class_num else task_for_class(class_num, args.task)
+        result = process_class(class_num, args.commit, backup_dir, task)
         all_results.append(result)
         print(f"  受講者リスト        : {result['roster']}")
-        print(f"  {args.task}(提出記録シート): {result['task1']}")
-        print(f"  {args.task}(出欠管理ファイル): {result['dest_task1']}")
+        print(f"  {task}(提出記録シート): {result['task1']}")
+        print(f"  {task}(出欠管理ファイル): {result['dest_task1']}")
 
     manifest_path = backup_dir / "manifest.json"
     manifest_path.write_text(json.dumps(all_results, ensure_ascii=False, indent=2))

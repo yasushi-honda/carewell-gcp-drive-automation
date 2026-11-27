@@ -493,21 +493,25 @@ def test_backup_file_names_keep_task1_and_use_task2(monkeypatch, tmp_path):
     assert "class01_task1_before.json" in names
 
 
-class TestClassesForTask:
-    """№10(短縮版)は課題②のみ。課題①の全クラス実行から外れ、課題②には入る。"""
+class TestTaskForClass:
+    """№10(短縮版)は課題②のみ。課題①の全クラス実行では課題②に読み替え、クラスごとは外さない。"""
 
-    def test_class10_excluded_from_task1_full_run(self):
-        from hide_sensitive_sheets import classes_for_task
+    def test_class10_task1_is_replaced_by_task2(self):
+        from hide_sensitive_sheets import task_for_class
 
-        classes = classes_for_task("課題①")
-        assert "10" not in classes
-        assert classes == [c for c in TARGET_CLASSES if c != "10"]
+        assert task_for_class("10", "課題①") == "課題②"
 
-    def test_class10_included_in_task2_full_run(self):
-        from hide_sensitive_sheets import classes_for_task
+    def test_class10_task2_is_unchanged(self):
+        from hide_sensitive_sheets import task_for_class
 
-        assert classes_for_task("課題②") == TARGET_CLASSES
-        assert "10" in classes_for_task("課題②")
+        assert task_for_class("10", "課題②") == "課題②"
+
+    @pytest.mark.parametrize("cn", [c for c in TARGET_CLASSES if c != "10"])
+    def test_other_classes_are_unchanged(self, cn):
+        from hide_sensitive_sheets import task_for_class
+
+        assert task_for_class(cn, "課題①") == "課題①"
+        assert task_for_class(cn, "課題②") == "課題②"
 
     def test_class10_has_submission_spreadsheet_id(self):
         from hide_sensitive_sheets import TASK1_SUBMISSION_SPREADSHEET_IDS
