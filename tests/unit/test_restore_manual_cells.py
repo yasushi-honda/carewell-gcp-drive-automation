@@ -458,21 +458,9 @@ class TestMain:
         assert rmc.main() == 2
         out = capsys.readouterr().out
         assert "RuntimeError" in out and "氏名" not in out
-        assert seen == list(rmc.a.TARGET_CLASSES)
-
-    def test_class10_runs_with_task2_in_default_full_run(self, monkeypatch):
-        """№10(短縮版)は課題①が無いため、課題①の全クラス実行では課題②に読み替えて残す。"""
-        seen = {}
-
-        def record(cn, label, commit):
-            seen[cn] = label
-            return 0
-
-        monkeypatch.setattr(sys, "argv", ["restore_manual_cells.py"])
-        monkeypatch.setattr(rmc, "process_class", record)
-        assert rmc.main() == 0
-        assert seen["10"] == "課題②"
-        assert all(v == "課題①" for k, v in seen.items() if k != "10")
+        # 既定は課題①。№10(短縮版)は課題①を実施しないため全クラス実行に含まれない
+        assert seen == rmc.a.classes_for_task("課題①")
+        assert "10" not in seen
 
     def test_worst_return_code_is_returned(self, monkeypatch):
         codes = iter([0, 1, 0] + [0] * 20)

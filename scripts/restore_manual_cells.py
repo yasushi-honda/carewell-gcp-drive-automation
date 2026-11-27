@@ -42,8 +42,6 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import apply_submission_formulas as a  # noqa: E402
 
-from scripts.hide_sensitive_sheets import task_for_class  # noqa: E402
-
 RESTORABLE_LITERALS = ("提出", "未提出")
 DISPLAY_CHECK_ATTEMPTS = 3
 DISPLAY_CHECK_WAIT_SEC = 5
@@ -335,15 +333,14 @@ def main() -> int:
     if args.commit and not args.class_num:
         print("[エラー] --commit には --class が必要です(1クラスずつ実行します)")
         return 1
-    classes = [args.class_num] if args.class_num else list(a.TARGET_CLASSES)
+    classes = [args.class_num] if args.class_num else a.classes_for_task(args.task)
     if args.class_num and args.class_num not in a.TARGET_CLASSES:
         print(f"[エラー] クラス{args.class_num}は対象外です(対象: {a.TARGET_CLASSES})")
         return 1
     rc = 0
     for cn in classes:
         try:
-            task = args.task if args.class_num else task_for_class(cn, args.task)
-            rc = max(rc, process_class(cn, task, args.commit))
+            rc = max(rc, process_class(cn, args.task, args.commit))
         except Exception as e:  # クラス単位で失敗を示し、他クラスの検出は続ける
             print(f"№{cn} {args.task}: 取得失敗({_describe_error(e)})")
             rc = max(rc, 2)

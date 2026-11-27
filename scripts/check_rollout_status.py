@@ -55,11 +55,11 @@ from scripts.apply_submission_formulas import (  # noqa: E402
 )
 from scripts.hide_sensitive_sheets import (  # noqa: E402
     TARGET_CLASSES,
+    classes_for_task,
     TASK1_SUBMISSION_SPREADSHEET_IDS,
     _find_sheet_entry,
     _get_full_sheets_list,
     _is_whole_sheet_protected,
-    task_for_class,
 )
 from scripts.merge_student_roster import (  # noqa: E402
     EXCLUDED_ROSTER_ENTRIES_BY_CLASS,
@@ -473,32 +473,29 @@ def main() -> int:
     if args.class_num and args.class_num not in TARGET_CLASSES:
         print(f"[エラー] クラス{args.class_num}は対象外です(対象: {TARGET_CLASSES})")
         return 1
-    classes = [args.class_num] if args.class_num else TARGET_CLASSES
+    classes = [args.class_num] if args.class_num else classes_for_task(args.task)
 
     states = []
     print("クラス | 状態 | 正本 | 名簿 | 提出/未提出 | 次のアクション")
     for cn in classes:
-        # 課題を実施しないクラス(№10は課題②のみ)は、実施する課題に読み替えて確認する
-        task = args.task if args.class_num else task_for_class(cn, args.task)
         try:
             try:
-                facts = gather_facts(cn, task)
+                facts = gather_facts(cn, args.task)
             except HttpError as e:
                 if getattr(e.resp, "status", None) != 429:
                     raise
                 time.sleep(
                     RATE_LIMIT_WAIT_SEC
                 )  # 読取りクォータ超過: 待って1回だけ再試行
-                facts = gather_facts(cn, task)
+                facts = gather_facts(cn, args.task)
             state, action = classify_class(facts)
             counts = (
                 f"{facts['_submitted']}/{facts['_unsubmitted']}"
                 if "_submitted" in facts
                 else "-"
             )
-            label = f"№{cn}" if task == args.task else f"№{cn}({task})"
             print(
-                f"{label} | {state} | {facts['source_count']} | {facts['roster_count']} "
+                f"№{cn} | {state} | {facts['source_count']} | {facts['roster_count']} "
                 f"| {counts} | {action}"
             )
         except Exception as e:  # 取得失敗は退行として扱い、他クラスの確認は続ける
