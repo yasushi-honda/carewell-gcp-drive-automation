@@ -611,7 +611,7 @@ def main() -> int:
         "--class",
         dest="class_num",
         default=None,
-        help="対象クラスを1件に限定する場合に指定(例: 01)。省略時は対象8クラス全件",
+        help="対象クラスを1件に限定する場合に指定(例: 01)。省略時は指定課題を実施する全クラス(№10は課題①の対象外)",
     )
     parser.add_argument(
         "--task",

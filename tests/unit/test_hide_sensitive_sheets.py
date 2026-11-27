@@ -513,3 +513,43 @@ class TestClassesForTask:
         from hide_sensitive_sheets import TASK1_SUBMISSION_SPREADSHEET_IDS
 
         assert set(TASK1_SUBMISSION_SPREADSHEET_IDS) == set(TARGET_CLASSES)
+
+
+class TestMainFullRunClasses:
+    """全クラス実行(--class省略)の対象。課題①の--commitが№10(課題①なし)に触れないことを固定する。"""
+
+    @staticmethod
+    def _run(monkeypatch, tmp_path, argv):
+        import hide_sensitive_sheets as hs
+
+        seen = []
+
+        def fake_process_class(class_num, commit, backup_dir, task_label):
+            seen.append((class_num, task_label))
+            return {
+                "class": class_num,
+                "task": task_label,
+                "roster": {},
+                "task1": {},
+                "dest_task1": {},
+            }
+
+        monkeypatch.setattr(hs, "process_class", fake_process_class)
+        monkeypatch.setattr(hs, "_scratch_dir", lambda: tmp_path)
+        monkeypatch.setattr(sys, "argv", ["hide_sensitive_sheets.py", *argv])
+        hs.main()
+        return seen
+
+    def test_task1_full_run_excludes_class10(self, monkeypatch, tmp_path):
+        seen = self._run(monkeypatch, tmp_path, ["--commit"])
+        assert all(task == "課題①" for _, task in seen)
+        assert "10" not in [c for c, _ in seen]
+
+    def test_task2_full_run_includes_class10(self, monkeypatch, tmp_path):
+        seen = self._run(monkeypatch, tmp_path, ["--task", "課題②"])
+        assert ("10", "課題②") in seen
+        assert [c for c, _ in seen] == TARGET_CLASSES
+
+    def test_explicit_class10_task2_runs_only_class10(self, monkeypatch, tmp_path):
+        seen = self._run(monkeypatch, tmp_path, ["--class", "10", "--task", "課題②"])
+        assert seen == [("10", "課題②")]

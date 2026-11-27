@@ -273,7 +273,7 @@ gcloud logging read 'resource.type="cloud_run_revision" AND resource.labels.serv
 | 共有フォルダ（R08）がSAから404 | ユーザーアカウントにのみ共有されている。SAのアクセス権の問題であり、フォルダが存在しないとは限らない。手順2のブラウザ経路を使う |
 
 ### №10（短縮版）は課題②のみ（2026-11-28）
-- №10は出欠確認に課題①の列も、提出記録の課題①タブも無い。`hide_sensitive_sheets.py`の`CLASSES_WITHOUT_TASK`で課題①の対象外にし、`check_rollout_status.py` / `hide_sensitive_sheets.py` / `restore_manual_cells.py`の**課題①の全クラス実行から外れる**（`--class 10 --task 課題①`と明示すると、課題①の列が無く失敗する）。
+- №10は出欠確認に課題①の列も、提出記録の課題①タブも無い。`hide_sensitive_sheets.py`の`CLASSES_WITHOUT_TASK`で課題①の対象外にし、`check_rollout_status.py` / `hide_sensitive_sheets.py` / `restore_manual_cells.py`の**課題①の全クラス実行から外れる**（`check_rollout_status.py --class 10 --task 課題①`と明示すると、課題①の列が無く失敗する。2026-11-28に確認）。
 - №10の名簿・連携の検査は、**課題②の全クラス実行**（`check_rollout_status.py --task 課題②`、№10を含む）か、`--class 10 --task 課題②`で行う。課題①の全クラス実行は№10を見ないので、課題①だけで「全クラス完了」としない。
 - 課題②の全クラス実行は、課題②が未展開のクラスを「要対応」と数える既存の挙動のまま。№10だけを見るときは`--class 10`を付ける。
 - 異動4名（N9901150・N9906371は連鎖異動、N9906674・N9906229は新規）は`ATTENDANCE_ROSTER_TRANSFERRED_STUDENTS`に登録済み。№10への異動者は、№10の名簿に載り、異動元の行はグレーのまま旧クラスに残る。
