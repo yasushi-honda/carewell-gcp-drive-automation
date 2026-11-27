@@ -59,6 +59,16 @@ from src.gcp_sa_auth import call_with_reauth, get_impersonated_service  # noqa: 
 
 TARGET_CLASSES = ["01", "02", "03", "04", "05", "06", "07", "08", "09", "10"]
 
+# クラスごとに実施しない課題。№10(短縮版)は課題②のみで、出欠確認に課題①の列も
+# 提出記録の課題①タブも無い(2026-11-28、クライアント連絡)。課題①の全クラス実行から外す。
+CLASSES_WITHOUT_TASK = {"10": {"課題①"}}
+
+
+def classes_for_task(task: str) -> list[str]:
+    """課題を実施するクラスだけを返す(全クラス実行用)。"""
+    return [c for c in TARGET_CLASSES if task not in CLASSES_WITHOUT_TASK.get(c, set())]
+
+
 # 課題①提出記録シートは、merge_student_roster.py用SA(carewell-automation-sa)には
 # 編集権限がなく(anyone:readerのみの共有設定)、403で失敗することを実機確認済み(2026-09-12)。
 # Cloud Run実行用SA(github-actions-sa)は当該シートへの書込み権限を実際に持っているため、
@@ -601,7 +611,7 @@ def main() -> int:
         "--class",
         dest="class_num",
         default=None,
-        help="対象クラスを1件に限定する場合に指定(例: 01)。省略時は対象8クラス全件",
+        help="対象クラスを1件に限定する場合に指定(例: 01)。省略時は指定課題を実施する全クラス(№10は課題①の対象外)",
     )
     parser.add_argument(
         "--task",
@@ -618,7 +628,7 @@ def main() -> int:
         )
         return 1
 
-    classes = [args.class_num] if args.class_num else TARGET_CLASSES
+    classes = [args.class_num] if args.class_num else classes_for_task(args.task)
 
     scratch_dir = _scratch_dir()
     timestamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")

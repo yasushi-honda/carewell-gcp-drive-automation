@@ -59,6 +59,7 @@ from scripts.hide_sensitive_sheets import (  # noqa: E402
     _find_sheet_entry,
     _get_full_sheets_list,
     _is_whole_sheet_protected,
+    classes_for_task,
 )
 from scripts.merge_student_roster import (  # noqa: E402
     EXCLUDED_ROSTER_ENTRIES_BY_CLASS,
@@ -472,7 +473,7 @@ def main() -> int:
     if args.class_num and args.class_num not in TARGET_CLASSES:
         print(f"[エラー] クラス{args.class_num}は対象外です(対象: {TARGET_CLASSES})")
         return 1
-    classes = [args.class_num] if args.class_num else TARGET_CLASSES
+    classes = [args.class_num] if args.class_num else classes_for_task(args.task)
 
     states = []
     print("クラス | 状態 | 正本 | 名簿 | 提出/未提出 | 次のアクション")

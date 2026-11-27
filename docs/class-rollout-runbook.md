@@ -194,7 +194,8 @@ python scripts/check_rollout_status.py --class 0N --task 課題②              
 | №05 | `carewell-class05-task02` | :15 / :45 | PAUSED | 同上（№05） |
 | №06 | `carewell-class06-task02` | :25 / :55 | PAUSED | 名簿の取込み（手順1〜）が先 |
 | №07・№09 | `carewell-class07-task02` / `carewell-class09-task02` | :05 / :35 | PAUSED | 正本リスト（名簿）の入力が先 |
-| №08・№10 | `carewell-class08-task02` / `carewell-class10-task02` | :25 / :55、:15 / :45 | PAUSED | 本スクリプト群の対象外（課題①ジョブも停止中。収集側の再開が先） |
+| №08 | `carewell-class08-task02` | :25 / :55 | PAUSED | 本スクリプト群の対象外（課題②は指示待ち） |
+| №10（短縮版） | `carewell-class10-task02` | :15 / :45 | **ENABLED（設定完了、2026-11-28）** | 課題②のみ実施。名簿72名・異動4名・連携設定・非表示/保護まで完了。最初の実提出後に4段突合 |
 
 **ポータルの候補数の確認（クラスごと、デプロイ済みの今は「課題②の公開確認」が目的）**
 1. `decision-maker`がブラウザでログインする。AIは氏名や画面の本文を読まず、件数だけを数える。
@@ -270,3 +271,9 @@ gcloud logging read 'resource.type="cloud_run_revision" AND resource.labels.serv
 | `hide_sensitive_sheets.py` が自己ロックアウト防止ガード（`check_sa_not_locked_out`）で中断 | 保護の編集者リストに`carewell-automation-sa`が含まれない設定。**保護を適用せず中断するのが正しい動作**（2026-09-18、共有ドライブのorganizer系ロールの扱いで発覚）。編集者の取得結果を確認し、勝手に保護を外さない |
 | `gcloud` の再認証エラー | `! gcloud auth login`（`system@jaccw.or.jp`） |
 | 共有フォルダ（R08）がSAから404 | ユーザーアカウントにのみ共有されている。SAのアクセス権の問題であり、フォルダが存在しないとは限らない。手順2のブラウザ経路を使う |
+
+### №10（短縮版）は課題②のみ（2026-11-28）
+- №10は出欠確認に課題①の列も、提出記録の課題①タブも無い。`hide_sensitive_sheets.py`の`CLASSES_WITHOUT_TASK`で課題①の対象外にし、`check_rollout_status.py` / `hide_sensitive_sheets.py` / `restore_manual_cells.py`の**課題①の全クラス実行から外れる**（`check_rollout_status.py --class 10 --task 課題①`と明示すると、課題①の列が無く失敗する。2026-11-28に確認）。
+- №10の名簿・連携の検査は、**課題②の全クラス実行**（`check_rollout_status.py --task 課題②`、№10を含む）か、`--class 10 --task 課題②`で行う。課題①の全クラス実行は№10を見ないので、課題①だけで「全クラス完了」としない。
+- 課題②の全クラス実行は、課題②が未展開のクラスを「要対応」と数える既存の挙動のまま。№10だけを見るときは`--class 10`を付ける。
+- 異動4名（N9901150・N9906371は連鎖異動、N9906674・N9906229は新規）は`ATTENDANCE_ROSTER_TRANSFERRED_STUDENTS`に登録済み。№10への異動者は、№10の名簿に載り、異動元の行はグレーのまま旧クラスに残る。
