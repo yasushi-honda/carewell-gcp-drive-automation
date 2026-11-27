@@ -458,7 +458,9 @@ class TestMain:
         assert rmc.main() == 2
         out = capsys.readouterr().out
         assert "RuntimeError" in out and "氏名" not in out
-        assert seen == list(rmc.a.TARGET_CLASSES)
+        # 既定は課題①。№10(短縮版)は課題①を実施しないため全クラス実行に含まれない
+        assert seen == rmc.a.classes_for_task("課題①")
+        assert "10" not in seen
 
     def test_worst_return_code_is_returned(self, monkeypatch):
         codes = iter([0, 1, 0] + [0] * 20)

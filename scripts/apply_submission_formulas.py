@@ -38,6 +38,7 @@ from googleapiclient.errors import HttpError  # noqa: E402
 
 from scripts.hide_sensitive_sheets import (  # noqa: E402
     TARGET_CLASSES,
+    classes_for_task,  # noqa: F401  restore_manual_cells.pyがa.classes_for_taskで使う
     TASK1_SUBMISSION_SPREADSHEET_IDS,
     _build_task1_sheets_service,
 )

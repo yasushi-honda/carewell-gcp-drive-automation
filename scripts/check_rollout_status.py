@@ -55,6 +55,7 @@ from scripts.apply_submission_formulas import (  # noqa: E402
 )
 from scripts.hide_sensitive_sheets import (  # noqa: E402
     TARGET_CLASSES,
+    classes_for_task,
     TASK1_SUBMISSION_SPREADSHEET_IDS,
     _find_sheet_entry,
     _get_full_sheets_list,
@@ -472,7 +473,7 @@ def main() -> int:
     if args.class_num and args.class_num not in TARGET_CLASSES:
         print(f"[エラー] クラス{args.class_num}は対象外です(対象: {TARGET_CLASSES})")
         return 1
-    classes = [args.class_num] if args.class_num else TARGET_CLASSES
+    classes = [args.class_num] if args.class_num else classes_for_task(args.task)
 
     states = []
     print("クラス | 状態 | 正本 | 名簿 | 提出/未提出 | 次のアクション")
