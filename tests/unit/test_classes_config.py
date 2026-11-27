@@ -151,7 +151,11 @@ class TestAttendanceRosterTransferredStudents:
     def test_each_entry_has_a_valid_path(self):
         """`from`は空でない重複なしのリスト、`to`は`from`に含まれず、全て既知のクラス。"""
         registry = classes_config.ATTENDANCE_ROSTER_TRANSFERRED_STUDENTS
-        known = {f"No{int(n)}" for n in classes_config.ATTENDANCE_ROSTER_FILE_IDS}
+        # №10の出欠管理ファイルIDは名簿の書込み後に登録する(runbook手順1-0)ため、
+        # FILE_IDSには未登録。異動先としては既知のクラスとして扱う
+        known = {f"No{int(n)}" for n in classes_config.ATTENDANCE_ROSTER_FILE_IDS} | {
+            "No10"
+        }
         for sid, t in registry.items():
             assert set(t) == {"from", "to"}, sid
             assert isinstance(t["from"], list) and t["from"], sid
@@ -204,7 +208,6 @@ class TestAttendanceRosterTransferredStudents:
     @pytest.mark.parametrize(
         "sid,path",
         [
-            ("N9906371", ["No6"]),
             ("N9906943", ["No4"]),
             ("N9906889", ["No5"]),
             ("N0104472", ["No3"]),
@@ -224,12 +227,48 @@ class TestAttendanceRosterTransferredStudents:
             "to": "No7",
         }
 
-    def test_class07_transfer_count_is_eleven(self):
+    def test_class07_transfer_count_is_ten(self):
         to07 = [
             s
             for s, t in classes_config.ATTENDANCE_ROSTER_TRANSFERRED_STUDENTS.items()
             if t["to"] == "No7"
         ]
-        assert len(to07) == 11
+        assert len(to07) == 10
         # キャンセル済みのN9904158は№07への異動ではない(名簿の除外で外す)
         assert "N9904158" not in to07
+        # №10へ連鎖異動したN9906371(№06→№07→№10)は№07止まりではない
+        assert "N9906371" not in to07
+
+    @pytest.mark.parametrize(
+        "sid,path",
+        [
+            # 連鎖異動(№01→№09→№10)
+            ("N9901150", ["No1", "No9"]),
+            # 連鎖異動(№06→№07→№10)
+            ("N9906371", ["No6", "No7"]),
+            ("N9906674", ["No4"]),
+            ("N9906229", ["No5"]),
+        ],
+    )
+    def test_class10_transfers_registered(self, sid, path):
+        """№10へ異動した4名(クライアント連絡 2026-11-28)。"""
+        assert classes_config.ATTENDANCE_ROSTER_TRANSFERRED_STUDENTS[sid] == {
+            "from": path,
+            "to": "No10",
+        }
+
+    def test_class10_transfer_count_is_four_and_n9901150_not_stuck_at_class09(self):
+        to10 = [
+            s
+            for s, t in classes_config.ATTENDANCE_ROSTER_TRANSFERRED_STUDENTS.items()
+            if t["to"] == "No10"
+        ]
+        assert sorted(to10) == ["N9901150", "N9906229", "N9906371", "N9906674"]
+        # 連鎖異動に更新したため、№09止まりの登録は残っていない
+        to09 = [
+            s
+            for s, t in classes_config.ATTENDANCE_ROSTER_TRANSFERRED_STUDENTS.items()
+            if t["to"] == "No9"
+        ]
+        assert "N9901150" not in to09
+        assert len(to09) == 12
