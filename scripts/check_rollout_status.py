@@ -55,11 +55,11 @@ from scripts.apply_submission_formulas import (  # noqa: E402
 )
 from scripts.hide_sensitive_sheets import (  # noqa: E402
     TARGET_CLASSES,
-    classes_for_task,
     TASK1_SUBMISSION_SPREADSHEET_IDS,
     _find_sheet_entry,
     _get_full_sheets_list,
     _is_whole_sheet_protected,
+    classes_for_task,
 )
 from scripts.merge_student_roster import (  # noqa: E402
     EXCLUDED_ROSTER_ENTRIES_BY_CLASS,
